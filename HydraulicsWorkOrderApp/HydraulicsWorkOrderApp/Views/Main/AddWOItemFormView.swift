@@ -1,14 +1,12 @@
-//
 //  AddWOItemFormView.swift
 //  HydraulicsWorkOrderApp
 //
 //  Created by Bec Archer on 8/8/25.
 //
 
-
 // ─────────────────────────────────────────────────────────────
 // 📄 AddWOItemFormView.swift
-// Reusable inline form for each WO_Item
+// Reusable inline form for each WO_Item (no nested Form)
 // ─────────────────────────────────────────────────────────────
 
 import SwiftUI
@@ -22,7 +20,8 @@ struct AddWOItemFormView: View {
     let dropdowns = DropdownManager.shared
 
     var body: some View {
-        Form {
+        VStack(alignment: .leading, spacing: 12) {
+
             // ───── TYPE ─────
             DropdownField(
                 label: "Type",
@@ -36,7 +35,7 @@ struct AddWOItemFormView: View {
             )
 
             // ───── SIZE (if Cylinder) ─────
-            if item.dropdowns["type"] == "Cylinder" {
+            if (item.dropdowns["type"] ?? "") == "Cylinder" {
                 DropdownField(
                     label: "Size",
                     options: dropdowns.options["size"] ?? [],
@@ -57,7 +56,7 @@ struct AddWOItemFormView: View {
                     get: { item.dropdowns["color"] ?? "" },
                     set: { item.dropdowns["color"] = $0 }
                 ),
-                showColorPickerIfOther: true,
+                showColorPickerIfOther: true, // "Other" opens a ColorPicker
                 customColor: $customColor
             )
 
@@ -85,36 +84,46 @@ struct AddWOItemFormView: View {
                 customColor: $customColor
             )
 
-            // ───── REASONS FOR SERVICE ─────
-            Section(header: Text("Reason(s) for Service")) {
-                ForEach(dropdowns.options["reasonsForService"] ?? []) { option in
-                    Toggle(option.label, isOn: Binding(
-                        get: {
-                            item.reasonsForService.contains(option.value)
-                        },
-                        set: { isOn in
-                            if isOn {
-                                item.reasonsForService.append(option.value)
-                            } else {
-                                item.reasonsForService.removeAll { $0 == option.value }
-                            }
-                        }
-                    ))
-                }
+            // ───── WAIT TIME ─────
+            DropdownField(
+                label: "Estimated Wait Time",
+                options: dropdowns.options["waitTime"] ?? [],
+                selectedValue: Binding(
+                    get: { item.dropdowns["waitTime"] ?? "" },
+                    set: { item.dropdowns["waitTime"] = $0 }
+                ),
+                showColorPickerIfOther: false,
+                customColor: $customColor
+            )
 
-                if item.reasonsForService.contains("Other") {
-                    TextField("Enter custom reason...", text: $reasonNotes)
-                        .onChange(of: reasonNotes) {
-                            item.reasonNotes = reasonNotes
+            // ───── REASONS FOR SERVICE ─────
+            Text("Reason(s) for Service")
+                .font(.headline)
+                .padding(.top, 6)
+
+            ForEach(dropdowns.options["reasonsForService"] ?? []) { option in
+                Toggle(option.label, isOn: Binding(
+                    get: { item.reasonsForService.contains(option.value) },
+                    set: { isOn in
+                        if isOn {
+                            if !item.reasonsForService.contains(option.value) {
+                                item.reasonsForService.append(option.value)
+                            }
+                        } else {
+                            item.reasonsForService.removeAll { $0 == option.value }
                         }
-                }
+                    }
+                ))
             }
 
-            // ───── FLAG TOGGLE ─────
-            Section {
-                Toggle("Flag this Item", isOn: $item.isFlagged)
+            if item.reasonsForService.contains("Other (opens Service Notes)") || item.reasonsForService.contains("Other") {
+                TextField("Service Notes…", text: $reasonNotes)
+                    .textFieldStyle(.roundedBorder)
+                    .onChange(of: reasonNotes) { item.reasonNotes = reasonNotes }
+                    .padding(.top, 2)
             }
         }
+        .padding(12)
         // END .body
     }
 }

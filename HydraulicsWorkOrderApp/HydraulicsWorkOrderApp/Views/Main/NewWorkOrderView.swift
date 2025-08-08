@@ -8,7 +8,6 @@
 // 📄 NewWorkOrderView.swift
 // Updated to show inline WO_Item forms, no modals
 // ─────────────────────────────────────────────────────────────
-
 import SwiftUI
 import FirebaseFirestore
 import FirebaseFirestoreSwift
@@ -82,17 +81,30 @@ struct NewWorkOrderView: View {
                 }
 
                 // ───── WO_Item ENTRY ─────
+                // ───── WO_Item ENTRY ─────
                 Section(header: Text("Equipment Items")) {
-                    ForEach($items.indices, id: \.self) { index in
-                        AddWOItemFormView(item: $items[index])
+                    ForEach($items) { $item in
+                        VStack {
+                            AddWOItemFormView(item: $item)
+                        }
+                        .background(
+                            RoundedRectangle(cornerRadius: 12)
+                                .fill(Color(.secondarySystemBackground))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(Color(.systemGray4), lineWidth: 1)
+                        )
+                        .padding(.vertical, 6)
                     }
 
-                    Button(action: {
+                    Button {
                         items.append(WO_Item.sample)
-                    }) {
+                    } label: {
                         Label("Add Another Item", systemImage: "plus.circle")
                     }
                 }
+
 
                 // ───── SAVE ─────
                 Section {
@@ -107,22 +119,34 @@ struct NewWorkOrderView: View {
             } message: {
                 Text(alertMessage)
             }
-            .onChange(of: searchText, perform: { newValue in
-                if newValue.isEmpty {
-                    matchingCustomers = []
-                } else {
-                    let lower = newValue.lowercased()
-                    Firestore.firestore().collection("customers").getDocuments { snapshot, error in
-                        if let docs = snapshot?.documents {
-                            let all = docs.compactMap { try? $0.data(as: Customer.self) }
-                            matchingCustomers = all.filter {
-                                $0.name.lowercased().contains(lower) || $0.phone.contains(lower)
-                            }
-                        }
+
+            // ───── SAFE ONCHANGE FOR iOS 16+17 ─────
+            // Update the .onChange modifier for iOS 17+
+            #if compiler(>=5.9)
+            .onChange(of: searchText) { oldValue, newValue in
+                handleSearchTextChange(newValue)
+            }
+            #else
+            .onChange(of: searchText) { newValue in
+                handleSearchTextChange(newValue)
+            }
+            #endif
+        }
+    }
+
+    private func handleSearchTextChange(_ newValue: String) {
+        if newValue.isEmpty {
+            matchingCustomers = []
+        } else {
+            let lower = newValue.lowercased()
+            Firestore.firestore().collection("customers").getDocuments { snapshot, error in
+                if let docs = snapshot?.documents {
+                    let all = docs.compactMap { try? $0.data(as: Customer.self) }
+                    matchingCustomers = all.filter {
+                        $0.name.lowercased().contains(lower) || $0.phone.contains(lower)
                     }
                 }
-            })
-
+            }
         }
     }
 
