@@ -24,7 +24,11 @@ struct WorkOrder: Identifiable, Codable, Equatable {
 
     // ───── Core Metadata ─────
     var createdBy: String                     // Logged-in user's name
-    var phoneNumber: String                   // For lookup and display
+    
+    var customerId: String                     // Firebase doc ID
+    var customerName: String                  // Snapshot for display
+    var customerPhone: String                 // Snapshot for display
+                   // For lookup and display
     var WO_Type: String                       // Cylinder, Pump, etc.
     var imageURL: String?                     // First image preview
     var timestamp: Date                       // Initial check-in time
@@ -62,7 +66,9 @@ extension WorkOrder {
     static let sample = WorkOrder(
         id: "preview-WO001",
         createdBy: "Maria",
-        phoneNumber: "555-1234",
+        customerId: "sample-id",
+        customerName: "Maria Rivera",
+        customerPhone: "555-1234",
         WO_Type: "Cylinder",
         imageURL: nil,
         timestamp: Date(),

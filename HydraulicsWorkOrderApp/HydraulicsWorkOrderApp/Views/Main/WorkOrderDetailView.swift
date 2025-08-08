@@ -10,7 +10,6 @@
 // 📄 WorkOrderDetailView.swift
 // Detail view for a selected WorkOrder
 // ─────────────────────────────────────────────────────────────
-
 import SwiftUI
 
 struct WorkOrderDetailView: View {
@@ -28,7 +27,7 @@ struct WorkOrderDetailView: View {
                 }
 
                 Text("Status: \(workOrder.status)")
-                Text("Phone: \(workOrder.phoneNumber)")
+                Text("Phone: \(workOrder.customerPhone)")
                 Text("Created: \(workOrder.timestamp.formatted(date: .abbreviated, time: .shortened))")
 
                 Divider()

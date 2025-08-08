@@ -39,9 +39,16 @@ struct WorkOrderCardView: View {
                     }
                 }
 
-                Text(workOrder.phoneNumber)
-                    .font(.subheadline)
-                    .foregroundColor(.primary)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(workOrder.customerName)
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+
+                    Text(workOrder.customerPhone)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+
 
                 StatusBadge(status: workOrder.status)
 

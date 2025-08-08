@@ -10,105 +10,91 @@
 // ─────────────────────────────────────────────────────────────
 
 import SwiftUI
+import FirebaseFirestore
+import FirebaseFirestoreSwift
 
 struct NewWorkOrderView: View {
+    @State private var selectedCustomer: Customer?
     @State private var searchText = ""
-    @State private var selectedCustomer: Customer? = nil
-    @State private var showAddCustomerModal = false
-
-    @ObservedObject var customerDB = CustomerDatabase.shared
-    
+    @State private var matchingCustomers: [Customer] = []
     @State private var flagged = false
     @State private var items: [WO_Item] = [WO_Item.sample]
-
     @State private var showAlert = false
     @State private var alertMessage = ""
+    @State private var showingNewCustomerModal = false
 
     var body: some View {
         NavigationStack {
             Form {
-                // ───── Customer Lookup Section ────
+                // ───── CUSTOMER LOOKUP ─────
                 Section(header: Text("Customer Lookup")) {
                     if let customer = selectedCustomer {
-                        // ───── Selected Customer Card ─────
-                        HStack {
-                            VStack(alignment: .leading) {
-                                Text(customer.name)
-                                    .font(.headline)
-                                Text(customer.phone)
-                                    .font(.subheadline)
-                                    .foregroundColor(.secondary)
-                            }
-
-                            Spacer()
-
-                            Button(action: {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(customer.name)
+                                .font(.headline)
+                            Text(customer.phone)
+                                .font(.subheadline)
+                            Button {
                                 selectedCustomer = nil
                                 searchText = ""
-                            }) {
-                                Image(systemName: "xmark.circle.fill")
-                                    .foregroundColor(.gray)
+                            } label: {
+                                Label("Clear", systemImage: "xmark.circle.fill")
+                                    .foregroundColor(.red)
                             }
+                            .padding(.top, 6)
                         }
-                        .padding(.vertical, 4)
                     } else {
-                        // ───── Search Field ─────
-                        TextField("Enter name or phone number", text: $searchText)
-                            .onChange(of: searchText) {
-                                customerDB.fetchCustomers()
-                            }
+                        VStack(alignment: .leading) {
+                            TextField("Search by name or phone", text: $searchText)
+                                .textFieldStyle(RoundedBorderTextFieldStyle())
 
-                        // ───── Search Results ─────
-                        let matches = customerDB.searchCustomers(matching: searchText)
-
-                        if !searchText.isEmpty {
-                            if matches.isEmpty {
-                                Button(action: {
-                                    showAddCustomerModal = true
-                                }) {
-                                    Label("Add New Customer", systemImage: "plus.circle")
-                                }
-                            } else {
-                                ForEach(matches) { customer in
+                            if !matchingCustomers.isEmpty {
+                                ForEach(matchingCustomers, id: \.id) { customer in
                                     Button {
                                         selectedCustomer = customer
                                         searchText = ""
                                     } label: {
-                                        HStack {
-                                            VStack(alignment: .leading) {
-                                                Text(customer.name)
-                                                    .fontWeight(.medium)
-                                                Text(customer.phone)
-                                                    .font(.caption)
-                                                    .foregroundColor(.secondary)
-                                            }
-                                            Spacer()
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text(customer.name)
+                                            Text(customer.phone)
+                                                .font(.caption)
+                                                .foregroundColor(.secondary)
                                         }
-                                        .padding(.vertical, 2)
+                                        .padding(.vertical, 4)
                                     }
                                 }
+                            } else if !searchText.isEmpty {
+                                Button {
+                                    showingNewCustomerModal = true
+                                } label: {
+                                    Label("Add New Customer", systemImage: "plus.circle")
+                                        .foregroundColor(.blue)
+                                }
+                                .padding(.top, 4)
                             }
                         }
                     }
                 }
-                // ───── End Add Customer Modal    ─────
-                
-                // ───── Work Order Details Section ─────
 
-                Section(header: Text("Work Order Details")) {
-                    Toggle("Flag for Attention", isOn: $flagged)
+                // ───── WORK ORDER FLAGS ─────
+                Section(header: Text("Work Order Info")) {
+                    Toggle("Flag this Work Order", isOn: $flagged)
                 }
 
-                ForEach($items) { $item in
-                    AddWOItemFormView(item: $item)
-                }
+                // ───── WO_Item ENTRY ─────
+                Section(header: Text("Equipment Items")) {
+                    ForEach($items.indices, id: \.self) { index in
+                        AddWOItemFormView(item: $items[index])
+                    }
 
-                Section {
-                    Button("+ Add Item") {
+                    Button(action: {
                         items.append(WO_Item.sample)
+                    }) {
+                        Label("Add Another Item", systemImage: "plus.circle")
                     }
                 }
 
+                // ───── SAVE ─────
                 Section {
                     Button("✅ Save Work Order") {
                         saveWorkOrder()
@@ -116,99 +102,78 @@ struct NewWorkOrderView: View {
                 }
             }
             .navigationTitle("New Work Order")
-            .alert("Status", isPresented: $showAlert) {
-                Button("OK", role: .cancel) { }
+            .alert(Text("Status"), isPresented: $showAlert) {
+                Button("OK", role: .cancel) {}
             } message: {
                 Text(alertMessage)
             }
-            .sheet(isPresented: $showAddCustomerModal) {
-                // Determine which field was typed
-                let isPhone = CharacterSet.decimalDigits.isSuperset(of: CharacterSet(charactersIn: searchText))
-                let namePrefill = isPhone ? "" : searchText
-                let phonePrefill = isPhone ? searchText : ""
-
-                NewCustomerModalView(
-                    prefillName: namePrefill,
-                    prefillPhone: phonePrefill,
-                    selectedCustomer: $selectedCustomer
-                )
-            }
-            // END .Form
-        }
-        // END .body
-    }
-
-    // ───── Firestore Save Handler ─────
-    func saveWorkOrder() {
-        // Validate inputs
-        // Ensure a customer is selected
-        guard let customer = selectedCustomer else {
-            alertMessage = "Please select a customer."
-            showAlert = true
-            return
-        }
-        // Validate phone number
-        guard !items.isEmpty else {
-            alertMessage = "Please add at least one piece of equipment."
-            showAlert = true
-            return
-        }
-        // Validate phone number format
-        let newWO = WorkOrder(
-            id: nil, // Firestore will auto-generate this
-            createdBy: "DevUser", // Hardcoded for now, replace with actual user ⚠️
-            phoneNumber: customer.phone, // Use the customer's phone number
-            WO_Type: "Auto", // auto-tagged inside WO_Items now
-            imageURL: nil, //  No image upload in this view ⚠️
-            timestamp: Date(), // Initial check-in time
-            status: "Checked In", // Default status
-            WO_Number: generateWorkOrderNumber(), // Generate unique number
-            flagged: flagged, // Flag for follow-up
-            tagId: nil, // No tag ID in this view
-            estimatedCost: nil, // No cost estimate in this view
-            finalCost: nil, // No final cost in this view
-            dropdowns: [:], // No dropdowns in this view
-            dropdownSchemaVersion: 1, // Default schema version
-            lastModified: Date(), // Current timestamp
-            lastModifiedBy: "DevUser", // Hardcoded for now, replace with actual user ⚠️
-            tagBypassReason: nil, // No tag bypass reason in this view
-            isDeleted: false, // Not deleted
-            notes: [], // No notes in this view
-            items: items // Use the items array from the view
-        )
-            // Save to Firestore
-        // Use the shared database instance
-        WorkOrdersDatabase.shared.addWorkOrder(newWO) { result in
-            DispatchQueue.main.async {
-                switch result {
-                case .success:
-                    alertMessage = "✅ Work Order saved!"
-                    searchText = ""
-                    selectedCustomer = nil
-                    flagged = false
-                    items = [WO_Item.sample]
-                case .failure(let error):
-                    alertMessage = "❌ Failed to save: \(error.localizedDescription)"
+            .onChange(of: searchText, perform: { newValue in
+                if newValue.isEmpty {
+                    matchingCustomers = []
+                } else {
+                    let lower = newValue.lowercased()
+                    Firestore.firestore().collection("customers").getDocuments { snapshot, error in
+                        if let docs = snapshot?.documents {
+                            let all = docs.compactMap { try? $0.data(as: Customer.self) }
+                            matchingCustomers = all.filter {
+                                $0.name.lowercased().contains(lower) || $0.phone.contains(lower)
+                            }
+                        }
+                    }
                 }
-                showAlert = true
-            }
+            })
+
         }
     }
-    // END .saveWorkOrder
-    // ───── Generate Work Order Number ─────
-    func generateWorkOrderNumber() -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "MMddyy"
-        let prefix = formatter.string(from: Date())
-        let suffix = Int.random(in: 100...999)
-        return "\(prefix)-\(suffix)"
-    }
 
-    // END
+    // ───── SAVE HANDLER ─────
+    func saveWorkOrder() {
+        guard let customer = selectedCustomer else {
+            alertMessage = "Please select a customer"
+            showAlert = true
+            return
+        }
+
+        let newWorkOrder = WorkOrder(
+            id: UUID().uuidString,
+            createdBy: "TestUser",
+            customerId: customer.id ?? "unknown",
+            customerName: customer.name,
+            customerPhone: customer.phone,
+            WO_Type: items.first?.dropdowns["type"] ?? "Unknown",
+            imageURL: nil,
+            timestamp: Date(),
+            status: "CheckedIn",
+            WO_Number: "080824-001",
+            flagged: flagged,
+            tagId: nil,
+            estimatedCost: nil,
+            finalCost: nil,
+            dropdowns: [:],
+            dropdownSchemaVersion: 1,
+            lastModified: Date(),
+            lastModifiedBy: "TestUser",
+            tagBypassReason: nil,
+            isDeleted: false,
+            notes: [],
+            items: items
+        )
+
+        WorkOrdersDatabase.shared.addWorkOrder(newWorkOrder) { result in
+            switch result {
+            case .success:
+                alertMessage = "✅ Work Order saved!"
+                flagged = false
+                items = [WO_Item.sample]
+            case .failure(let error):
+                alertMessage = "❌ Failed to save: \(error.localizedDescription)"
+            }
+            showAlert = true
+        }
+    }
 }
 
-// ───── Preview Template ─────
-
-#Preview(traits: .sizeThatFitsLayout) {
+// END
+#Preview {
     NewWorkOrderView()
 }
