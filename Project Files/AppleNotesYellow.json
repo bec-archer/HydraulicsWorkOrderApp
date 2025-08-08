@@ -1,0 +1,40 @@
+{
+  "themeName": "AppleNotes_Style_YellowTheme",
+  "colors": {
+	"background": "#FFFFFF",
+	"foreground": "#000000",
+	"textPrimary": "#000000",
+	"textSecondary": "#4A4A4A",
+	"linkColor": "#FFC500",
+	"buttonBackground": "#FFC500",
+	"buttonText": "#000000",
+	"highlight": "#FFF8DC",
+	"border": "#E0E0E0",
+	"disabled": "#BFBFBF"
+  },
+  "fonts": {
+	"title": {
+	  "size": 22,
+	  "weight": "bold"
+	},
+	"body": {
+	  "size": 16,
+	  "weight": "regular"
+	},
+	"label": {
+	  "size": 18,
+	  "weight": "semibold"
+	}
+  },
+  "buttons": {
+	"cornerRadius": 12,
+	"padding": 12,
+	"elevation": 1
+  },
+  "cards": {
+	"background": "#FFFFFF",
+	"shadowColor": "#888888",
+	"shadowOpacity": 0.1,
+	"cornerRadius": 16
+  }
+}
