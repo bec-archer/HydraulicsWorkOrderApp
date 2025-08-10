@@ -22,6 +22,7 @@ struct NewWorkOrderView: View {
     @State private var items: [WO_Item] = [WO_Item.sample]
     @State private var showAlert: Bool = false
     @State private var alertMessage: String = ""
+    @State private var expandedIndex: Int? = nil
     @State private var showingNewCustomerModal: Bool = false   // ✅ fixed: had no Bool type
     
     // ───── Prefill Helpers (derive from searchText) ─────
@@ -36,7 +37,24 @@ struct NewWorkOrderView: View {
         return digits.count >= 3 ? trimmed : ""   // digits ⇒ phone, else blank
     }
     // END Prefill Helpers
-    
+    // ───── Item Header Helpers ─────
+    private func itemTitle(for item: WO_Item) -> String {
+        // Prefer dropdown “type” or fall back gracefully
+        item.dropdowns["type"]?.capitalized ?? "WO_Item"
+    }
+
+    private func itemSubtitle(for item: WO_Item) -> String {
+        // Show a quick at-a-glance detail, like size or color
+        if let size = item.dropdowns["size"], !size.isEmpty {
+            return size
+        }
+        if let color = item.dropdowns["color"], !color.isEmpty {
+            return color
+        }
+        return "Details"
+    }
+    // END Item Header Helpers
+
     // ───── BODY ─────
     var body: some View {
         NavigationStack {
@@ -101,27 +119,35 @@ struct NewWorkOrderView: View {
                 
                 // ───── WO_Item ENTRY ─────
                 Section(header: Text("Equipment Items")) {
-                    ForEach($items) { $item in
-                        VStack {
-                            AddWOItemFormView(item: $item)
-                        }
-                        .background(
-                            RoundedRectangle(cornerRadius: 12)
-                                .fill(Color(.secondarySystemBackground))
+                    ForEach(items.indices, id: \.self) { idx in
+                        WOItemAccordionRow(
+                            item: $items[idx],
+                            index: idx,
+                            expandedIndex: $expandedIndex
                         )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 12)
-                                .stroke(Color(.systemGray4), lineWidth: 1)
-                        )
-                        .padding(.vertical, 6)
                     }
-                    
+
                     Button {
-                        items.append(WO_Item.sample)
+                        // ───── Add & Expand New Item (collapse previous first) ─────
+                        let insertIndex = items.count
+                        let newItem = WO_Item.sample   // OK even if sample uses a fixed UUID
+                        withAnimation(.snappy) {       // collapse the currently open row
+                            expandedIndex = nil
+                        }
+                        items.append(newItem)          // append the new item
+
+                        // Defer opening to next run loop so collapse is visible
+                        DispatchQueue.main.async {
+                            withAnimation(.snappy) {
+                                expandedIndex = insertIndex
+                            }
+                        }
+                        // ───── END Add & Expand New Item ─────
                     } label: {
                         Label("Add Another Item", systemImage: "plus.circle")
                     }
                 }
+
                 // END WO_Item Entry
                 
                 // ───── SAVE ─────
@@ -142,6 +168,14 @@ struct NewWorkOrderView: View {
             .onChange(of: searchText) {
                 handleSearchTextChange(searchText)
             }
+            
+            .onAppear {
+                if expandedIndex == nil {
+                    expandedIndex = items.indices.first
+                }
+            }
+
+
             // END onChange
         } // END NavigationStack
         // ───── New Customer Modal Sheet (attached to NavigationStack) ─────
@@ -223,6 +257,62 @@ struct NewWorkOrderView: View {
     // END Save Handler
 }
 // END struct
+
+// ───── ROW: WOItemAccordionRow ─────
+private struct WOItemAccordionRow: View {
+    @Binding var item: WO_Item
+    let index: Int
+    @Binding var expandedIndex: Int?
+
+    // Compact header helpers
+    private func itemTitle(for item: WO_Item) -> String {
+        item.dropdowns["type"]?.capitalized ?? "WO_Item"
+    }
+    private func itemSubtitle(for item: WO_Item) -> String {
+        if let size = item.dropdowns["size"], !size.isEmpty { return size }
+        if let color = item.dropdowns["color"], !color.isEmpty { return color }
+        return "Details"
+    }
+
+    var body: some View {
+        // Only one open at a time based on index
+        let isExpanded = Binding<Bool>(
+            get: { expandedIndex == index },
+            set: { newValue in expandedIndex = newValue ? index : nil }
+        )
+
+        DisclosureGroup(isExpanded: isExpanded) {
+            // ───── Expanded Content (full inline form) ─────
+            AddWOItemFormView(item: $item)
+                .padding(.top, 6)
+        } label: {
+            // ───── Collapsed Header (compact summary) ─────
+            HStack(spacing: 8) {
+                Text(itemTitle(for: item))
+                    .font(.headline)
+                Spacer(minLength: 12)
+                Text(itemSubtitle(for: item))
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            .contentShape(Rectangle())
+        }
+        .padding(.vertical, 4)
+        .padding(.horizontal, 6)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color(.secondarySystemBackground))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Color(.systemGray4), lineWidth: 1)
+        )
+        .animation(.snappy, value: expandedIndex) // smooth expand/collapse
+    }
+}
+// END WOItemAccordionRow
+
+
 
 // ───── PREVIEW ─────
 #Preview {
