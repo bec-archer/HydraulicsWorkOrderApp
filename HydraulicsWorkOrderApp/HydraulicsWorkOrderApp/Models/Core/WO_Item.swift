@@ -18,32 +18,56 @@ import FirebaseFirestoreSwift
 struct WO_Item: Identifiable, Codable, Equatable {
     // ───── Unique Identifier ─────
     var id: UUID = UUID()
-
+    
     // ───── Equipment Info ─────
     var tagId: String?                      // QR or RFID
     var imageUrls: [String]                 // Uploaded to Firebase Storage
     var type: String                        // Cylinder, Pump, Hose, etc.
-
+    
     // ───── Dropdowns + Reason ─────
     var dropdowns: [String: String]         // Frozen at intake
     var dropdownSchemaVersion: Int
     var reasonsForService: [String]         // e.g., "Replace Seals"
     var reasonNotes: String?
-
+    
     // ───── Status + Testing ─────
     var statusHistory: [WO_Status]          // Timeline entries
     var testResult: String?                 // PASS / FAIL / nil
     var partsUsed: String?
     var hoursWorked: String?
     var cost: String?
-
+    
     // ───── Assignment + Flags ─────
     var assignedTo: String                  // Technician name
     var isFlagged: Bool
-
+    
     // ───── Audit Trail ─────
     var tagReplacementHistory: [TagReplacement]?
+    
+    // ───── FACTORY: Blank WO_Item ─────
+    static func blank() -> WO_Item {
+        WO_Item(
+            id: UUID(),                      // fresh unique ID every time
+            tagId: nil,
+            imageUrls: [],
+            type: "",
+            dropdowns: [:],
+            dropdownSchemaVersion: DropdownSchema.currentVersion,
+            reasonsForService: [],
+            reasonNotes: nil,
+            statusHistory: [],
+            testResult: nil,
+            partsUsed: nil,
+            hoursWorked: nil,
+            cost: nil,
+            assignedTo: "",
+            isFlagged: false,
+            tagReplacementHistory: nil
+        )
+    }
 }
+// END FACTORY: Blank WO_Item
+
 
 // MARK: - Sample + Factory
 

@@ -19,7 +19,7 @@ struct NewWorkOrderView: View {
     @State private var searchText: String = ""
     @State private var matchingCustomers: [Customer] = []
     @State private var flagged: Bool = false
-    @State private var items: [WO_Item] = [WO_Item.sample]
+    @State private var items: [WO_Item] = [WO_Item.blank()]
     @State private var showAlert: Bool = false
     @State private var alertMessage: String = ""
     @State private var expandedIndex: Int? = nil
@@ -123,29 +123,27 @@ struct NewWorkOrderView: View {
                         WOItemAccordionRow(
                             item: $items[idx],
                             index: idx,
-                            expandedIndex: $expandedIndex
+                            expandedIndex: $expandedIndex,
+                            onDelete: handleDeleteWOItem   // ← add this
                         )
                     }
 
-                    Button {
-                        // ───── Add & Expand New Item (collapse previous first) ─────
-                        let insertIndex = items.count
-                        let newItem = WO_Item.sample   // OK even if sample uses a fixed UUID
-                        withAnimation(.snappy) {       // collapse the currently open row
-                            expandedIndex = nil
-                        }
-                        items.append(newItem)          // append the new item
 
-                        // Defer opening to next run loop so collapse is visible
-                        DispatchQueue.main.async {
-                            withAnimation(.snappy) {
-                                expandedIndex = insertIndex
-                            }
+                    Button {
+                        // ───── Add & Expand New Item (atomic animation) ─────
+                        withAnimation { // use default animation for iOS 16/17 safety
+                            let insertIndex = items.count
+                            let newItem = WO_Item.blank()
+                            expandedIndex = nil            // collapse current
+                            items.append(newItem)          // append new
+                            expandedIndex = insertIndex    // expand the new one
                         }
                         // ───── END Add & Expand New Item ─────
+
                     } label: {
                         Label("Add Another Item", systemImage: "plus.circle")
                     }
+
                 }
 
                 // END WO_Item Entry
@@ -211,106 +209,143 @@ struct NewWorkOrderView: View {
     
     // ───── SAVE HANDLER ─────
     func saveWorkOrder() {
-        guard let customer = selectedCustomer else {
-            alertMessage = "Please select a customer"
-            showAlert = true
-            return
-        }
-        
-        let newWorkOrder = WorkOrder(
-            id: UUID().uuidString,
-            createdBy: "TestUser",
-            customerId: customer.id ?? "unknown",
-            customerName: customer.name,
-            customerPhone: customer.phone,
-            WO_Type: items.first?.dropdowns["type"] ?? "Unknown",
-            imageURL: nil,
-            timestamp: Date(),
-            status: "CheckedIn",
-            WO_Number: "080824-001",
-            flagged: flagged,
-            tagId: nil,
-            estimatedCost: nil,
-            finalCost: nil,
-            dropdowns: [:],
-            dropdownSchemaVersion: 1,
-            lastModified: Date(),
-            lastModifiedBy: "TestUser",
-            tagBypassReason: nil,
-            isDeleted: false,
-            notes: [],
-            items: items
-        )
-        
-        WorkOrdersDatabase.shared.addWorkOrder(newWorkOrder) { result in
-            switch result {
-            case .success:
-                alertMessage = "✅ Work Order saved!"
-                flagged = false
-                items = [WO_Item.sample]
-            case .failure(let error):
-                alertMessage = "❌ Failed to save: \(error.localizedDescription)"
-            }
-            showAlert = true
-        }
+        // ...
     }
     // END Save Handler
+
+    // ───── Action: Delete / Reset WO_Item ─────
+    private func handleDeleteWOItem(_ index: Int) {
+        if items.count > 1 {
+            withAnimation { items.remove(at: index) }
+            // Keep expansion on a sensible neighbor
+            if let current = expandedIndex, current == index {
+                expandedIndex = max(0, min(index, items.count - 1))
+            } else if let current = expandedIndex, current > index {
+                expandedIndex = current - 1
+            }
+        } else {
+            // Must always have ≥ 1 WO_Item: reset the lone item
+            withAnimation { items[0] = WO_Item.blank() }
+            expandedIndex = 0
+        }
+    }
+    // END: Delete / Reset WO_Item
+
 }
 // END struct
 
-// ───── ROW: WOItemAccordionRow ─────
+
+
+// ─────────────────────────────────────────────────────────────
+// MARK: - WOItemAccordionRow
+// Collapsible inline form for a single WO_Item.
+// Shows "New Item" when empty. When expanded, includes a
+// destructive "Delete Item" button (resets if it's the only item).
+// ─────────────────────────────────────────────────────────────
 private struct WOItemAccordionRow: View {
     @Binding var item: WO_Item
     let index: Int
     @Binding var expandedIndex: Int?
+    let onDelete: (_ index: Int) -> Void  // ← parent-provided action
 
-    // Compact header helpers
-    private func itemTitle(for item: WO_Item) -> String {
-        item.dropdowns["type"]?.capitalized ?? "WO_Item"
-    }
-    private func itemSubtitle(for item: WO_Item) -> String {
-        if let size = item.dropdowns["size"], !size.isEmpty { return size }
-        if let color = item.dropdowns["color"], !color.isEmpty { return color }
-        return "Details"
+    // Control whether THIS row is expanded (single-expand behavior)
+    private var isExpanded: Binding<Bool> {
+        Binding(
+            get: { expandedIndex == index },
+            set: { $0 ? (expandedIndex = index) : (expandedIndex = nil) }
+        )
     }
 
     var body: some View {
-        // Only one open at a time based on index
-        let isExpanded = Binding<Bool>(
-            get: { expandedIndex == index },
-            set: { newValue in expandedIndex = newValue ? index : nil }
-        )
-
         DisclosureGroup(isExpanded: isExpanded) {
             // ───── Expanded Content (full inline form) ─────
             AddWOItemFormView(item: $item)
                 .padding(.top, 6)
-        } label: {
-            // ───── Collapsed Header (compact summary) ─────
+
+            // ───── Danger Zone: Delete Item (expanded only) ─────
+            Divider().padding(.top, 12)
+
+            HStack {
+                Spacer()
+                Button(role: .destructive) {
+                    onDelete(index)
+                } label: {
+                    Label("Delete Item", systemImage: "trash")
+                        .font(.body.weight(.semibold))
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.red)
+            }
+            // END: Danger Zone
+        }
+        
+        // ───── WO_Item Header Label ─────
+        label: {
             HStack(spacing: 8) {
-                Text(itemTitle(for: item))
-                    .font(.headline)
-                Spacer(minLength: 12)
-                Text(itemSubtitle(for: item))
-                    .font(.subheadline)
+                Text(headerTitle(for: item))   // "New Item" (neutral) → "Item" (bold) after input
+                    .font(hasUserEnteredData(item) ? .headline : .body)
+                    .foregroundStyle(hasUserEnteredData(item) ? .primary : .secondary)
+
+                Spacer()
+                if let summary = summaryText(for: item) {
+                    Text(summary)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                } // else: show nothing until user enters data
+                Image(systemName: "chevron.down")
+                    .imageScale(.small)
                     .foregroundStyle(.secondary)
             }
-            .contentShape(Rectangle())
         }
-        .padding(.vertical, 4)
-        .padding(.horizontal, 6)
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color(.secondarySystemBackground))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(Color(.systemGray4), lineWidth: 1)
-        )
-        .animation(.snappy, value: expandedIndex) // smooth expand/collapse
+        // END: WO_Item Header Label
+
     }
+    // END: .body
+    // ───── Helper: Did user enter anything yet? ─────
+    private func hasUserEnteredData(_ item: WO_Item) -> Bool {
+        // Treat true user input only; ignore empty defaults.
+        if let tag = item.tagId, !tag.trimmingCharacters(in: .whitespaces).isEmpty { return true }
+        if !item.imageUrls.isEmpty { return true }
+        if !item.type.trimmingCharacters(in: .whitespaces).isEmpty { return true }
+        if item.dropdowns.values.contains(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty }) { return true }
+        if !item.reasonsForService.isEmpty { return true }
+        if let notes = item.reasonNotes, !notes.trimmingCharacters(in: .whitespaces).isEmpty { return true }
+        return false
+    }
+    // END Helper
+
+    // ───── Helper: Header Title for WO_Item Row ─────
+    private func headerTitle(for item: WO_Item) -> String {
+        // Until the user interacts, keep it neutral and not bold.
+        // After input, we switch to a generic "Item" title and let summary carry the details.
+        return hasUserEnteredData(item) ? "Item" : "New Item"
+    }
+
+    // ───── Helper: Optional summary text (only if there’s data) ─────
+    private func summaryText(for item: WO_Item) -> String? {
+        guard hasUserEnteredData(item) else { return nil }  // nothing until user enters data
+        var bits: [String] = []
+        if let t = (item.type.isEmpty ? item.dropdowns["type"] : item.type), !t.isEmpty {
+            bits.append(t)                      // Type
+        }
+        if let size = item.dropdowns["size"], !size.isEmpty {
+            bits.append(size)                   // Size
+        }
+        if let color = item.dropdowns["color"], !color.isEmpty {
+            bits.append(color)                  // Color
+        }
+        return bits.isEmpty ? nil : bits.joined(separator: " • ")
+    }
+
+    // END Helper
+
+    
+
+    // (Your next helper function or computed property starts here…)
+
 }
-// END WOItemAccordionRow
+// END: WOItemAccordionRow
+
 
 
 
