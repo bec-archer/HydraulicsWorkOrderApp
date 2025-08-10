@@ -263,20 +263,25 @@ private struct WOItemAccordionRow: View {
                 .padding(.top, 6)
 
             // ───── Danger Zone: Delete Item (expanded only) ─────
-            Divider().padding(.top, 12)
 
             HStack {
                 Spacer()
-                Button(role: .destructive) {
+                
+                //Delete Circle Button (red circle with white X)
+                Button {
                     onDelete(index)
                 } label: {
-                    Label("Delete Item", systemImage: "trash")
-                        .font(.body.weight(.semibold))
+                    Image(systemName: "xmark")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 28, height: 28)             // circle size
+                        .background(Color.red, in: Circle())      // red circle
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(.red)
+                .buttonStyle(.plain)                              // no default border
+                .accessibilityLabel("Delete Item")
             }
             // END: Danger Zone
+
         }
         
         // ───── WO_Item Header Label ─────
