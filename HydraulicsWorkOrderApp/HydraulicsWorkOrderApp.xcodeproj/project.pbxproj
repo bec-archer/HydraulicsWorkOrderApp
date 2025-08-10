@@ -10,6 +10,8 @@
 		8996D2DA2E4636F3005DE3D4 /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = 8996D2D92E4636F3005DE3D4 /* FirebaseFirestore */; };
 		8996D2DC2E4636F3005DE3D4 /* FirebaseFirestoreSwift in Frameworks */ = {isa = PBXBuildFile; productRef = 8996D2DB2E4636F3005DE3D4 /* FirebaseFirestoreSwift */; };
 		8996D2DE2E4636F3005DE3D4 /* FirebaseStorage in Frameworks */ = {isa = PBXBuildFile; productRef = 8996D2DD2E4636F3005DE3D4 /* FirebaseStorage */; };
+		8996D34D2E46D185005DE3D4 /* FirestoreTestView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8996D33F2E46D185005DE3D4 /* FirestoreTestView.swift */; };
+		8996D3552E46D185005DE3D4 /* HydraulicsWorkOrderAppApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8996D3402E46D185005DE3D4 /* HydraulicsWorkOrderAppApp.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -33,6 +35,8 @@
 		8996D2AB2E46348B005DE3D4 /* HydraulicsWorkOrderApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = HydraulicsWorkOrderApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		8996D2B82E46348C005DE3D4 /* HydraulicsWorkOrderAppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HydraulicsWorkOrderAppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		8996D2C22E46348C005DE3D4 /* HydraulicsWorkOrderAppUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HydraulicsWorkOrderAppUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		8996D33F2E46D185005DE3D4 /* FirestoreTestView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirestoreTestView.swift; sourceTree = "<group>"; };
+		8996D3402E46D185005DE3D4 /* HydraulicsWorkOrderAppApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HydraulicsWorkOrderAppApp.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -88,6 +92,8 @@
 				8996D2BB2E46348C005DE3D4 /* HydraulicsWorkOrderAppTests */,
 				8996D2C52E46348C005DE3D4 /* HydraulicsWorkOrderAppUITests */,
 				8996D2AC2E46348B005DE3D4 /* Products */,
+				8996D3402E46D185005DE3D4 /* HydraulicsWorkOrderAppApp.swift */,
+				8996D33F2E46D185005DE3D4 /* FirestoreTestView.swift */,
 			);
 			sourceTree = "<group>";
 		};
@@ -251,6 +257,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				8996D34D2E46D185005DE3D4 /* FirestoreTestView.swift in Sources */,
+				8996D3552E46D185005DE3D4 /* HydraulicsWorkOrderAppApp.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

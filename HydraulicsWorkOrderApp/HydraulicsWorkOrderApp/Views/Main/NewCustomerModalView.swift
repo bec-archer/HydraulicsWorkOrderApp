@@ -5,7 +5,6 @@
 //  Created by Bec Archer on 8/8/25.
 //
 
-
 // ─────────────────────────────────────────────────────────────
 // 📄 NewCustomerModalView.swift
 // Used to create a new Customer and return it to parent view
@@ -14,42 +13,63 @@
 import SwiftUI
 
 struct NewCustomerModalView: View {
-    @Environment(\.dismiss) var dismiss
+    // ───── ENV ─────
+    @Environment(\.dismiss) private var dismiss
 
-    // Prefilled from search
-    @State var prefillName: String
-    @State var prefillPhone: String
+    // ───── INPUT (Prefilled from search) ─────
+    let prefillName: String
+    let prefillPhone: String
 
-    // Output
+    // ───── OUTPUT (Parent binding) ─────
     @Binding var selectedCustomer: Customer?
 
-    // Fields
+    // ───── FIELDS ─────
     @State private var name: String = ""
     @State private var phone: String = ""
     @State private var company: String = ""
     @State private var email: String = ""
     @State private var taxExempt: Bool = false
 
-    // Feedback
+    // ───── FEEDBACK ─────
     @State private var errorMessage: String?
-    @State private var isSaving = false
+    @State private var isSaving: Bool = false
+    @FocusState private var focusedField: Field?
 
+    enum Field { case phone, name, company, email }
+
+    // ───── BODY ─────
     var body: some View {
         NavigationStack {
             Form {
+                // ───── Customer Info ─────
                 Section(header: Text("Customer Info")) {
                     TextField("Phone Number", text: $phone)
                         .keyboardType(.phonePad)
-                    TextField("Full Name", text: $name)
-                }
+                        .textContentType(.telephoneNumber)
+                        .focused($focusedField, equals: .phone)
 
+                    TextField("Full Name", text: $name)
+                        .textContentType(.name)
+                        .focused($focusedField, equals: .name)
+                }
+                // END Section
+
+                // ───── Optional Info ─────
                 Section(header: Text("Optional Info")) {
                     TextField("Company", text: $company)
+                        .focused($focusedField, equals: .company)
+
                     TextField("Email", text: $email)
                         .keyboardType(.emailAddress)
+                        .textContentType(.emailAddress)
+                        .autocapitalization(.none)
+                        .focused($focusedField, equals: .email)
+
                     Toggle("Tax Exempt", isOn: $taxExempt)
                 }
+                // END Section
 
+                // ───── Error State ─────
                 if let error = errorMessage {
                     Section {
                         Text("❌ \(error)")
@@ -57,35 +77,71 @@ struct NewCustomerModalView: View {
                             .font(.footnote)
                     }
                 }
+                // END Section
 
+                // ───── Actions ─────
                 Section {
-                    Button("Save Customer") {
+                    Button {
                         saveCustomer()
+                    } label: {
+                        if isSaving {
+                            ProgressView()
+                        } else {
+                            Text("Save Customer")
+                                .fontWeight(.semibold)
+                        }
                     }
-                    .disabled(isSaving || name.isEmpty || phone.isEmpty)
+                    .disabled(isSaving || !canSave)
                 }
+                // END Section
             }
             .navigationTitle("New Customer")
-            .onAppear {
+            .toolbar { // ───── Toolbar ─────
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+            }
+            .onAppear { // ───── Prefill on Appear ─────
                 name = prefillName
                 phone = prefillPhone
+                // Focus the first empty field
+                if phone.isEmpty { focusedField = .phone }
+                else if name.isEmpty { focusedField = .name }
             }
         }
-        // END .body
+        // END NavigationStack
+    }
+    // END .body
+
+    // ───── Derived Validation ─────
+    private var canSave: Bool {
+        !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+        !phoneDigits.isEmpty
     }
 
-    // ───── Save to Firebase ─────
-    func saveCustomer() {
+    private var phoneDigits: String {
+        phone.filter(\.isNumber)
+    }
+    // END Validation
+
+    // ───── Save to Database ─────
+    private func saveCustomer() {
+        errorMessage = nil
+        guard canSave else { return }
         isSaving = true
+
+        // ───── Create model (UUID id, include required name) ─────
         let newCustomer = Customer(
-            id: nil,
-            name: name,
-            phone: phone,
-            company: company.isEmpty ? nil : company,
-            email: email.isEmpty ? nil : email,
+            id: UUID(), // ✅ UUID in-app
+            name: name.trimmingCharacters(in: .whitespacesAndNewlines),   // ✅ add this
+            phone: phoneDigits,
+            company: company.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : company,
+            email: email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : email,
             taxExempt: taxExempt
         )
 
+
+        // ───── Persistence Call ─────
         CustomerDatabase.shared.addCustomer(newCustomer) { result in
             DispatchQueue.main.async {
                 isSaving = false
@@ -98,13 +154,21 @@ struct NewCustomerModalView: View {
                 }
             }
         }
+        // END Persistence Call
     }
-
-    // END
+    // END Save
 }
+// END NewCustomerModalView
 
-// ───── Preview Template ─────
 
+// ─────────────────────────────────────────────────────────────
+// MARK: - Preview Template
+// ─────────────────────────────────────────────────────────────
 #Preview(traits: .sizeThatFitsLayout) {
-    NewCustomerModalView(prefillName: "Maria", prefillPhone: "555-1234", selectedCustomer: .constant(nil))
+    NewCustomerModalView(
+        prefillName: "Maria",
+        prefillPhone: "555-1234",
+        selectedCustomer: .constant(nil)
+    )
 }
+// END Preview

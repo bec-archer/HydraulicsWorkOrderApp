@@ -14,27 +14,34 @@
 import Foundation
 import FirebaseFirestoreSwift
 
+// ─────────────────────────────────────────────────────────────
+// 📄 Customer.swift
+// Canonical Customer model — UUID id in-app, Firestore stores as String
+// ─────────────────────────────────────────────────────────────
+
+import Foundation
+
 struct Customer: Identifiable, Codable, Equatable {
-    @DocumentID var id: String?             // Firebase doc ID
-
-    var name: String                        // Customer name
-    var phone: String                       // Primary contact (used for lookup)
-    var company: String?                    // Optional company name
-    var email: String?                      // Optional contact email
-    var taxExempt: Bool                     // Optional toggle
-
-    // END
+    let id: UUID                         // ✅ Non-optional UUID
+    var name: String
+    var phone: String
+    var company: String?
+    var email: String?
+    var taxExempt: Bool
 }
+// END Customer
+
 
 // MARK: - Sample
 
 extension Customer {
     static let sample = Customer(
-        id: "sample-id",
+        id: UUID(), // ✅ generates a valid UUID for sample data
         name: "Maria Rivera",
         phone: "555-1234",
         company: "Suncoast Hydraulics",
         email: "maria@example.com",
         taxExempt: false
     )
+
 }

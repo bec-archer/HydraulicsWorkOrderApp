@@ -1,9 +1,7 @@
-# 📁 Hydraulics Work Order App – File Structure
+# 📁 Hydraulics Work Order App – File Structure - Actual Build
 
-*Reflecting FINAL PRD – Updated: August 7, 2025*
-
-* Created Files/Folders are marked with ✅
-* New Files not originally in File Structure are marked with 📍
+* Existing Files/Folders are marked with ✅
+* New Files not originally in File Structure are marked with 🧩
 * Scaffolded Files marked with 🏗️
 
 ---
@@ -13,10 +11,11 @@
 ```
 HydraulicsWorkOrderApp/✅
 ├── App/ ✅
-│   ├── HydraulicsWorkOrderAppApp.swift ✅      # App entry point
 │   ├── AppDelegate.swift ✅                 # Lifecycle management
-│   ├── AppState.swift                     # Global user state
-│   └── FirestoreTestView.swift 📍✅ 		# Used to test Firebase connection
+│   ├── AppState.swift                     # Global user state		
+├──HydraulicsWorkOrderAppApp.swift ✅  	 # App entry point
+├──FirestoreTestView.swift 🧩✅         # Used to test Firebase connection
+└──ContentView.swift 🧩✅
 ```
 
 ---
@@ -30,13 +29,13 @@ HydraulicsWorkOrderApp/✅
 │   │   ├── WO_Item.swift ✅          # One per equipment item
 │   │   ├── WO_Status.swift 🏗️          # Tracks all status updates
 │   │   ├── WO_Note.swift ✅            # Freeform notes
-│   │   ├── Customer.swift
+│   │   ├── Customer.swift ✅
 │   │   ├── User.swift
 │   │   ├── AuditLog.swift           # Tag reassignments, deletions, etc.
-│   │   └── TagReplacement.swift 📍🏗️ 
+│   │   └── TagReplacement.swift 🧩🏗️ 
 │   │
-│   ├── Enums/
-│   │   ├── UserRole.swift           # tech, manager, admin, superadmin
+│   ├── Enums/✅
+│   │   ├── UserRole.swift ✅           # tech, manager, admin, superadmin
 │   │   ├── TagBypassReason.swift
 │   │   ├── TestResult.swift
 │   │   ├── NoteType.swift
@@ -48,24 +47,28 @@ HydraulicsWorkOrderApp/✅
 ## 📲 Views
 
 ```
-├── Views/
+├── Views/✅
 │   ├── Main/
-│   │   ├── ActiveWorkOrdersView.swift     # Replaces ActiveWO_sView
+│   │   ├── ActiveWorkOrdersView.swift ✅     # Replaces ActiveWO_sView
 │   │   ├── CompletedWorkOrdersView.swift  # Replaces CompletedWO_sView
-│   │   ├── NewWorkOrderView.swift         # Replaces NewWO_View
+│   │   ├── NewWorkOrderView.swift ✅         # Replaces NewWO_View
 │   │   ├── WorkOrderDetailView.swift      # Replaces WO_DetailView
 │   │   ├── WorkOrderItemDetailView.swift  # Replaces WO_ItemDetailView
-│   │   └── SearchView.swift
+│   │   ├── SearchView.swift
+│   │   ├── AddWOItemView.swift 🧩✅
+│   │   ├── AddWOItemFormView.swift 🧩✅	# Inline Form for Entry
+│   │   ├── NewCustomerModalView.swift 🧩✅
+│   │   └── AddWOItemView.swift 🧩✅
 │   │
 │   ├── Components/
-│   │   ├── WorkOrderCardView.swift        # Replaces WO_CardView
-│   │   ├── DropdownField.swift
+│   │   ├── WorkOrderCardView.swift ✅        # Replaces WO_CardView
+│   │   ├── DropdownField.swift ✅ 
 │   │   ├── PhotoPickerView.swift
 │   │   ├── NotesTimelineView.swift
-│   │   └── StatusBadge.swift
+│   │   └── StatusBadge.swift✅ 
 │   │
-│   ├── Authentication/
-│   │   ├── LoginView.swift
+│   ├── Authentication/✅
+│   │   ├── LoginView.swift✅
 │   │   └── UserSelectionView.swift
 │   │
 │   ├── Manager/
@@ -75,7 +78,7 @@ HydraulicsWorkOrderApp/✅
 │   ├── Admin/
 │   │   ├── SettingsView.swift
 │   │   ├── UserManagerView.swift
-│   │   ├── DropdownManagerView.swift
+│   │   ├── DropdownManager.swift ⚠️ saved in /Managers/Data
 │   │   ├── DeletedWorkOrdersView.swift    # Replaces DeletedWO_sView
 │   │   └── SyncStatusView.swift
 ```
@@ -85,17 +88,18 @@ HydraulicsWorkOrderApp/✅
 ## 🔧 Managers
 
 ```
-├── Managers/
+├── Managers/✅
 │   ├── Data/
-│   │   ├── WorkOrdersDatabase.swift
-│   │   ├── CustomerDatabase.swift
+│   │   ├── WorkOrdersDatabase.swift✅
+│   │   ├── CustomerDatabase.swift ✅
 │   │   ├── LocalBackupManager.swift       # Writes SQLite copy
-│   │   └── SyncManager.swift              # Firebase sync + retry, conflict resolution
+│   │   ├── SyncManager.swift              # Firebase sync + retry, conflict resolution
+│   │   └── DropdownManagerView.swift 
 │   │
-│   ├── Configuration/
+│   ├── Configuration/✅
 │   │   ├── SettingsManager.swift
-│   │   ├── DevSettingsManager.swift
-│   │   └── DropdownManager.swift          # Stays here for now (handles constants)
+│   │   ├── DevSettingsManager.swift ✅
+│   │   └── DropdownManager.swift    # Stays here for now (handles constants)
 ```
 
 ---
@@ -112,10 +116,11 @@ HydraulicsWorkOrderApp/✅
 │   ├── Helpers/
 │   │   └── WorkOrderNumberGenerator.swift # Replaces WO_NumberGenerator.swift
 │   │
-│   └── Constants/
+│   └── Constants/ ✅
 │       ├── AppConstants.swift
 │       ├── UIConstants.swift
-│       └── ErrorMessages.swift
+│       ├── ErrorMessages.swift
+│       └── DropdownSchema.swift 🧩✅
 ```
 
 ---

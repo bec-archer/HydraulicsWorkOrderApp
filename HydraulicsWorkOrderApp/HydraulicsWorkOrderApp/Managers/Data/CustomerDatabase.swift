@@ -54,20 +54,31 @@ final class CustomerDatabase: ObservableObject {
     }
 
     // ───── ADD NEW CUSTOMER ─────
+    // Store using the Customer.id (UUID) as the Firestore document ID (String)
     func addCustomer(_ customer: Customer, completion: @escaping (Result<Void, Error>) -> Void) {
+        let docId = customer.id.uuidString // ✅ deterministic, derived from UUID
+
         do {
-            let _ = try db.collection(collection).addDocument(from: customer) { error in
-                if let error = error {
-                    completion(.failure(error))
-                } else {
-                    self.fetchCustomers()
-                    completion(.success(()))
+            try db.collection(collection)
+                .document(docId)
+                .setData(from: customer) { error in
+                    if let error = error {
+                        completion(.failure(error))
+                    } else {
+                        // Ensure the doc contains its own id field (string) for easy querying
+                        self.db.collection(self.collection)
+                            .document(docId)
+                            .setData(["id": docId], merge: true)
+
+                        self.fetchCustomers() // refresh local cache so live search sees it
+                        completion(.success(()))
+                    }
                 }
-            }
         } catch {
             completion(.failure(error))
         }
     }
 
-    // END
+
+
 }
