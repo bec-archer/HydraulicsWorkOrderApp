@@ -64,51 +64,58 @@ struct NewWorkOrderView: View {
             Form {
                 // ───── CUSTOMER LOOKUP ─────
                 Section(header: Text("Customer Lookup")) {
+                    // CANCEL BUTTON INLINE
                     if let customer = selectedCustomer {
-                        // Selected customer summary card
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(customer.name).font(.headline)
-                            Text(customer.phone).font(.subheadline)
-                            
+                        // Selected customer summary card with inline Clear button (compact layout)
+                        HStack(alignment: .center, spacing: 8) {
+                            VStack(alignment: .leading, spacing: 2) { // ↓ tighter vertical spacing
+                                Text(customer.name)
+                                    .font(.headline)
+                                Text(customer.phone)
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
                             Button {
                                 selectedCustomer = nil
                                 searchText = ""
                             } label: {
-                                Label("Clear", systemImage: "xmark.circle.fill")
+                                Image(systemName: "xmark.circle.fill")
                                     .foregroundColor(.red)
+                                    .imageScale(.large)
+                                    .padding(.leading, 4)
+                                    .accessibilityLabel("Clear selected customer")
                             }
-                            .padding(.top, 6)
                         }
+                        .padding(.vertical, 4)
+                        // END CANCEL BUTTON INLINE
                     } else {
                         // Search + results + Add New button
                         VStack(alignment: .leading) {
+                            
+                            // ----- CUSTOMER LOOKUP (INSIDE THE SECTION) -----
                             TextField("Search by name or phone", text: $searchText)
                                 .textFieldStyle(.roundedBorder)
-                                .disabled(isPickingCustomer) // ← prevents changes mid-selection
-                            
-                            // HERE
+                                .disabled(isPickingCustomer) // ← prevent live search while selecting
+
                             if !matchingCustomers.isEmpty {
-                                // Use index-based rows to avoid identity reuse while tapping
                                 ForEach(matchingCustomers.indices, id: \.self) { idx in
                                     let customer = matchingCustomers[idx]
-
                                     Button {
-                                        // ───── Freeze EVERYTHING during selection ─────
+                                        // Freeze updates during selection
                                         isPickingCustomer = true
 
-                                        // Select the exact element we tapped
+                                        // Commit selection deterministically
                                         selectCustomer(customer)
 
-                                        // Immediately clear the list so no row diffing can fire
+                                        // Clear list immediately so no diffing can fire
                                         matchingCustomers = []
                                         searchText = ""
 
-                                        // Unfreeze on next runloop (feels instant in UI)
-                                        DispatchQueue.main.async {
-                                            isPickingCustomer = false
-                                        }
+                                        // Unfreeze on next runloop
+                                        DispatchQueue.main.async { isPickingCustomer = false }
 
-                                        // TEMP DIAGNOSTIC
+                                        // (Optional) debug
                                         print("👆 PICKED (idx \(idx)):", customer.id.uuidString, customer.name, customer.phone)
                                     } label: {
                                         VStack(alignment: .leading, spacing: 2) {
@@ -118,28 +125,26 @@ struct NewWorkOrderView: View {
                                                 .foregroundStyle(.secondary)
                                         }
                                         .padding(.vertical, 4)
-                                        .contentShape(Rectangle()) // full-row tap target
+                                        .contentShape(Rectangle()) // nice big tap target
                                     }
                                     .buttonStyle(.plain)
                                 }
                             } else if !searchText.isEmpty {
-
-                                // TO HERE
                                 Button {
                                     showingNewCustomerModal = true
-                                    print("➕ Presenting NewCustomerModalView with prefill:",
-                                          prefillNameFromSearch, prefillPhoneFromSearch) // TEMP LOG
                                 } label: {
                                     Label("Add New Customer", systemImage: "plus.circle")
                                         .foregroundStyle(.blue)
                                 }
                                 .padding(.top, 4)
                             }
-
+//  --------- END HERE ---------------
                             // END VALIDATE ME??
                         }
                     }
                 }
+                .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 4, trailing: 16)) // ↓ tighter bottom spacing
+
                 // END Customer Lookup
                 
                 // ───── WORK ORDER FLAGS ─────
@@ -147,6 +152,7 @@ struct NewWorkOrderView: View {
                     Toggle("Flag this WorkOrder", isOn: $flagged)
                 }
                 // END Work Order Flags
+                .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 0, trailing: 16)) // ↓ tighter top spacing
                 
                 // ───── WO_Item ENTRY ─────
                 Section(header: Text("Equipment Items")) {
@@ -213,12 +219,6 @@ struct NewWorkOrderView: View {
             }
             // END Diagnostic
             
-            // ───── DIAGNOSTIC: detect unexpected overwrites ─────
-            .onChange(of: selectedCustomer) { newValue in
-                guard let c = newValue else { return }
-                print("⚠️ selectedCustomer CHANGED:", c.id.uuidString, c.name, c.phone)
-            }
-            // END diagnostics
             // ───── CUSTOMER INJECTION ─────
 
             // 🔁 Customer injected from NewCustomerModalView
@@ -311,9 +311,25 @@ struct NewWorkOrderView: View {
     
     // ───── SAVE HANDLER ─────
     func saveWorkOrder() {
-        // ...
+        // ───── Required Field Validation ─────
+        guard let customer = selectedCustomer else {
+            // No customer selected: stop and inform the user.
+            alertMessage = "Please select or add a Customer before saving this WorkOrder."
+            showAlert = true
+            return
+        }
+        // END: Required Field Validation
+
+        // ───── Proceed with save (placeholder) ─────
+        // Build WorkOrder object and persist to Firebase/SQLite here.
+        // Using 'customer' is now safe because validation passed.
+        print("✅ Proceeding to save WorkOrder for customer:", customer.name, customer.phone)
+
+        // TODO: implement actual persistence flow in the next step.
+        // ───── END Proceed with save (placeholder) ─────
     }
     // END Save Handler
+
 
     // ───── Action: Delete / Reset WO_Item ─────
     private func handleDeleteWOItem(_ index: Int) {
