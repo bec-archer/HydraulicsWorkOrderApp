@@ -143,7 +143,7 @@ struct NewWorkOrderView: View {
                         }
                     }
                 }
-                .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 4, trailing: 16)) // ↓ tighter bottom spacing
+                .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16)) // ↓ tighter bottom spacing
 
                 // END Customer Lookup
                 
@@ -152,7 +152,7 @@ struct NewWorkOrderView: View {
                     Toggle("Flag this WorkOrder", isOn: $flagged)
                 }
                 // END Work Order Flags
-                .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 0, trailing: 16)) // ↓ tighter top spacing
+                .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16)) // ↓ tighter top spacing
                 
                 // ───── WO_Item ENTRY ─────
                 Section(header: Text("Equipment Items")) {
