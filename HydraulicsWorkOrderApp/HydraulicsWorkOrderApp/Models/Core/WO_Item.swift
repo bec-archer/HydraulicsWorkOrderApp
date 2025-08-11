@@ -1,129 +1,51 @@
-//
-//  WO_Item.swift
-//  HydraulicsWorkOrderApp
-//
-//  Created by Bec Archer on 8/8/25.
-//
-
-// ─────────────────────────────────────────────────────────────
-// 📄 WO_Item.swift
-// Represents a single piece of equipment in a WorkOrder
-// ─────────────────────────────────────────────────────────────
-import SwiftUI
 import Foundation
-import FirebaseFirestoreSwift
-
-// MARK: - WO_Item Model
+import SwiftUI
 
 struct WO_Item: Identifiable, Codable, Equatable {
-    // ───── Unique Identifier ─────
     var id: UUID = UUID()
-    
-    // ───── Equipment Info ─────
-    var tagId: String?                      // QR or RFID
-    var imageUrls: [String]                 // Uploaded to Firebase Storage
-    var type: String                        // Cylinder, Pump, Hose, etc.
-    
-    // ───── Dropdowns + Reason ─────
-    var dropdowns: [String: String]         // Frozen at intake
-    var dropdownSchemaVersion: Int
-    var reasonsForService: [String]         // e.g., "Replace Seals"
-    var reasonNotes: String?
-    
-    // ───── Status + Testing ─────
-    var statusHistory: [WO_Status]          // Timeline entries
-    var testResult: String?                 // PASS / FAIL / nil
-    var partsUsed: String?
-    var hoursWorked: String?
-    var cost: String?
-    
-    // ───── Assignment + Flags ─────
-    var assignedTo: String                  // Technician name
-    var isFlagged: Bool
-    
-    // ───── Audit Trail ─────
-    var tagReplacementHistory: [TagReplacement]?
-    
-    // ───── FACTORY: Blank WO_Item ─────
-    static func blank() -> WO_Item {
-        WO_Item(
-            id: UUID(),                      // fresh unique ID every time
-            tagId: nil,
-            imageUrls: [],
-            type: "",
-            dropdowns: [:],
-            dropdownSchemaVersion: DropdownSchema.currentVersion,
-            reasonsForService: [],
-            reasonNotes: nil,
-            statusHistory: [],
-            testResult: nil,
-            partsUsed: nil,
-            hoursWorked: nil,
-            cost: nil,
-            assignedTo: "",
-            isFlagged: false,
-            tagReplacementHistory: nil
-        )
+    var tagId: String? = nil
+    var type: String = ""
+
+    var dropdowns: [String: String] = [:]
+    var reasonsForService: [String] = []
+    var reasonNotes: String? = nil
+
+    var imageUrls: [String] = []
+    var localImages: [UIImage] = []    // ✅ No longer using @TransientImageStorage
+
+    var lastModified: Date = Date()
+    var dropdownSchemaVersion: Int = 1
+    var lastModifiedBy: String? = nil
+}
+
+// Ignore localImages in Codable
+extension WO_Item {
+    enum CodingKeys: String, CodingKey {
+        case id, tagId, type, dropdowns, reasonsForService, reasonNotes,
+             imageUrls, lastModified, dropdownSchemaVersion, lastModifiedBy
     }
 }
-// END FACTORY: Blank WO_Item
 
-
-// MARK: - Sample + Factory
-
+// ───── Preview Stub ─────
 extension WO_Item {
     static let sample = WO_Item(
-        tagId: "QR-123456",
-        imageUrls: [],
+        tagId: "TEST123",
         type: "Cylinder",
         dropdowns: [
-            "type": "Cylinder",
-            "size": "< 24\"",
-            "color": "Black",
+            "size": "3\" Bore",
+            "color": "Yellow",
+            "colorHex": "#FFD700",
             "machineType": "Forklift",
             "machineBrand": "Bobcat",
-            "waitTime": "24 hrs"
+            "waitTime": "1–2 Days"
         ],
-        dropdownSchemaVersion: 1,
-        reasonsForService: ["Replace Seals"],
-        reasonNotes: "Leaking from top seal",
-        statusHistory: [],
-        testResult: nil,
-        partsUsed: nil,
-        hoursWorked: nil,
-        cost: nil,
-        assignedTo: "Maria",
-        isFlagged: false,
-        tagReplacementHistory: nil
+        reasonsForService: ["Leaking", "Other"],
+        reasonNotes: "This is just a sample note.",
+        imageUrls: []
     )
-
-    static func empty() -> WO_Item {
-        WO_Item(
-            tagId: nil,
-            imageUrls: [],
-            type: "",
-            dropdowns: [:],
-            dropdownSchemaVersion: 1,
-            reasonsForService: [],
-            reasonNotes: nil,
-            statusHistory: [],
-            testResult: nil,
-            partsUsed: nil,
-            hoursWorked: nil,
-            cost: nil,
-            assignedTo: "",
-            isFlagged: false,
-            tagReplacementHistory: nil
-        )
-    }
 }
-
-// ───── Preview Template ─────
-#Preview(traits: .sizeThatFitsLayout) {
-    VStack(alignment: .leading) {
-        Text("WO_Item Preview")
-            .font(.title2)
-        Text("Assigned To: \(WO_Item.sample.assignedTo)")
+extension WO_Item {
+    static func blank() -> WO_Item {
+        WO_Item()
     }
-    .padding()
 }

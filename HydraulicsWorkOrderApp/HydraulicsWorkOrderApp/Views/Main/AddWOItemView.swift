@@ -62,25 +62,21 @@ struct AddWOItemView: View {
 
         let newItem = WO_Item(
             tagId: tagId.isEmpty ? nil : tagId,
-            imageUrls: [],
             type: type,
             dropdowns: [:],
-            dropdownSchemaVersion: 1,
             reasonsForService: reason.isEmpty ? [] : [reason],
             reasonNotes: nil,
-            statusHistory: [],
-            testResult: nil,
-            partsUsed: nil,
-            hoursWorked: nil,
-            cost: nil,
-            assignedTo: "DevUser",
-            isFlagged: isFlagged,
-            tagReplacementHistory: nil
+            imageUrls: [],
+            localImages: [],
+            lastModified: Date(),
+            dropdownSchemaVersion: 1,
+            lastModifiedBy: nil
         )
 
         items.append(newItem)
         dismiss()
     }
+
 
     // END
 }

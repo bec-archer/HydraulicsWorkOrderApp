@@ -45,6 +45,7 @@ struct DropdownField: View {
                 }
             }
             .pickerStyle(MenuPickerStyle())
+            .id("picker_\(label)")     // ← keeps each field from hijacking another
 
             if showColorPickerIfOther && (selectedValue ?? "") == "Other" {
                 ColorPicker("Pick a color", selection: $customColor)
@@ -52,6 +53,7 @@ struct DropdownField: View {
             }
         }
     }
+
 }
 
 // ───── UIColor Hex Extension ─────

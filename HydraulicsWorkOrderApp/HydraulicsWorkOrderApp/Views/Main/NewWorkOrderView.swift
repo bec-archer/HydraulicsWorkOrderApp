@@ -40,23 +40,7 @@ struct NewWorkOrderView: View {
         return digits.count >= 3 ? trimmed : ""   // digits ⇒ phone, else blank
     }
     // END Prefill Helpers
-    // ───── Item Header Helpers ─────
-    private func itemTitle(for item: WO_Item) -> String {
-        // Prefer dropdown “type” or fall back gracefully
-        item.dropdowns["type"]?.capitalized ?? "WO_Item"
-    }
 
-    private func itemSubtitle(for item: WO_Item) -> String {
-        // Show a quick at-a-glance detail, like size or color
-        if let size = item.dropdowns["size"], !size.isEmpty {
-            return size
-        }
-        if let color = item.dropdowns["color"], !color.isEmpty {
-            return color
-        }
-        return "Details"
-    }
-    // END Item Header Helpers
 
     // ───── BODY ─────
     var body: some View {
@@ -158,10 +142,10 @@ struct NewWorkOrderView: View {
                 Section(header: Text("Equipment Items")) {
                     ForEach(items.indices, id: \.self) { idx in
                         WOItemAccordionRow(
-                            item: $items[idx],
                             index: idx,
+                            items: $items,
                             expandedIndex: $expandedIndex,
-                            onDelete: handleDeleteWOItem   // ← add this
+                            onDelete: handleDeleteWOItem
                         )
                     }
 
@@ -201,10 +185,8 @@ struct NewWorkOrderView: View {
             }
             // ───── SAFE ONCHANGE FOR iOS 16+17 ─────
             // ───── Debounced onChange (prevents list swapping mid‑tap) ─────
-            .onChange(of: searchText) { newValue in
-                // Don’t recompute matches while the user is selecting a row
+            .onChange(of: searchText) { _, newValue in
                 guard !isPickingCustomer else { return }
-
                 searchDebounce?.cancel()
                 let task = DispatchWorkItem { handleSearchTextChange(newValue) }
                 searchDebounce = task
@@ -213,10 +195,11 @@ struct NewWorkOrderView: View {
             // END Debounced onChange
             
             // ───── DIAGNOSTIC: Who is overwriting selectedCustomer? ─────
-            .onChange(of: selectedCustomer) { newValue in
-                guard let c = newValue else { return }
-                print("⚠️ selectedCustomer CHANGED:", c.id.uuidString, c.name, c.phone)
-            }
+            .onChange(of: selectedCustomer) { _, newValue in
+            guard let c = newValue else { return }
+            print("⚠️ selectedCustomer CHANGED:", c.id.uuidString, c.name, c.phone)
+        }
+
             // END Diagnostic
             
             // ───── CUSTOMER INJECTION ─────
@@ -313,28 +296,86 @@ struct NewWorkOrderView: View {
     func saveWorkOrder() {
         // ───── Required Field Validation ─────
         guard let customer = selectedCustomer else {
-            // No customer selected: stop and inform the user.
             alertMessage = "Please select or add a Customer before saving this WorkOrder."
             showAlert = true
             return
         }
         // END: Required Field Validation
 
-        // ───── Proceed with save (placeholder) ─────
-        // Build WorkOrder object and persist to Firebase/SQLite here.
-        // Using 'customer' is now safe because validation passed.
-        print("✅ Proceeding to save WorkOrder for customer:", customer.name, customer.phone)
+        // ───── Build WorkOrder (ALL required fields) ─────
+        // NOTE: Placeholder values where we haven't wired managers yet.
+        // - createdBy / lastModifiedBy will come from UserManager
+        // - dropdownSchemaVersion hard-coded to 1 until DropdownSchema exists
+        let wo = WorkOrder(
+            id: UUID().uuidString,            // if your model uses String; otherwise keep UUID()
+            createdBy: "Tech",                // ⬅️ move this up, right after id
+            customerId: customer.id.uuidString,
+            customerName: customer.name,
+            customerPhone: customer.phone,
+            WO_Type: "Intake",
+            imageURL: items.first?.imageUrls.first,
+            timestamp: Date(),
+            status: "Checked In",
+            WO_Number: generateLocalWONumber(),
+            flagged: flagged,
+            tagId: nil,
+            estimatedCost: nil,
+            finalCost: nil,
+            dropdowns: [:],
+            dropdownSchemaVersion: 1,
+            lastModified: Date(),
+            lastModifiedBy: "Tech",
+            tagBypassReason: nil,
+            isDeleted: false,
+            notes: [],
+            items: items        )
 
-        // TODO: implement actual persistence flow in the next step.
-        // ───── END Proceed with save (placeholder) ─────
+
+        // ───── END Build WorkOrder ─────
+
+        // ───── Persist to Firestore (Codable) ─────
+        do {
+            let db = Firestore.firestore()
+            try db.collection("workOrders")
+                .document(wo.id ?? UUID().uuidString)   // unwrap: ensure non-optional doc id
+                .setData(from: wo)
+            
+            alertMessage = "✅ WorkOrder saved: \(wo.WO_Number)"
+            showAlert = true
+
+            // (Optional) Reset for next intake
+            selectedCustomer = nil
+            searchText = ""
+            matchingCustomers = []
+            flagged = false
+            items = [WO_Item.blank()]
+            expandedIndex = 0
+
+        } catch {
+            alertMessage = "❌ Failed to save WorkOrder: \(error.localizedDescription)"
+            showAlert = true
+        }
+        // ───── END Persist ─────
     }
     // END Save Handler
+
+    // ───── Helper: Local WO Number (temp) ─────
+    private func generateLocalWONumber() -> String {
+        // Format: YYMMDD-### (temp counter = seconds mod 1000 to avoid collisions in dev)
+        let df = DateFormatter()
+        df.dateFormat = "yyMMdd"
+        let day = df.string(from: Date())
+        let suffix = String(format: "%03d", Int(Date().timeIntervalSince1970) % 1000)
+        return "\(day)-\(suffix)"
+    }
+    // END Helper
+
 
 
     // ───── Action: Delete / Reset WO_Item ─────
     private func handleDeleteWOItem(_ index: Int) {
         if items.count > 1 {
-            withAnimation { items.remove(at: index) }
+            _ = withAnimation { items.remove(at: index) }   // ignore return explicitly
             // Keep expansion on a sensible neighbor
             if let current = expandedIndex, current == index {
                 expandedIndex = max(0, min(index, items.count - 1))
@@ -343,7 +384,7 @@ struct NewWorkOrderView: View {
             }
         } else {
             // Must always have ≥ 1 WO_Item: reset the lone item
-            withAnimation { items[0] = WO_Item.blank() }
+            withAnimation { items[0] = WO_Item.blank() }   // ignore return explicitly
             expandedIndex = 0
         }
     }
@@ -351,126 +392,6 @@ struct NewWorkOrderView: View {
 
 }
 // END struct
-
-
-
-// ─────────────────────────────────────────────────────────────
-// MARK: - WOItemAccordionRow
-// Collapsible inline form for a single WO_Item.
-// Shows "New Item" when empty. When expanded, includes a
-// destructive "Delete Item" button (resets if it's the only item).
-// ─────────────────────────────────────────────────────────────
-private struct WOItemAccordionRow: View {
-    @Binding var item: WO_Item
-    let index: Int
-    @Binding var expandedIndex: Int?
-    let onDelete: (_ index: Int) -> Void  // ← parent-provided action
-
-    // Control whether THIS row is expanded (single-expand behavior)
-    private var isExpanded: Binding<Bool> {
-        Binding(
-            get: { expandedIndex == index },
-            set: { $0 ? (expandedIndex = index) : (expandedIndex = nil) }
-        )
-    }
-
-    var body: some View {
-        DisclosureGroup(isExpanded: isExpanded) {
-            // ───── Expanded Content (full inline form) ─────
-            AddWOItemFormView(item: $item)
-                .padding(.top, 6)
-
-            // ───── Danger Zone: Delete Item (expanded only) ─────
-
-            HStack {
-                Spacer()
-                
-                //Delete Circle Button (red circle with white X)
-                Button {
-                    onDelete(index)
-                } label: {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(.white)
-                        .frame(width: 28, height: 28)             // circle size
-                        .background(Color.red, in: Circle())      // red circle
-                }
-                .buttonStyle(.plain)                              // no default border
-                .accessibilityLabel("Delete Item")
-            }
-            // END: Danger Zone
-
-        }
-        
-        // ───── WO_Item Header Label ─────
-        label: {
-            HStack(spacing: 8) {
-                Text(headerTitle(for: item))   // "New Item" (neutral) → "Item" (bold) after input
-                    .font(hasUserEnteredData(item) ? .headline : .body)
-                    .foregroundStyle(hasUserEnteredData(item) ? .primary : .secondary)
-
-                Spacer()
-                if let summary = summaryText(for: item) {
-                    Text(summary)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                } // else: show nothing until user enters data
-                Image(systemName: "chevron.down")
-                    .imageScale(.small)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        // END: WO_Item Header Label
-
-    }
-    // END: .body
-    // ───── Helper: Did user enter anything yet? ─────
-    private func hasUserEnteredData(_ item: WO_Item) -> Bool {
-        // Treat true user input only; ignore empty defaults.
-        if let tag = item.tagId, !tag.trimmingCharacters(in: .whitespaces).isEmpty { return true }
-        if !item.imageUrls.isEmpty { return true }
-        if !item.type.trimmingCharacters(in: .whitespaces).isEmpty { return true }
-        if item.dropdowns.values.contains(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty }) { return true }
-        if !item.reasonsForService.isEmpty { return true }
-        if let notes = item.reasonNotes, !notes.trimmingCharacters(in: .whitespaces).isEmpty { return true }
-        return false
-    }
-    // END Helper
-
-    // ───── Helper: Header Title for WO_Item Row ─────
-    private func headerTitle(for item: WO_Item) -> String {
-        // Until the user interacts, keep it neutral and not bold.
-        // After input, we switch to a generic "Item" title and let summary carry the details.
-        return hasUserEnteredData(item) ? "Item" : "New Item"
-    }
-
-    // ───── Helper: Optional summary text (only if there’s data) ─────
-    private func summaryText(for item: WO_Item) -> String? {
-        guard hasUserEnteredData(item) else { return nil }  // nothing until user enters data
-        var bits: [String] = []
-        if let t = (item.type.isEmpty ? item.dropdowns["type"] : item.type), !t.isEmpty {
-            bits.append(t)                      // Type
-        }
-        if let size = item.dropdowns["size"], !size.isEmpty {
-            bits.append(size)                   // Size
-        }
-        if let color = item.dropdowns["color"], !color.isEmpty {
-            bits.append(color)                  // Color
-        }
-        return bits.isEmpty ? nil : bits.joined(separator: " • ")
-    }
-
-    // END Helper
-
-    
-
-    // (Your next helper function or computed property starts here…)
-
-}
-// END: WOItemAccordionRow
-
-
-
 
 // ───── PREVIEW ─────
 #Preview {
