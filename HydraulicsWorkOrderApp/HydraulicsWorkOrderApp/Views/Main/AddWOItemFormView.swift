@@ -28,8 +28,8 @@ struct AddWOItemFormView: View {
                 label: "Type",
                 options: dropdowns.options["type"] ?? [],
                 selectedValue: Binding(
-                    get: { item.dropdowns["type"] ?? "" },
-                    set: { item.dropdowns["type"] = $0 }
+                    get: { let v = item.dropdowns["type"]; return v?.isEmpty == true ? nil : v },
+                    set: { item.dropdowns["type"] = $0 ?? "" }
                 ),
                 showColorPickerIfOther: false,
                 customColor: $customColor
@@ -41,9 +41,9 @@ struct AddWOItemFormView: View {
                     label: "Size",
                     options: dropdowns.options["size"] ?? [],
                     selectedValue: Binding(
-                        get: { item.dropdowns["size"] ?? "" },
-                        set: { item.dropdowns["size"] = $0 }
-                    ),
+                        get: { let v = item.dropdowns["type"]; return v?.isEmpty == true ? nil : v },
+                            set: { item.dropdowns["type"] = $0 ?? "" }
+                        ),
                     showColorPickerIfOther: false,
                     customColor: $customColor
                 )
@@ -54,9 +54,9 @@ struct AddWOItemFormView: View {
                 label: "Color",
                 options: dropdowns.options["color"] ?? [],
                 selectedValue: Binding(
-                    get: { item.dropdowns["color"] ?? "" },
-                    set: { item.dropdowns["color"] = $0 }
-                ),
+                    get: { let v = item.dropdowns["type"]; return v?.isEmpty == true ? nil : v },
+                        set: { item.dropdowns["type"] = $0 ?? "" }
+                    ),
                 showColorPickerIfOther: true, // "Other" opens a ColorPicker
                 customColor: $customColor
             )
@@ -66,9 +66,9 @@ struct AddWOItemFormView: View {
                 label: "Machine Type",
                 options: dropdowns.options["machineType"] ?? [],
                 selectedValue: Binding(
-                    get: { item.dropdowns["machineType"] ?? "" },
-                    set: { item.dropdowns["machineType"] = $0 }
-                ),
+                    get: { let v = item.dropdowns["type"]; return v?.isEmpty == true ? nil : v },
+                        set: { item.dropdowns["type"] = $0 ?? "" }
+                    ),
                 showColorPickerIfOther: false,
                 customColor: $customColor
             )
@@ -78,9 +78,9 @@ struct AddWOItemFormView: View {
                 label: "Machine Brand",
                 options: dropdowns.options["machineBrand"] ?? [],
                 selectedValue: Binding(
-                    get: { item.dropdowns["machineBrand"] ?? "" },
-                    set: { item.dropdowns["machineBrand"] = $0 }
-                ),
+                    get: { let v = item.dropdowns["type"]; return v?.isEmpty == true ? nil : v },
+                        set: { item.dropdowns["type"] = $0 ?? "" }
+                    ),
                 showColorPickerIfOther: false,
                 customColor: $customColor
             )
@@ -90,9 +90,9 @@ struct AddWOItemFormView: View {
                 label: "Estimated Wait Time",
                 options: dropdowns.options["waitTime"] ?? [],
                 selectedValue: Binding(
-                    get: { item.dropdowns["waitTime"] ?? "" },
-                    set: { item.dropdowns["waitTime"] = $0 }
-                ),
+                    get: { let v = item.dropdowns["type"]; return v?.isEmpty == true ? nil : v },
+                        set: { item.dropdowns["type"] = $0 ?? "" }
+                    ),
                 showColorPickerIfOther: false,
                 customColor: $customColor
             )

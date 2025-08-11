@@ -130,10 +130,11 @@ struct NewCustomerModalView: View {
         guard canSave else { return }
         isSaving = true
 
-        // ───── Create model (UUID id, include required name) ─────
+        // ───── Create model (UUID id in-app; DB uses uuidString for doc id) ─────
+        // ───── Create model (UUID id + all required fields) ─────
         let newCustomer = Customer(
-            id: UUID(), // ✅ UUID in-app
-            name: name.trimmingCharacters(in: .whitespacesAndNewlines),   // ✅ add this
+            id: UUID(),
+            name: name.trimmingCharacters(in: .whitespacesAndNewlines),
             phone: phoneDigits,
             company: company.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : company,
             email: email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : email,
@@ -147,14 +148,18 @@ struct NewCustomerModalView: View {
                 isSaving = false
                 switch result {
                 case .success:
+                    print("✅ NewCustomerModalView SAVED:", newCustomer.id, newCustomer.name, newCustomer.phone) // TEMP LOG
                     selectedCustomer = newCustomer
+                    print("🔁 NewCustomerModalView INJECTED BACK TO PARENT") // TEMP LOG
                     dismiss()
                 case .failure(let error):
+                    print("🛑 NewCustomerModalView SAVE FAILED:", error.localizedDescription) // TEMP LOG
                     errorMessage = error.localizedDescription
                 }
             }
         }
         // END Persistence Call
+
     }
     // END Save
 }

@@ -20,14 +20,18 @@ struct DropdownOption: Identifiable, Equatable {
 struct DropdownField: View {
     var label: String
     var options: [DropdownOption]
-    @Binding var selectedValue: String
+    @Binding var selectedValue: String?
     var showColorPickerIfOther: Bool = false
     @Binding var customColor: Color
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Picker(label, selection: $selectedValue) {
+                // ───── Placeholder so nil has a matching tag ─────
+                Text("Select…").tag(nil as String?)
+
                 ForEach(options) { option in
+
                     HStack {
                         if let hex = option.colorHex, let uiColor = UIColor(hex: hex) {
                             Circle()
@@ -35,13 +39,14 @@ struct DropdownField: View {
                                 .frame(width: 12, height: 12)
                         }
                         Text(option.label)
-                    }
-                    .tag(option.value)
+                        }
+                        .tag(option.value as String?)   // match Binding<String?>
+
                 }
             }
             .pickerStyle(MenuPickerStyle())
 
-            if showColorPickerIfOther && selectedValue == "Other" {
+            if showColorPickerIfOther && (selectedValue ?? "") == "Other" {
                 ColorPicker("Pick a color", selection: $customColor)
                     .labelsHidden()
             }
@@ -68,10 +73,10 @@ extension UIColor {
 
 // ───── Preview ─────
 #Preview(traits: .sizeThatFitsLayout) {
-    @Previewable @State var selected = "Yellow"
+    @Previewable @State var selected: String? = "Yellow"   // ← make optional
     @Previewable @State var customColor = Color.yellow
 
-    return DropdownField(
+    DropdownField(                                       // ← no 'return' in ViewBuilder
         label: "Color",
         options: [
             DropdownOption(label: "Black", value: "Black", colorHex: "#000000"),

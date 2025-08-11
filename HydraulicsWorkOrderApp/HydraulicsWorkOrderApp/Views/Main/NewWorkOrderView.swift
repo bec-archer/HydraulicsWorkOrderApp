@@ -24,6 +24,9 @@ struct NewWorkOrderView: View {
     @State private var alertMessage: String = ""
     @State private var expandedIndex: Int? = nil
     @State private var showingNewCustomerModal: Bool = false   // ✅ fixed: had no Bool type
+    @State private var isPickingCustomer = false
+    @State private var searchDebounce: DispatchWorkItem?
+    @ObservedObject private var customerDB = CustomerDatabase.shared
     
     // ───── Prefill Helpers (derive from searchText) ─────
     private var prefillNameFromSearch: String {
@@ -81,12 +84,32 @@ struct NewWorkOrderView: View {
                         VStack(alignment: .leading) {
                             TextField("Search by name or phone", text: $searchText)
                                 .textFieldStyle(.roundedBorder)
+                                .disabled(isPickingCustomer) // ← prevents changes mid-selection
                             
+                            // HERE
                             if !matchingCustomers.isEmpty {
-                                ForEach(matchingCustomers, id: \.id) { customer in
+                                // Use index-based rows to avoid identity reuse while tapping
+                                ForEach(matchingCustomers.indices, id: \.self) { idx in
+                                    let customer = matchingCustomers[idx]
+
                                     Button {
-                                        selectedCustomer = customer
+                                        // ───── Freeze EVERYTHING during selection ─────
+                                        isPickingCustomer = true
+
+                                        // Select the exact element we tapped
+                                        selectCustomer(customer)
+
+                                        // Immediately clear the list so no row diffing can fire
+                                        matchingCustomers = []
                                         searchText = ""
+
+                                        // Unfreeze on next runloop (feels instant in UI)
+                                        DispatchQueue.main.async {
+                                            isPickingCustomer = false
+                                        }
+
+                                        // TEMP DIAGNOSTIC
+                                        print("👆 PICKED (idx \(idx)):", customer.id.uuidString, customer.name, customer.phone)
                                     } label: {
                                         VStack(alignment: .leading, spacing: 2) {
                                             Text(customer.name)
@@ -95,17 +118,25 @@ struct NewWorkOrderView: View {
                                                 .foregroundStyle(.secondary)
                                         }
                                         .padding(.vertical, 4)
+                                        .contentShape(Rectangle()) // full-row tap target
                                     }
+                                    .buttonStyle(.plain)
                                 }
                             } else if !searchText.isEmpty {
+
+                                // TO HERE
                                 Button {
                                     showingNewCustomerModal = true
+                                    print("➕ Presenting NewCustomerModalView with prefill:",
+                                          prefillNameFromSearch, prefillPhoneFromSearch) // TEMP LOG
                                 } label: {
                                     Label("Add New Customer", systemImage: "plus.circle")
                                         .foregroundStyle(.blue)
                                 }
                                 .padding(.top, 4)
                             }
+
+                            // END VALIDATE ME??
                         }
                     }
                 }
@@ -163,11 +194,48 @@ struct NewWorkOrderView: View {
                 Text(alertMessage)
             }
             // ───── SAFE ONCHANGE FOR iOS 16+17 ─────
-            .onChange(of: searchText) {
-                handleSearchTextChange(searchText)
+            // ───── Debounced onChange (prevents list swapping mid‑tap) ─────
+            .onChange(of: searchText) { newValue in
+                // Don’t recompute matches while the user is selecting a row
+                guard !isPickingCustomer else { return }
+
+                searchDebounce?.cancel()
+                let task = DispatchWorkItem { handleSearchTextChange(newValue) }
+                searchDebounce = task
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2, execute: task)
             }
+            // END Debounced onChange
             
+            // ───── DIAGNOSTIC: Who is overwriting selectedCustomer? ─────
+            .onChange(of: selectedCustomer) { newValue in
+                guard let c = newValue else { return }
+                print("⚠️ selectedCustomer CHANGED:", c.id.uuidString, c.name, c.phone)
+            }
+            // END Diagnostic
+            
+            // ───── DIAGNOSTIC: detect unexpected overwrites ─────
+            .onChange(of: selectedCustomer) { newValue in
+                guard let c = newValue else { return }
+                print("⚠️ selectedCustomer CHANGED:", c.id.uuidString, c.name, c.phone)
+            }
+            // END diagnostics
+            // ───── CUSTOMER INJECTION ─────
+
+            // 🔁 Customer injected from NewCustomerModalView
+            .onChange(of: selectedCustomer) {
+                if let c = selectedCustomer {
+                    print("📦 NewWorkOrderView RECEIVED CUSTOMER:", c.id.uuidString)       // TEMP LOG
+                    print("👤 Injected Name/Phone:", c.name, c.phone)                       // TEMP LOG
+                    searchText = ""
+                    matchingCustomers = []
+                    print("🧹 Cleared search/matches; summary card should now be visible.") // TEMP LOG
+                }
+            }
+
             .onAppear {
+                // Prefetch customers once for fast local filtering
+                customerDB.fetchCustomers()
+
                 if expandedIndex == nil {
                     expandedIndex = items.indices.first
                 }
@@ -188,24 +256,58 @@ struct NewWorkOrderView: View {
     }
     // END .body
     
-    // ───── SEARCH HANDLER ─────
+    
+    
+    // ───── SEARCH HANDLER (Cached Filter + Stable IDs) ─────
     private func handleSearchTextChange(_ newValue: String) {
-        if newValue.isEmpty {
+        let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
             matchingCustomers = []
             return
         }
-        
-        let lower = newValue.lowercased()
-        Firestore.firestore().collection("customers").getDocuments { snapshot, _ in
-            if let docs = snapshot?.documents {
-                let all = docs.compactMap { try? $0.data(as: Customer.self) }
-                matchingCustomers = all.filter {
-                    $0.name.lowercased().contains(lower) || $0.phone.contains(lower)
-                }
-            }
+
+        // Normalize: digits-only for phone comparisons
+        func digits(_ s: String) -> String { s.filter(\.isNumber) }
+        let qLower = trimmed.lowercased()
+        let qDigits = digits(trimmed)
+
+        // Filter cached list
+        let filtered = customerDB.customers.filter { c in
+            let nameHit = c.name.lowercased().contains(qLower)
+            let phoneHit: Bool = {
+                if qDigits.isEmpty { return false }
+                return digits(c.phone).contains(qDigits)
+            }()
+            return nameHit || phoneHit
         }
+
+        // De-duplicate by id (some datasets can surface dupes after formatting)
+        var seen = Set<UUID>()
+        let unique = filtered.filter { seen.insert($0.id).inserted }
+
+        // Stable sort: by name, then phone
+        let sorted = unique.sorted {
+            if $0.name.caseInsensitiveCompare($1.name) == .orderedSame {
+                return $0.phone < $1.phone
+            }
+            return $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+        }
+
+        matchingCustomers = Array(sorted.prefix(25))
     }
     // END Search Handler
+
+    // ───── Selection Helper ─────
+    private func selectCustomer(_ customer: Customer) {
+        withTransaction(Transaction(animation: .none)) {
+            selectedCustomer = customer
+            searchText = ""         // makes the list disappear
+        }
+        // TEMP: diagnostics so we can see if anyone overwrites later
+        print("✅ selectCustomer:", customer.id.uuidString, customer.name, customer.phone)
+    }
+    // END Selection Helper
+
     
     // ───── SAVE HANDLER ─────
     func saveWorkOrder() {

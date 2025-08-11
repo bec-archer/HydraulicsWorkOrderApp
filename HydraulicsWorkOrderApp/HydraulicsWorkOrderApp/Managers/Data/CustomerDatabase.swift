@@ -37,21 +37,52 @@ final class CustomerDatabase: ObservableObject {
     func fetchCustomers() {
         db.collection(collection)
             .order(by: "name")
-            .getDocuments { snapshot, error in
-                if let documents = snapshot?.documents {
-                    do {
-                        let decoded = try documents.compactMap {
-                            try $0.data(as: Customer.self)
-                        }
-                        DispatchQueue.main.async {
-                            self.customers = decoded
-                        }
-                    } catch {
-                        print("❌ Failed to decode customers: \(error)")
+            .getDocuments { snapshot, _ in
+                guard let documents = snapshot?.documents else { return }
+
+                // Try Codable first; if 'id' is missing or wrong type, map manually.
+                let mapped: [Customer] = documents.compactMap { doc in
+                    // 1) Best case: full Codable decode works (e.g., when 'id' was stored in the doc)
+                    if let c = try? doc.data(as: Customer.self) {
+                        return c
                     }
+
+                    // 2) Manual map: pull fields; build a Customer using docID (UUID string) or 'id' field
+                    let data = doc.data()
+
+                    guard
+                        let name = data["name"] as? String,
+                        let phone = data["phone"] as? String
+                    else {
+                        print("⚠️ Skipping customer \(doc.documentID): missing required fields")
+                        return nil
+                    }
+
+                    let company = data["company"] as? String
+                    let email = data["email"] as? String
+                    let taxExempt = data["taxExempt"] as? Bool ?? false
+
+                    // Prefer documentID if it is a UUID string; else try "id" field; else generate UUID
+                    let docUUID = UUID(uuidString: doc.documentID)
+                    let fieldUUID = (data["id"] as? String).flatMap(UUID.init(uuidString:))
+                    let uuid = docUUID ?? fieldUUID ?? UUID()
+
+                    return Customer(
+                        id: uuid,
+                        name: name,
+                        phone: phone,
+                        company: company,
+                        email: email,
+                        taxExempt: taxExempt
+                    )
+                }
+
+                DispatchQueue.main.async {
+                    self.customers = mapped
                 }
             }
     }
+
 
     // ───── ADD NEW CUSTOMER ─────
     // Store using the Customer.id (UUID) as the Firestore document ID (String)
