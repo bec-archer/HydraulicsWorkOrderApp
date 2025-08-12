@@ -164,28 +164,17 @@ struct NewWorkOrderView: View {
             .navigationTitle("New Work Order")
             
             // ───── Toolbar: Check In (Save) ─────
-            .toolbar {
+            .toolbar 
                 ToolbarItem(placement: .confirmationAction) {
-                    Button(action: {
+                    Button("Check In Work Order") {
                         saveWorkOrder {
                             appState.currentView = .activeWorkOrders
                         }
-                    }) {
-                        Text("Check In Work Order")
-                            .font(.headline)
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 8)
-                            .background(Color(hex: "#FFC500")) // AppleNotesYellow buttonBackground
-                            .foregroundColor(.black)           // AppleNotesYellow buttonText
-                            .clipShape(RoundedRectangle(cornerRadius: 12))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 12)
-                                    .stroke(Color.black.opacity(0.1), lineWidth: 1)
-                            )
                     }
-                    .buttonStyle(.plain)
-
+                    .buttonStyle(PrimaryButtonStyle(compact: true))
                 }
+
+                
             }
             // END toolbar
             
@@ -398,6 +387,31 @@ struct NewWorkOrderView: View {
         }
     }
     // END: Delete / Reset WO_Item
+    
+    // ───── PrimaryButtonStyle (shared for toolbar + sticky) ─────
+    private struct PrimaryButtonStyle: ButtonStyle {
+        var compact: Bool = false      // toolbar-sized if true
+        var fillWidth: Bool = false    // full-width if true
+
+        func makeBody(configuration: Configuration) -> some View {
+            configuration.label
+                .font(.headline)
+                .padding(.horizontal, compact ? 14 : 16)
+                .padding(.vertical,   compact ?  8 : 14)
+                .frame(maxWidth: fillWidth ? .infinity : nil)
+                // Apple Notes yellow (#FFC500) without needing Color(hex:)
+                .background(Color(red: 1.0, green: 0.7725, blue: 0.0))
+                .foregroundColor(.black)
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(Color.black.opacity(0.1), lineWidth: 1)
+                )
+                .opacity(configuration.isPressed ? 0.88 : 1)
+                .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
+        }
+    }
+    // END PrimaryButtonStyle
 
 }
 // END struct
