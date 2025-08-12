@@ -45,13 +45,44 @@ struct NewWorkOrderView: View {
 
     // END Prefill Helpers
 
+    // ───── Readiness Helpers (hide Check In buttons until valid) ─────
+    private func itemHasType(_ item: WO_Item) -> Bool {
+        // Type can live in item.type or dropdowns["type"] depending on caller
+        let t = item.type.isEmpty ? (item.dropdowns["type"] ?? "") : item.type
+        return !t.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private var hasSelectedType: Bool {
+        items.contains { itemHasType($0) }
+    }
+
+    private var hasAnyPhoto: Bool {
+        items.contains { !$0.localImages.isEmpty || !$0.imageUrls.isEmpty }
+    }
+
+    private var canShowCheckInButtons: Bool {
+        // ✅ Require: Customer + a Type + at least one photo (any item)
+        (selectedCustomer != nil) && hasSelectedType && hasAnyPhoto
+    }
+    // END Readiness Helpers
 
     // ───── BODY ─────
     var body: some View {
         NavigationStack {
-
             // ───── CUSTOMER LOOKUP (Plain container to avoid Form/keyboard cycles) ─────
+            // Required field header
+            HStack(spacing: 4) {
+                Text("Customer")
+                    .font(.headline)
+                Text("*")
+                    .foregroundColor(.red)
+                    .font(.headline)
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 8)
+
             GroupBox {
+
                 if let customer = selectedCustomer {
                     // Selected customer summary with inline Clear
                     HStack(alignment: .center, spacing: 8) {
@@ -163,42 +194,46 @@ struct NewWorkOrderView: View {
             
             .navigationTitle("New Work Order")
             
-            // ───── Toolbar: Check In (Save) ─────
-            .toolbar 
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Check In Work Order") {
-                        saveWorkOrder {
-                            appState.currentView = .activeWorkOrders
+                // ───── Toolbar: Check In (Save) ─────
+                .toolbar {
+                    if canShowCheckInButtons {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Check In Work Order") {
+                                saveWorkOrder {
+                                    appState.currentView = .activeWorkOrders
+                                }
+                            }
+                            .buttonStyle(PrimaryButtonStyle(compact: true))
                         }
                     }
-                    .buttonStyle(PrimaryButtonStyle(compact: true))
                 }
+                // END toolbar
 
-                
-            }
-            // END toolbar
             
-            // ───── Sticky Bottom Save Button (backup to toolbar) ─────
-            .safeAreaInset(edge: .bottom) {
-                Button {
-                    saveWorkOrder {
-                        appState.currentView = .activeWorkOrders
+                // ───── Sticky Bottom Save Button (backup to toolbar) ─────
+                .safeAreaInset(edge: .bottom) {
+                    if canShowCheckInButtons {
+                        Button {
+                            saveWorkOrder {
+                                appState.currentView = .activeWorkOrders
+                            }
+                        } label: {
+                            Text("Check In Work Order")
+                                .font(.headline)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 14)
+                                .background(Color.yellow)
+                                .foregroundColor(.black)
+                                .clipShape(RoundedRectangle(cornerRadius: 14))
+                                .padding(.horizontal, 16)
+                                .padding(.top, 4)
+                        }
+                        .buttonStyle(.plain)
+                        .background(.ultraThinMaterial) // keeps it readable over scroll
                     }
-                } label: {
-                    Text("Check In Work Order")
-                        .font(.headline)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
-                        .background(Color.yellow)
-                        .foregroundColor(.black)
-                        .clipShape(RoundedRectangle(cornerRadius: 14))
-                        .padding(.horizontal, 16)
-                        .padding(.top, 4)
                 }
-                .buttonStyle(.plain)
-                .background(.ultraThinMaterial) // keeps it readable over scroll
-            }
-            // END sticky bottom button
+                // END sticky bottom button
+
 
 
             

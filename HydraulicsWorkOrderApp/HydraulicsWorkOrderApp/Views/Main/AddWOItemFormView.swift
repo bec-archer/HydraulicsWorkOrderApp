@@ -22,9 +22,9 @@ struct AddWOItemFormView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
 
-            // ───── TYPE ─────
+            // ───── TYPE (Required) ─────
             DropdownField(
-                label: "Type",
+                label: "Type *", // visually indicate required
                 options: dropdowns.options["type"] ?? [],
                 selectedValue: Binding(
                     get: { item.type.isEmpty ? nil : item.type },
@@ -34,87 +34,100 @@ struct AddWOItemFormView: View {
                 customColor: $customColor
             )
 
-            // SIZE (Only if Type == "Cylinder")
-            if item.type.caseInsensitiveCompare("Cylinder") == .orderedSame {
+            // ───── DROPDOWNS GRID (iPad: 2 columns, iPhone: stacks naturally) ─────
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], alignment: .leading, spacing: 12) {
+
+                // SIZE (Only if Type == "Cylinder")
+                if item.type.caseInsensitiveCompare("Cylinder") == .orderedSame {
+                    DropdownField(
+                        label: "Size",
+                        options: dropdowns.options["size"] ?? [],
+                        selectedValue: Binding(
+                            get: { let v = item.dropdowns["size"]; return v?.isEmpty == true ? nil : v },
+                            set: { item.dropdowns["size"] = $0 ?? ""; DispatchQueue.main.async { item.lastModified = Date() } }
+                        ),
+                        showColorPickerIfOther: false,
+                        customColor: $customColor
+                    )
+                }
+
+                // COLOR
                 DropdownField(
-                    label: "Size",
-                    options: dropdowns.options["size"] ?? [],
+                    label: "Color",
+                    options: dropdowns.options["color"] ?? [],
                     selectedValue: Binding(
-                        get: { let v = item.dropdowns["size"]; return v?.isEmpty == true ? nil : v },
-                        set: { item.dropdowns["size"] = $0 ?? ""; DispatchQueue.main.async { item.lastModified = Date() } }
+                        get: { let v = item.dropdowns["color"]; return v?.isEmpty == true ? nil : v },
+                        set: { item.dropdowns["color"] = $0 ?? ""; DispatchQueue.main.async { item.lastModified = Date() } }
+                    ),
+                    showColorPickerIfOther: true,
+                    customColor: $customColor
+                )
+
+                // MACHINE TYPE
+                DropdownField(
+                    label: "Machine Type",
+                    options: dropdowns.options["machineType"] ?? [],
+                    selectedValue: Binding(
+                        get: { let v = item.dropdowns["machineType"]; return v?.isEmpty == true ? nil : v },
+                        set: { item.dropdowns["machineType"] = $0 ?? ""; DispatchQueue.main.async { item.lastModified = Date() } }
+                    ),
+                    showColorPickerIfOther: false,
+                    customColor: $customColor
+                )
+
+                // MACHINE BRAND
+                DropdownField(
+                    label: "Machine Brand",
+                    options: dropdowns.options["machineBrand"] ?? [],
+                    selectedValue: Binding(
+                        get: { let v = item.dropdowns["machineBrand"]; return v?.isEmpty == true ? nil : v },
+                        set: { item.dropdowns["machineBrand"] = $0 ?? ""; DispatchQueue.main.async { item.lastModified = Date() } }
+                    ),
+                    showColorPickerIfOther: false,
+                    customColor: $customColor
+                )
+
+                // WAIT TIME
+                DropdownField(
+                    label: "Estimated Wait Time",
+                    options: dropdowns.options["waitTime"] ?? [],
+                    selectedValue: Binding(
+                        get: { let v = item.dropdowns["waitTime"]; return v?.isEmpty == true ? nil : v },
+                        set: { item.dropdowns["waitTime"] = $0 ?? ""; DispatchQueue.main.async { item.lastModified = Date() } }
                     ),
                     showColorPickerIfOther: false,
                     customColor: $customColor
                 )
             }
+            // END DROPDOWNS GRID
 
-            // COLOR
-            DropdownField(
-                label: "Color",
-                options: dropdowns.options["color"] ?? [],
-                selectedValue: Binding(
-                    get: { let v = item.dropdowns["color"]; return v?.isEmpty == true ? nil : v },
-                    set: { item.dropdowns["color"] = $0 ?? ""; DispatchQueue.main.async { item.lastModified = Date() } }
-                ),
-                showColorPickerIfOther: true,
-                customColor: $customColor
-            )
-
-            // MACHINE TYPE
-            DropdownField(
-                label: "Machine Type",
-                options: dropdowns.options["machineType"] ?? [],
-                selectedValue: Binding(
-                    get: { let v = item.dropdowns["machineType"]; return v?.isEmpty == true ? nil : v },
-                    set: { item.dropdowns["machineType"] = $0 ?? ""; DispatchQueue.main.async { item.lastModified = Date() } }
-                ),
-                showColorPickerIfOther: false,
-                customColor: $customColor
-            )
-
-            // MACHINE BRAND
-            DropdownField(
-                label: "Machine Brand",
-                options: dropdowns.options["machineBrand"] ?? [],
-                selectedValue: Binding(
-                    get: { let v = item.dropdowns["machineBrand"]; return v?.isEmpty == true ? nil : v },
-                    set: { item.dropdowns["machineBrand"] = $0 ?? ""; DispatchQueue.main.async { item.lastModified = Date() } }
-                ),
-                showColorPickerIfOther: false,
-                customColor: $customColor
-            )
-
-            // WAIT TIME
-            DropdownField(
-                label: "Estimated Wait Time",
-                options: dropdowns.options["waitTime"] ?? [],
-                selectedValue: Binding(
-                    get: { let v = item.dropdowns["waitTime"]; return v?.isEmpty == true ? nil : v },
-                    set: { item.dropdowns["waitTime"] = $0 ?? ""; DispatchQueue.main.async { item.lastModified = Date() } }
-                ),
-                showColorPickerIfOther: false,
-                customColor: $customColor
-            )
 
             // ───── REASONS FOR SERVICE ─────
             Text("Reason(s) for Service")
                 .font(.headline)
                 .padding(.top, 6)
 
-            ForEach(dropdowns.options["reasonsForService"] ?? []) { option in
-                Toggle(option.label, isOn: Binding(
-                    get: { item.reasonsForService.contains(option.value) },
-                    set: { isOn in
-                        if isOn {
-                            if !item.reasonsForService.contains(option.value) {
-                                item.reasonsForService.append(option.value); DispatchQueue.main.async { item.lastModified = Date() }
+            // Two-column grid of toggles
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], alignment: .leading, spacing: 8) {
+                ForEach(dropdowns.options["reasonsForService"] ?? []) { option in
+                    Toggle(option.label, isOn: Binding(
+                        get: { item.reasonsForService.contains(option.value) },
+                        set: { isOn in
+                            if isOn {
+                                if !item.reasonsForService.contains(option.value) {
+                                    item.reasonsForService.append(option.value)
+                                    DispatchQueue.main.async { item.lastModified = Date() }
+                                }
+                            } else {
+                                item.reasonsForService.removeAll { $0 == option.value }
+                                DispatchQueue.main.async { item.lastModified = Date() }
                             }
-                        } else {
-                            item.reasonsForService.removeAll { $0 == option.value }; DispatchQueue.main.async { item.lastModified = Date() }
                         }
-                    }
-                ))
+                    ))
+                }
             }
+            // END reasons grid
+
 
             if item.reasonsForService.contains("Other (opens Service Notes)") || item.reasonsForService.contains("Other") {
                 TextField("Service Notes…", text: $reasonNotes)
@@ -149,7 +162,9 @@ struct AddWOItemFormView: View {
             }
         }
         .padding(12)
+        // END .body
     }
+
 
     // Helper function to update color hex
     private func updateColorHexFromCustomColor() {
