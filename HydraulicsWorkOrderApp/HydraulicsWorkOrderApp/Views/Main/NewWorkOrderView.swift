@@ -26,6 +26,8 @@ struct NewWorkOrderView: View {
     @State private var showingNewCustomerModal: Bool = false   // ✅ fixed: had no Bool type
     @State private var isPickingCustomer = false
     @State private var searchDebounce: DispatchWorkItem?
+    @State private var showSaveBanner: Bool = false
+    @State private var savedWONumber: String = ""
     @ObservedObject private var customerDB = CustomerDatabase.shared
     
     // ───── Prefill Helpers (derive from searchText) ─────
@@ -39,6 +41,9 @@ struct NewWorkOrderView: View {
         let digits = trimmed.filter(\.isNumber)
         return digits.count >= 3 ? trimmed : ""   // digits ⇒ phone, else blank
     }
+    @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject var appState: AppState
+
     // END Prefill Helpers
 
 
@@ -172,10 +177,13 @@ struct NewWorkOrderView: View {
                 // ───── SAVE ─────
                 Section {
                     Button("✅ Save Work Order") {
-                        saveWorkOrder()
+                        saveWorkOrder {
+                            AppState.shared.currentView = .activeWorkOrders  // ⬅️ Navigate to Active
+                        }
                     }
                 }
                 // END Save
+
             }
             .navigationTitle("New Work Order")
             .alert(Text("Status"), isPresented: $showAlert) {
@@ -186,6 +194,7 @@ struct NewWorkOrderView: View {
             // ───── SAFE ONCHANGE FOR iOS 16+17 ─────
             // ───── Debounced onChange (prevents list swapping mid‑tap) ─────
             .onChange(of: searchText) { _, newValue in
+                print("🔁 onChange: searchText updated to '\(newValue)'")
                 guard !isPickingCustomer else { return }
                 searchDebounce?.cancel()
                 let task = DispatchWorkItem { handleSearchTextChange(newValue) }
@@ -196,24 +205,44 @@ struct NewWorkOrderView: View {
             
             // ───── DIAGNOSTIC: Who is overwriting selectedCustomer? ─────
             .onChange(of: selectedCustomer) { _, newValue in
-            guard let c = newValue else { return }
-            print("⚠️ selectedCustomer CHANGED:", c.id.uuidString, c.name, c.phone)
-        }
+                guard let c = newValue else { return }
+                print("⚠️ selectedCustomer CHANGED:", c.id.uuidString, c.name, c.phone)
+
+                // Prevent triggering another change if already empty
+                if !searchText.isEmpty {
+                    print("🧹 Clearing searchText")
+                    searchText = ""
+                }
+
+                if !matchingCustomers.isEmpty {
+                    print("🧹 Clearing matchingCustomers")
+                    matchingCustomers = []
+                }
+            }
+
 
             // END Diagnostic
             
             // ───── CUSTOMER INJECTION ─────
 
             // 🔁 Customer injected from NewCustomerModalView
-            .onChange(of: selectedCustomer) {
-                if let c = selectedCustomer {
-                    print("📦 NewWorkOrderView RECEIVED CUSTOMER:", c.id.uuidString)       // TEMP LOG
-                    print("👤 Injected Name/Phone:", c.name, c.phone)                       // TEMP LOG
+            .onChange(of: selectedCustomer) { _, newValue in
+                guard let c = newValue else { return }
+                print("⚠️ selectedCustomer CHANGED:", c.id.uuidString, c.name, c.phone)
+
+                // Prevent triggering another change if already empty
+                if !searchText.isEmpty {
+                    print("🧹 Clearing searchText")
                     searchText = ""
+                }
+
+                if !matchingCustomers.isEmpty {
+                    print("🧹 Clearing matchingCustomers")
                     matchingCustomers = []
-                    print("🧹 Cleared search/matches; summary card should now be visible.") // TEMP LOG
                 }
             }
+
+
 
             .onAppear {
                 // Prefetch customers once for fast local filtering
@@ -226,6 +255,38 @@ struct NewWorkOrderView: View {
 
 
             // END onChange
+            // ───── Toast Banner Overlay ─────
+            .overlay(
+                Group {
+                    if showSaveBanner {
+                        VStack {
+                            Spacer()
+                            Text("✅ WO-\(savedWONumber) Saved!")
+                                .font(.subheadline)
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 10)
+                                .background(Color.green.opacity(0.95))
+                                .foregroundColor(.white)
+                                .cornerRadius(12)
+                                .shadow(radius: 4)
+                                .padding(.bottom, 30)
+                                .transition(.move(edge: .bottom).combined(with: .opacity))
+                                .animation(.easeInOut(duration: 0.3), value: showSaveBanner)
+                        }
+                    }
+                }
+            )
+            // END overlay
+
+            // ───── New Customer Modal Sheet (attached to NavigationStack) ─────
+            .sheet(isPresented: $showingNewCustomerModal) {
+                NewCustomerModalView(
+                    prefillName: prefillNameFromSearch,
+                    prefillPhone: prefillPhoneFromSearch,
+                    selectedCustomer: $selectedCustomer
+                )
+            }
+            // END sheet
         } // END NavigationStack
         // ───── New Customer Modal Sheet (attached to NavigationStack) ─────
         .sheet(isPresented: $showingNewCustomerModal) {
@@ -293,7 +354,7 @@ struct NewWorkOrderView: View {
 
     
     // ───── SAVE HANDLER ─────
-    func saveWorkOrder() {
+    func saveWorkOrder(onSuccess: (() -> Void)? = nil) {
         // ───── Required Field Validation ─────
         guard let customer = selectedCustomer else {
             alertMessage = "Please select or add a Customer before saving this WorkOrder."
@@ -340,16 +401,24 @@ struct NewWorkOrderView: View {
                 .document(wo.id ?? UUID().uuidString)   // unwrap: ensure non-optional doc id
                 .setData(from: wo)
             
-            alertMessage = "✅ WorkOrder saved: \(wo.WO_Number)"
-            showAlert = true
+            // If a success callback was provided (e.g., to dismiss), call it.
+            // Otherwise show the success alert (useful for unit/UI testing).
+            savedWONumber = wo.WO_Number
+            showSaveBanner = true
 
-            // (Optional) Reset for next intake
+            // Wait ~2 sec, then call the success callback (which routes away)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                onSuccess?()
+            }
+
+            // (Optional) Reset local form state for the next intake (kept as-is)
             selectedCustomer = nil
             searchText = ""
             matchingCustomers = []
             flagged = false
             items = [WO_Item.blank()]
             expandedIndex = 0
+
 
         } catch {
             alertMessage = "❌ Failed to save WorkOrder: \(error.localizedDescription)"

@@ -17,12 +17,9 @@ struct HydraulicsWorkOrderAppApp: App {
     var body: some Scene {
         WindowGroup {
             // ───── Dev Login Toggle Logic ─────
-            if DevSettingsManager.shared.skipLogin {
-                NewWorkOrderView() // 👈 swap this in for testing
-// or SettingsView() if testing admin tools
-            } else {
-                LoginView()
-            }
+            RouterView()
+                .environmentObject(AppState.shared)
+
         }
         // END .body
     }

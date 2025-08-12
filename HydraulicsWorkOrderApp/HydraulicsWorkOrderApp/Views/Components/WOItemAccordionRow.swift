@@ -34,18 +34,42 @@ struct WOItemAccordionRow: View {
         DisclosureGroup(isExpanded: isExpanded) {
 
             // ───── Expanded Content (Form + Photos) ─────
+            // ───── Expanded Content (Photos + Form) ─────
+            // Move photos above "Type" so camera/library buttons are the first thing users see.
+            // Row with image capture buttons on the left + QR Scan button on the right
+            HStack {
+                // Existing photo capture controls
+                PhotoCaptureView(images: $items[index].localImages)
+                    .onChange(of: items[index].localImages.count) { _, _ in
+                        Task { await uploadNewLocalImages() }
+                    }
+
+                Spacer()
+
+                // Placeholder QR Scan button — bright iOS blue for contrast
+                Button {
+                    // TODO: Implement QR code scanner logic here
+                    print("Scan QR Code tapped for item \(items[index].id)")
+                } label: {
+                    Text("Scan QR Code")
+                        .font(.callout)
+                        .fontWeight(.semibold)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(Color(hex: "#007AFF")) // iOS system blue
+                        .foregroundColor(.white)
+                        .cornerRadius(8)
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.top, 6)
+
+
+            // Now the inline WO_Item form; first field is "Type"
             AddWOItemFormView(item: $items[index])
                 .padding(.top, 6)
+            // END expanded content
 
-            PhotoCaptureView(images: $items[index].localImages)
-                .padding(.top, 6)
-                .onChange(of: items[index].localImages.count) { _, _ in
-                    Task { await uploadNewLocalImages() }
-                }
-
-            Text("📸 Local image count: \(items[index].localImages.count)")
-                .font(.caption)
-                .foregroundStyle(.secondary)
 
             if isUploadingImages {
                 HStack(spacing: 8) {
@@ -90,20 +114,27 @@ struct WOItemAccordionRow: View {
                 }
 
                 if let thumb = items[index].localImages.first {
-                    Image(uiImage: thumb)
-                        .resizable()
-                        .scaledToFill()
-                        .frame(width: 36, height: 36)
-                        .clipShape(RoundedRectangle(cornerRadius: 6))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 6)
-                                .stroke(Color(hex: "#E0E0E0"))
-                        )
+                    VStack(spacing: 2) {
+                        Image(uiImage: thumb)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: 36, height: 36)
+                            .clipShape(RoundedRectangle(cornerRadius: 6))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 6)
+                                    .stroke(Color(hex: "#E0E0E0"))
+                            )
+                        Text("\(items[index].localImages.count) pic\(items[index].localImages.count == 1 ? "" : "s")")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
                 } else {
                     Image(systemName: "chevron.down")
                         .imageScale(.small)
                         .foregroundStyle(.secondary)
                 }
+
+
             }
         }
         // END DisclosureGroup
