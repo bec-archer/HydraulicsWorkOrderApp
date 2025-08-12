@@ -25,6 +25,10 @@ struct NewWorkOrderView: View {
     @State private var searchDebounce: DispatchWorkItem?
     @State private var showSaveBanner: Bool = false
     @State private var savedWONumber: String = ""
+    
+    @State private var draftWOId: String = UUID().uuidString
+
+    
     // 🔍 Search logic is now isolated
     @StateObject private var customerSearch = CustomerSearchViewModel()
 
@@ -155,12 +159,14 @@ struct NewWorkOrderView: View {
                     ForEach(items.indices, id: \.self) { idx in
                         WOItemAccordionRow(
                             index: idx,
+                            woId: draftWOId,               // ⬅️ pass parent WO id
                             items: $items,
                             expandedIndex: $expandedIndex,
                             onDelete: { indexToDelete in
                                 handleDeleteWOItem(indexToDelete)
                             }
                         )
+
                         .padding(12)
                         .background(
                             RoundedRectangle(cornerRadius: 14)
@@ -333,7 +339,8 @@ struct NewWorkOrderView: View {
         // - createdBy / lastModifiedBy will come from UserManager
         // - dropdownSchemaVersion hard-coded to 1 until DropdownSchema exists
         let wo = WorkOrder(
-            id: UUID().uuidString,            // if your model uses String; otherwise keep UUID()
+            id: draftWOId,                    // keep ID consistent with Storage folder
+          // if your model uses String; otherwise keep UUID()
             createdBy: "Tech",                // ⬅️ move this up, right after id
             customerId: customer.id.uuidString,
             customerName: customer.name,
@@ -363,9 +370,9 @@ struct NewWorkOrderView: View {
         do {
             let db = Firestore.firestore()
             try db.collection("workOrders")
-                .document(wo.id ?? UUID().uuidString)   // unwrap: ensure non-optional doc id
+                .document(draftWOId)
                 .setData(from: wo)
-            
+
             // If a success callback was provided (e.g., to dismiss), call it.
             // Otherwise show the success alert (useful for unit/UI testing).
             savedWONumber = wo.WO_Number
@@ -382,6 +389,8 @@ struct NewWorkOrderView: View {
             flagged = false
             items = [WO_Item.blank()]
             expandedIndex = 0
+
+            draftWOId = UUID().uuidString
 
 
         } catch {

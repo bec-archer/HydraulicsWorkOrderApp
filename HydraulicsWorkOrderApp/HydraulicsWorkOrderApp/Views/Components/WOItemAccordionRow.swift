@@ -12,9 +12,11 @@ import SwiftUI
 
 struct WOItemAccordionRow: View {
     let index: Int
+    let woId: String                     // ⬅️ parent WorkOrder ID
     @Binding var items: [WO_Item]
     @Binding var expandedIndex: Int?
     let onDelete: (Int) -> Void
+
 
     @State private var isUploadingImages = false
 
@@ -204,7 +206,8 @@ struct WOItemAccordionRow: View {
             guard indexIsValid, idx < items[index].localImages.count else { continue }
             let image = items[index].localImages[idx]
 
-            if let urlString = try? await StorageManager.shared.uploadWOItemImage(image, woItemId: items[index].id) {
+            if let urlString = try? await StorageManager.shared.uploadWOItemImage(image, woId: woId, woItemId: items[index].id) {
+
                 await MainActor.run {
                     if indexIsValid { items[index].imageUrls.append(urlString) }
                 }
@@ -220,6 +223,7 @@ struct WOItemAccordionRow: View {
 #Preview {
     WOItemAccordionRow(
         index: 0,
+        woId: "SAMPLE_WO_ID",
         items: .constant([WO_Item.sample]),
         expandedIndex: .constant(0),
         onDelete: { _ in }

@@ -27,7 +27,30 @@ struct WorkOrderDetailView: View {
                 }
 
                 Text("Status: \(workOrder.status)")
-                Text("Phone: \(workOrder.customerPhone)")
+                // ───── Tappable Phone (call + context menu for text) ─────
+                HStack(spacing: 8) {
+                    Text("Phone:")
+                    Button {
+                        let digits = workOrder.customerPhone.filter(\.isNumber)
+                        if let telURL = URL(string: "tel://\(digits)") {
+                            UIApplication.shared.open(telURL)
+                        }
+                    } label: {
+                        Text(workOrder.customerPhone)
+                            .foregroundColor(Color(hex: "#FFC500"))   // Apple‑Notes yellow accent
+                            .underline()
+                    }
+                    .buttonStyle(.plain)
+                    .contextMenu {
+                        Button("Text") {
+                            let digits = workOrder.customerPhone.filter(\.isNumber)
+                            if let smsURL = URL(string: "sms:\(digits)") {
+                                UIApplication.shared.open(smsURL)
+                            }
+                        }
+                    }
+                }
+                // END tappable phone
                 Text("Created: \(workOrder.timestamp.formatted(date: .abbreviated, time: .shortened))")
 
                 Divider()
