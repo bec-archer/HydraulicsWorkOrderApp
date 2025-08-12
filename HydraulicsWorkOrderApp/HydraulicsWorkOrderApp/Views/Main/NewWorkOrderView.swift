@@ -16,28 +16,27 @@ import FirebaseFirestoreSwift
 struct NewWorkOrderView: View {
     // ───── STATE ─────
     @State private var selectedCustomer: Customer?
-    @State private var searchText: String = ""
-    @State private var matchingCustomers: [Customer] = []
     @State private var flagged: Bool = false
     @State private var items: [WO_Item] = [WO_Item.blank()]
     @State private var showAlert: Bool = false
     @State private var alertMessage: String = ""
     @State private var expandedIndex: Int? = nil
     @State private var showingNewCustomerModal: Bool = false   // ✅ fixed: had no Bool type
-    @State private var isPickingCustomer = false
     @State private var searchDebounce: DispatchWorkItem?
     @State private var showSaveBanner: Bool = false
     @State private var savedWONumber: String = ""
-    @ObservedObject private var customerDB = CustomerDatabase.shared
+    // 🔍 Search logic is now isolated
+    @StateObject private var customerSearch = CustomerSearchViewModel()
+
     
-    // ───── Prefill Helpers (derive from searchText) ─────
+    // ───── Prefill Helpers (derive from customerSearch.searchText) ─────
     private var prefillNameFromSearch: String {
-        let trimmed = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = customerSearch.searchText.trimmingCharacters(in: .whitespacesAndNewlines)
         let digits = trimmed.filter(\.isNumber)
         return digits.count >= 3 ? "" : trimmed   // numbers ⇒ phone, else ⇒ name
     }
     private var prefillPhoneFromSearch: String {
-        let trimmed = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = customerSearch.searchText.trimmingCharacters(in: .whitespacesAndNewlines)
         let digits = trimmed.filter(\.isNumber)
         return digits.count >= 3 ? trimmed : ""   // digits ⇒ phone, else blank
     }
@@ -50,208 +49,192 @@ struct NewWorkOrderView: View {
     // ───── BODY ─────
     var body: some View {
         NavigationStack {
-            Form {
-                // ───── CUSTOMER LOOKUP ─────
-                Section(header: Text("Customer Lookup")) {
-                    // CANCEL BUTTON INLINE
-                    if let customer = selectedCustomer {
-                        // Selected customer summary card with inline Clear button (compact layout)
-                        HStack(alignment: .center, spacing: 8) {
-                            VStack(alignment: .leading, spacing: 2) { // ↓ tighter vertical spacing
-                                Text(customer.name)
-                                    .font(.headline)
-                                Text(customer.phone)
-                                    .font(.subheadline)
-                                    .foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            Button {
-                                selectedCustomer = nil
-                                searchText = ""
-                            } label: {
-                                Image(systemName: "xmark.circle.fill")
-                                    .foregroundColor(.red)
-                                    .imageScale(.large)
-                                    .padding(.leading, 4)
-                                    .accessibilityLabel("Clear selected customer")
-                            }
+
+            // ───── CUSTOMER LOOKUP (Plain container to avoid Form/keyboard cycles) ─────
+            GroupBox {
+                if let customer = selectedCustomer {
+                    // Selected customer summary with inline Clear
+                    HStack(alignment: .center, spacing: 8) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(customer.name).font(.headline)
+                            Text(customer.phone).font(.subheadline).foregroundStyle(.secondary)
                         }
-                        .padding(.vertical, 4)
-                        // END CANCEL BUTTON INLINE
-                    } else {
-                        // Search + results + Add New button
-                        VStack(alignment: .leading) {
-                            
-                            // ----- CUSTOMER LOOKUP (INSIDE THE SECTION) -----
-                            TextField("Search by name or phone", text: $searchText)
-                                .textFieldStyle(.roundedBorder)
-                                .disabled(isPickingCustomer) // ← prevent live search while selecting
+                        Spacer()
+                        Button {
+                            selectedCustomer = nil
+                            customerSearch.resetSearch()
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundColor(.red)
+                                .imageScale(.large)
+                                .padding(.leading, 4)
+                                .accessibilityLabel("Clear selected customer")
+                        }
+                    }
+                    .padding(.vertical, 4)
 
-                            if !matchingCustomers.isEmpty {
-                                ForEach(matchingCustomers.indices, id: \.self) { idx in
-                                    let customer = matchingCustomers[idx]
-                                    Button {
-                                        // Freeze updates during selection
-                                        isPickingCustomer = true
+                } else {
+                    VStack(alignment: .leading, spacing: 8) {
+                        // TextField OUTSIDE Form to avoid accessory constraint thrash
+                        TextField("Search by name or phone", text: $customerSearch.searchText)
+                            .textFieldStyle(.roundedBorder)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled(true)
+                            .keyboardType(.default)
 
-                                        // Commit selection deterministically
-                                        selectCustomer(customer)
-
-                                        // Clear list immediately so no diffing can fire
-                                        matchingCustomers = []
-                                        searchText = ""
-
-                                        // Unfreeze on next runloop
-                                        DispatchQueue.main.async { isPickingCustomer = false }
-
-                                        // (Optional) debug
-                                        print("👆 PICKED (idx \(idx)):", customer.id.uuidString, customer.name, customer.phone)
-                                    } label: {
-                                        VStack(alignment: .leading, spacing: 2) {
-                                            Text(customer.name)
-                                            Text(customer.phone)
-                                                .font(.caption)
-                                                .foregroundStyle(.secondary)
-                                        }
-                                        .padding(.vertical, 4)
-                                        .contentShape(Rectangle()) // nice big tap target
-                                    }
-                                    .buttonStyle(.plain)
-                                }
-                            } else if !searchText.isEmpty {
+                        if !customerSearch.matchingCustomers.isEmpty {
+                            // Stable identity list
+                            ForEach(customerSearch.matchingCustomers, id: \.id) { customer in
                                 Button {
-                                    showingNewCustomerModal = true
+                                    customerSearch.isPickingCustomer = true
+                                    selectCustomer(customer)
+                                    customerSearch.resetSearch()
+                                    DispatchQueue.main.async { customerSearch.isPickingCustomer = false }
+                                    print("👆 PICKED:", customer.id.uuidString, customer.name, customer.phone)
                                 } label: {
-                                    Label("Add New Customer", systemImage: "plus.circle")
-                                        .foregroundStyle(.blue)
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(customer.name)
+                                        Text(customer.phone).font(.caption).foregroundStyle(.secondary)
+                                    }
+                                    .padding(.vertical, 4)
+                                    .contentShape(Rectangle())
                                 }
-                                .padding(.top, 4)
+                                .buttonStyle(.plain)
                             }
-//  --------- END HERE ---------------
-                            // END VALIDATE ME??
+                        } else if !customerSearch.searchText.isEmpty {
+                            Button {
+                                showingNewCustomerModal = true
+                            } label: {
+                                Label("Add New Customer", systemImage: "plus.circle")
+                                    .foregroundStyle(.blue)
+                            }
+                            .padding(.top, 4)
                         }
                     }
                 }
-                .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16)) // ↓ tighter bottom spacing
-
-                // END Customer Lookup
-                
-                // ───── WORK ORDER FLAGS ─────
-                Section(header: Text("Work Order Info")) {
-                    Toggle("Flag this WorkOrder", isOn: $flagged)
-                }
-                // END Work Order Flags
-                .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16)) // ↓ tighter top spacing
-                
-                // ───── WO_Item ENTRY ─────
-                Section(header: Text("Equipment Items")) {
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 8)
+            .animation(nil, value: customerSearch.matchingCustomers.count) // no implicit animation during typing
+            // END Customer Lookup (Plain)
+            
+            // ───── WO_Items (Accordion List) ─────
+            ScrollView {
+                VStack(spacing: 12) {
                     ForEach(items.indices, id: \.self) { idx in
                         WOItemAccordionRow(
                             index: idx,
                             items: $items,
                             expandedIndex: $expandedIndex,
-                            onDelete: handleDeleteWOItem
+                            onDelete: { indexToDelete in
+                                handleDeleteWOItem(indexToDelete)
+                            }
+                        )
+                        .padding(12)
+                        .background(
+                            RoundedRectangle(cornerRadius: 14)
+                                .fill(Color(.systemBackground))
+                                .shadow(color: .black.opacity(0.06), radius: 4, x: 0, y: 2)
                         )
                     }
 
-
+                    // ➕ Add Item button
                     Button {
-                        // ───── Add & Expand New Item (atomic animation) ─────
-                        withAnimation { // use default animation for iOS 16/17 safety
-                            let insertIndex = items.count
-                            let newItem = WO_Item.blank()
-                            expandedIndex = nil            // collapse current
-                            items.append(newItem)          // append new
-                            expandedIndex = insertIndex    // expand the new one
+                        withAnimation {
+                            items.append(WO_Item.blank())
+                            expandedIndex = items.indices.last
                         }
-                        // ───── END Add & Expand New Item ─────
-
                     } label: {
-                        Label("Add Another Item", systemImage: "plus.circle")
+                        Label("Add Item", systemImage: "plus.circle.fill")
+                            .font(.headline)
+                            .padding(.vertical, 10)
+                            .frame(maxWidth: .infinity)
+                            .background(Color.yellow.opacity(0.25))
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
                     }
-
+                    .buttonStyle(.plain)
+                    .padding(.top, 4)
                 }
-
-                // END WO_Item Entry
-                
-                // ───── SAVE ─────
-                Section {
-                    Button("✅ Save Work Order") {
-                        saveWorkOrder {
-                            AppState.shared.currentView = .activeWorkOrders  // ⬅️ Navigate to Active
-                        }
-                    }
-                }
-                // END Save
-
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
             }
+            // END WO_Items (Accordion List)
+
+            
             .navigationTitle("New Work Order")
+            
+            // ───── Toolbar: Check In (Save) ─────
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(action: {
+                        saveWorkOrder {
+                            appState.currentView = .activeWorkOrders
+                        }
+                    }) {
+                        Text("Check In Work Order")
+                            .font(.headline)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 8)
+                            .background(Color(hex: "#FFC500")) // AppleNotesYellow buttonBackground
+                            .foregroundColor(.black)           // AppleNotesYellow buttonText
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .stroke(Color.black.opacity(0.1), lineWidth: 1)
+                            )
+                    }
+                    .buttonStyle(.plain)
+
+                }
+            }
+            // END toolbar
+            
+            // ───── Sticky Bottom Save Button (backup to toolbar) ─────
+            .safeAreaInset(edge: .bottom) {
+                Button {
+                    saveWorkOrder {
+                        appState.currentView = .activeWorkOrders
+                    }
+                } label: {
+                    Text("Check In Work Order")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .background(Color.yellow)
+                        .foregroundColor(.black)
+                        .clipShape(RoundedRectangle(cornerRadius: 14))
+                        .padding(.horizontal, 16)
+                        .padding(.top, 4)
+                }
+                .buttonStyle(.plain)
+                .background(.ultraThinMaterial) // keeps it readable over scroll
+            }
+            // END sticky bottom button
+
+
+            
             .alert(Text("Status"), isPresented: $showAlert) {
                 Button("OK", role: .cancel) {}
             } message: {
                 Text(alertMessage)
             }
             // ───── SAFE ONCHANGE FOR iOS 16+17 ─────
-            // ───── Debounced onChange (prevents list swapping mid‑tap) ─────
-            .onChange(of: searchText) { _, newValue in
-                print("🔁 onChange: searchText updated to '\(newValue)'")
-                guard !isPickingCustomer else { return }
-                searchDebounce?.cancel()
-                let task = DispatchWorkItem { handleSearchTextChange(newValue) }
-                searchDebounce = task
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2, execute: task)
-            }
-            // END Debounced onChange
+
             
-            // ───── DIAGNOSTIC: Who is overwriting selectedCustomer? ─────
-            .onChange(of: selectedCustomer) { _, newValue in
-                guard let c = newValue else { return }
-                print("⚠️ selectedCustomer CHANGED:", c.id.uuidString, c.name, c.phone)
-
-                // Prevent triggering another change if already empty
-                if !searchText.isEmpty {
-                    print("🧹 Clearing searchText")
-                    searchText = ""
-                }
-
-                if !matchingCustomers.isEmpty {
-                    print("🧹 Clearing matchingCustomers")
-                    matchingCustomers = []
-                }
+            // ───── CUSTOMER PICKED (observe only; no state writes here) ─────
+            .onChange(of: selectedCustomer?.id) { newID in
+                guard let newID = newID else { return }
+                print("✅ selectedCustomer changed → \(newID)")
+                // NOTE: selectCustomer(_:) already resets the search UI.
             }
-
-
-            // END Diagnostic
-            
-            // ───── CUSTOMER INJECTION ─────
-
-            // 🔁 Customer injected from NewCustomerModalView
-            .onChange(of: selectedCustomer) { _, newValue in
-                guard let c = newValue else { return }
-                print("⚠️ selectedCustomer CHANGED:", c.id.uuidString, c.name, c.phone)
-
-                // Prevent triggering another change if already empty
-                if !searchText.isEmpty {
-                    print("🧹 Clearing searchText")
-                    searchText = ""
-                }
-
-                if !matchingCustomers.isEmpty {
-                    print("🧹 Clearing matchingCustomers")
-                    matchingCustomers = []
-                }
-            }
-
-
+            // ─────────────────────────────────────────────────────
 
             .onAppear {
-                // Prefetch customers once for fast local filtering
-                customerDB.fetchCustomers()
-
                 if expandedIndex == nil {
                     expandedIndex = items.indices.first
                 }
             }
+
 
 
             // END onChange
@@ -288,68 +271,26 @@ struct NewWorkOrderView: View {
             }
             // END sheet
         } // END NavigationStack
-        // ───── New Customer Modal Sheet (attached to NavigationStack) ─────
-        .sheet(isPresented: $showingNewCustomerModal) {
-            NewCustomerModalView(
-                prefillName: prefillNameFromSearch,
-                prefillPhone: prefillPhoneFromSearch,
-                selectedCustomer: $selectedCustomer
-            )
-        }
-        // END sheet
+
     }
     // END .body
-    
-    
-    
-    // ───── SEARCH HANDLER (Cached Filter + Stable IDs) ─────
-    private func handleSearchTextChange(_ newValue: String) {
-        let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else {
-            matchingCustomers = []
-            return
-        }
-
-        // Normalize: digits-only for phone comparisons
-        func digits(_ s: String) -> String { s.filter(\.isNumber) }
-        let qLower = trimmed.lowercased()
-        let qDigits = digits(trimmed)
-
-        // Filter cached list
-        let filtered = customerDB.customers.filter { c in
-            let nameHit = c.name.lowercased().contains(qLower)
-            let phoneHit: Bool = {
-                if qDigits.isEmpty { return false }
-                return digits(c.phone).contains(qDigits)
-            }()
-            return nameHit || phoneHit
-        }
-
-        // De-duplicate by id (some datasets can surface dupes after formatting)
-        var seen = Set<UUID>()
-        let unique = filtered.filter { seen.insert($0.id).inserted }
-
-        // Stable sort: by name, then phone
-        let sorted = unique.sorted {
-            if $0.name.caseInsensitiveCompare($1.name) == .orderedSame {
-                return $0.phone < $1.phone
-            }
-            return $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
-        }
-
-        matchingCustomers = Array(sorted.prefix(25))
-    }
-    // END Search Handler
 
     // ───── Selection Helper ─────
     private func selectCustomer(_ customer: Customer) {
+        // Avoid recursive update if already selected
+        if selectedCustomer?.id == customer.id {
+            print("⚠️ selectCustomer: already selected, skipping redundant update.")
+            return
+        }
+
         withTransaction(Transaction(animation: .none)) {
             selectedCustomer = customer
-            searchText = ""         // makes the list disappear
+            customerSearch.resetSearch()
         }
-        // TEMP: diagnostics so we can see if anyone overwrites later
+
         print("✅ selectCustomer:", customer.id.uuidString, customer.name, customer.phone)
     }
+
     // END Selection Helper
 
     
@@ -413,8 +354,7 @@ struct NewWorkOrderView: View {
 
             // (Optional) Reset local form state for the next intake (kept as-is)
             selectedCustomer = nil
-            searchText = ""
-            matchingCustomers = []
+            customerSearch.resetSearch()
             flagged = false
             items = [WO_Item.blank()]
             expandedIndex = 0
@@ -463,7 +403,5 @@ struct NewWorkOrderView: View {
 // END struct
 
 // ───── PREVIEW ─────
-#Preview {
-    NewWorkOrderView()
-}
+
 // END Preview
