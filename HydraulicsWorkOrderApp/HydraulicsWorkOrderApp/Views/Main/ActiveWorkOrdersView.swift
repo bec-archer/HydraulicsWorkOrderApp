@@ -15,6 +15,7 @@ import SwiftUI
 
 struct ActiveWorkOrdersView: View {
     @ObservedObject var db = WorkOrdersDatabase.shared
+    @EnvironmentObject private var appState: AppState
     @State private var isLoading = true
     @State private var showError = false
     @State private var errorMessage = ""
@@ -72,14 +73,28 @@ struct ActiveWorkOrdersView: View {
                             // Then oldest → newest by timestamp
                             return $0.timestamp < $1.timestamp
                         }
-
                     ForEach(active) { wo in
                         NavigationLink {
-                            WorkOrderDetailView(workOrder: wo)
+                            // ───── Detail with Delete wiring ─────
+                            WorkOrderDetailView(workOrder: wo) { target in
+                                // Bypass login is on during dev — use appState.currentUserName (can be blank)
+                                WorkOrdersDatabase.shared.softDelete(target, by: appState.currentUserName) { result in
+                                    switch result {
+                                    case .success:
+                                        break // The detail view will dismiss itself after calling this
+                                    case .failure(let err):
+                                        errorMessage = err.localizedDescription
+                                        showError = true
+                                    }
+                                }
+                            }
+                            // END delete wiring
                         } label: {
                             WorkOrderCardView(workOrder: wo)
                         }
                     }
+
+
                     // END data source
 
                 }
@@ -95,7 +110,7 @@ struct ActiveWorkOrdersView: View {
             .refreshable {
                 await loadWorkOrders()
             }
-            .alert("Error", isPresented: $showError) {
+            .alert("Delete Failed", isPresented: $showError) {
 
                 Button("OK", role: .cancel) {}
             } message: {

@@ -5,15 +5,37 @@
 //  Created by Bec Archer on 8/8/25.
 //
 
-
 // ─────────────────────────────────────────────────────────────
 // 📄 WorkOrderDetailView.swift
 // Detail view for a selected WorkOrder
+// + Toolbar Delete (role‑gated) with confirmation
 // ─────────────────────────────────────────────────────────────
+
 import SwiftUI
 
 struct WorkOrderDetailView: View {
     let workOrder: WorkOrder
+
+    // 🔌 Parent provides deletion behavior (soft delete + sync)
+    // Keep this optional so the view compiles even if caller hasn't wired it yet.
+    var onDelete: ((WorkOrder) -> Void)? = nil
+
+    // ───── Environment / State ─────
+    @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var appState: AppState
+    @State private var showDeleteConfirm = false
+
+    // ───── Role Gate: who can delete? (DEV bypass) ─────
+    // During development we always show Delete to test soft delete.
+    // TODO: remove DEBUG bypass when role gates are enforced.
+    private var canDelete: Bool {
+        #if DEBUG
+        return true
+        #else
+        return appState.canDeleteWorkOrders()
+        #endif
+    }
+
 
     var body: some View {
         ScrollView {
@@ -51,6 +73,7 @@ struct WorkOrderDetailView: View {
                     }
                 }
                 // END tappable phone
+
                 Text("Created: \(workOrder.timestamp.formatted(date: .abbreviated, time: .shortened))")
 
                 Divider()
@@ -75,12 +98,39 @@ struct WorkOrderDetailView: View {
         }
         .navigationTitle("Work Order Details")
         .navigationBarTitleDisplayMode(.inline)
+        // ───── Toolbar: Delete (role‑gated) ─────
+        .toolbar {
+            if canDelete {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(role: .destructive) {
+                        showDeleteConfirm = true
+                    } label: {
+                        Label("Delete", systemImage: "trash")
+                    }
+                    .accessibilityLabel("Delete Work Order")
+                }
+            }
+        }
+        // ───── Confirm Delete Alert ─────
+        .alert("Delete this Work Order?", isPresented: $showDeleteConfirm) {
+            Button("Delete", role: .destructive) {
+                // Parent should mark isDeleted = true and sync, then we pop back.
+                onDelete?(workOrder)
+                dismiss()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This will remove the WorkOrder from Active. Managers/Admins can still access it in Deleted WorkOrders.")
+        }
         // END .body
     }
 }
 
 // ───── Preview Template ─────
-
 #Preview {
-    WorkOrderDetailView(workOrder: WorkOrder.sample)
+    let appState = AppState.shared
+    appState.currentUserName = "Preview Manager"
+    appState.currentUserRole = .manager
+    return WorkOrderDetailView(workOrder: WorkOrder.sample)
+        .environmentObject(appState)
 }

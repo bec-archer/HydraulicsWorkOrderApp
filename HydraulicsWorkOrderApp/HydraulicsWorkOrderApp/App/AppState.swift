@@ -25,8 +25,22 @@ class AppState: ObservableObject {
     static let shared = AppState() // Singleton for global access
     
     @Published var currentView: AppScreen = .newWorkOrder
+    
+    // ───── Current Logged-in User Info ─────
+    @Published var currentUserName: String = ""
+    @Published var currentUserRole: UserRole = .tech
 
     private init() {}  // Singleton enforcement
+    
+    // ───── Helper: Role Check ─────
+    func canDeleteWorkOrders() -> Bool {
+        switch currentUserRole {
+        case .manager, .admin, .superadmin:
+            return true
+        default:
+            return false
+        }
+    }
 }
 // END class
 
