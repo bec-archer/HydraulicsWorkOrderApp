@@ -10,6 +10,7 @@
 
 import SwiftUI
 import UIKit
+import FirebaseStorage    // ⬅️ for debug listing
 
 // ───── AddWOItemFormView ─────
 struct AddWOItemFormView: View {
@@ -17,13 +18,61 @@ struct AddWOItemFormView: View {
     @State private var customColor = Color.yellow
     @State private var reasonNotes = ""
 
+    // Used for Firebase Storage pathing; parent can pass draftWOId/WO_Number
+    var woId: String = "DRAFT"
+
+
+    // ───── WorkOrder context (handled by `var woId` above) ─────
+    // (Removed duplicate `let woId`; we keep the single `var woId: String = "DRAFT"`)
+
+
+    // ───── Temporary sink for thumbnail URLs (Option 1: no schema change yet) ─────
+    @State private var trashThumbs: [String] = []
+
     let dropdowns = DropdownManager.shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
+            
+            // ───── Photos (uploads full + thumbnail, updates URLs) ─────
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Photos")
+                    .font(.headline)
+
+                // Uses the wrapper you added in PhotoCaptureView.swift
+                PhotoCaptureUploadView(
+                    imageURLs: $item.imageUrls,    // full-size URLs
+                    thumbURLs: $item.thumbUrls,    // thumbnail URLs
+                    woId: woId,
+                    woItemId: item.id,
+                    showQR: true,
+                    onScanQR: {
+                        // TODO: Implement QR code scanner logic
+                        print("Scan QR Code tapped for item \(item.id)")
+                    }
+                )
+
+            }
+            .padding(.bottom, 8)
+            // END Photos
+#if DEBUG
+// ───── DEBUG: Show URLs captured on this WO_Item ─────
+Button {
+    debugPrintItemURLs()
+} label: {
+    Text("🔎 Debug: Print image URLs for This WO_Item")
+        .font(.subheadline)
+}
+.buttonStyle(.bordered)
+.padding(.bottom, 8)
+// END DEBUG
+#endif
+
+
 
             // ───── TYPE (Required) ─────
             DropdownField(
+
                 label: "Type *", // visually indicate required
                 options: dropdowns.options["type"] ?? [],
                 selectedValue: Binding(
@@ -162,9 +211,24 @@ struct AddWOItemFormView: View {
             }
         }
         .padding(12)
-        // END .body
+    }
+    // ───── DEBUG Helper: list Storage paths for this WO_Item ─────
+    // ───── DEBUG Helper: print the URLs stored on this WO_Item ─────
+    private func debugPrintItemURLs() {
+        print("🔎 WO_Item \(item.id) in WO \(woId)")
+        if item.thumbUrls.isEmpty && item.imageUrls.isEmpty {
+            print("ℹ️ No URLs on item yet. Take/choose a photo and try again.")
+        } else {
+            item.thumbUrls.enumerated().forEach { idx, url in
+                print("🖼 thumb[\(idx)]: \(url)")
+            }
+            item.imageUrls.enumerated().forEach { idx, url in
+                print("🖼 image[\(idx)]: \(url)")
+            }
+        }
     }
 
+    // END DEBUG Helper
 
     // Helper function to update color hex
     private func updateColorHexFromCustomColor() {
@@ -179,5 +243,5 @@ struct AddWOItemFormView: View {
 
 // ───── Preview Template ─────
 #Preview {
-    AddWOItemFormView(item: .constant(WO_Item.sample))
+    AddWOItemFormView(item: .constant(WO_Item.sample), woId: "WO_PREVIEW")
 }

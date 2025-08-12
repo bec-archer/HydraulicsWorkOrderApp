@@ -60,14 +60,16 @@ struct NewWorkOrderView: View {
         items.contains { itemHasType($0) }
     }
 
-    private var hasAnyPhoto: Bool {
-        items.contains { !$0.localImages.isEmpty || !$0.imageUrls.isEmpty }
+    // Only count uploaded photos (thumbs or full URLs), not local images
+    private var hasAnyUploadedPhoto: Bool {
+        items.contains { !$0.thumbUrls.isEmpty || !$0.imageUrls.isEmpty }
     }
 
     private var canShowCheckInButtons: Bool {
-        // ✅ Require: Customer + a Type + at least one photo (any item)
-        (selectedCustomer != nil) && hasSelectedType && hasAnyPhoto
+        // ✅ Require: Customer + a Type + at least one **uploaded** photo (any item)
+        (selectedCustomer != nil) && hasSelectedType && hasAnyUploadedPhoto
     }
+
     // END Readiness Helpers
 
     // ───── BODY ─────
@@ -346,7 +348,7 @@ struct NewWorkOrderView: View {
             customerName: customer.name,
             customerPhone: customer.phone,
             WO_Type: "Intake",
-            imageURL: items.first?.imageUrls.first,
+            imageURL: items.first?.thumbUrls.first ?? items.first?.imageUrls.first,
             timestamp: Date(),
             status: "Checked In",
             WO_Number: generateLocalWONumber(),

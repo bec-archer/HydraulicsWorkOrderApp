@@ -20,6 +20,11 @@ struct PhotoCaptureView: View {
     
     // Parent binds to this; you'll map to WO_Item.imageUrls after uploads
     @Binding var images: [UIImage]
+
+    // Optional inline QR button support
+    var showQR: Bool = false
+    var onScanQR: (() -> Void)? = nil
+
     
     // Presentation state (single source of truth avoids back‑to‑back sheet bugs)
     private enum ActiveSheet: Identifiable { case camera, library
@@ -64,10 +69,35 @@ struct PhotoCaptureView: View {
                         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                         .accessibilityLabel("Choose Photos from Library")
                 }
-            }
 
-            
+                // ───── QR Code Scan (inline with capture buttons) ─────
+                Spacer() // push QR button to the far right
+
+                if showQR {
+                    Button {
+                        haptic.impactOccurred()
+                        onScanQR?()
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "qrcode.viewfinder")
+                            Text("Scan QR Code")
+                        }
+                        .padding(.horizontal, 14).padding(.vertical, 10)
+                        .background(Color.blue)             // 🔵 make it blue
+                        .foregroundColor(.white)            // white text/icon for contrast
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(Color.blue.opacity(0.2), lineWidth: 1)
+                        )
+                        .accessibilityLabel("Scan QR Code")
+                    }
+                    .buttonStyle(.plain)
+                }
+            } // END HStack (Header Row)
+
             .padding(.top, 4)
+
             
             // ───── Thumbnails Row (Horizontal) ─────
             ThumbnailsRow(images: $images)
@@ -313,8 +343,148 @@ extension Color {
     init(_ hex: String) { self.init(hex: hex) }
 }
 
-// ───── Preview Template ─────
+// ───── PhotoCaptureUploadView (uploads to Firebase, returns URLs) ─────
+// Drop‑in wrapper that uses PhotoCaptureView for UI, but automatically
+// uploads each newly added image to Firebase Storage and appends the
+// resulting URLs to the provided bindings.
+//
+// • Keeps your existing PhotoCaptureView(images:) unchanged
+// • Sequentially uploads new photos to avoid concurrency spikes
+// • Shows a small progress indicator while uploading
+// • Collects errors (non-blocking) so techs can keep working
+@MainActor
+struct PhotoCaptureUploadView: View {
+    
+    // ───── Bindings to your model ─────
+    // Recommended: bind these to WO_Item.imageUrls and WO_Item.thumbUrls
+    @Binding var imageURLs: [String]
+    @Binding var thumbURLs: [String]
+
+    // WorkOrder context for Storage pathing
+    let woId: String
+    let woItemId: UUID
+
+    // Inline QR support (passed down to PhotoCaptureView)
+    var showQR: Bool = false
+    var onScanQR: (() -> Void)? = nil
+
+    
+    // Local scratchpad for captured images (not persisted)
+    @State private var localImages: [UIImage] = []
+    
+    // Upload state
+    @State private var uploadedCount: Int = 0            // how many localImages already uploaded
+    @State private var isUploading: Bool = false
+    @State private var uploadErrors: [String] = []
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            
+            // Reuse your existing capture/picker UI (now with inline QR)
+            PhotoCaptureView(images: $localImages, showQR: showQR, onScanQR: onScanQR)
+
+            
+            // Subtle progress
+            if isUploading {
+                ProgressView("Uploading photos…")
+                    .progressViewStyle(.linear)
+                    .padding(.vertical, 4)
+            }
+            
+            // Non-blocking error note (dev-visible)
+            if !uploadErrors.isEmpty {
+                Text("Some uploads failed (\(uploadErrors.count)).")
+                    .font(.footnote)
+                    .foregroundColor(.red)
+            }
+        }
+        // ───── Auto-upload newly appended images ─────
+        .onChange(of: localImages) { _, newImages in
+            // Only act when new images were appended
+            guard newImages.count > uploadedCount else { return }
+            
+            let toUpload = Array(newImages.dropFirst(uploadedCount)) // only the new ones
+            isUploading = true
+            
+            Task {
+                for img in toUpload {
+                    do {
+                        // 🔧 Ensure image is < 5 MB per Storage rules before uploading
+                        let prepared = compressForFirebase(img)
+
+                        let (fullURL, thumbURL) = try await StorageManager.shared
+                            .uploadWOItemImageWithThumbnail(prepared, woId: woId, woItemId: woItemId)
+                        
+                        // Hop to main to update bindings
+                        await MainActor.run {
+                            imageURLs.append(fullURL)
+                            thumbURLs.append(thumbURL)
+                            uploadedCount += 1
+                        }
+                    } catch {
+                        await MainActor.run {
+                            uploadErrors.append(error.localizedDescription)
+                            uploadedCount += 1   // mark as processed to avoid re-looping
+                        }
+                    }
+                }
+                
+                await MainActor.run { isUploading = false }
+            }
+
+        }
+        // END .body
+    }
+    // ───── Image Compressor (< 5 MB for Firebase Storage rules) ─────
+    private func compressForFirebase(_ image: UIImage) -> UIImage {
+        // Downscale longest edge to ~2000 px to shrink big photos
+        let maxEdge: CGFloat = 2000
+        let size = image.size
+        let scale = min(1.0, maxEdge / max(size.width, size.height))
+        let targetSize = CGSize(width: size.width * scale, height: size.height * scale)
+
+        let renderer = UIGraphicsImageRenderer(size: targetSize)
+        let downscaled = renderer.image { _ in
+            image.draw(in: CGRect(origin: .zero, size: targetSize))
+        }
+
+        // Step down JPEG quality until we're safely under 5 MB
+        var quality: CGFloat = 0.85
+        var data = downscaled.jpegData(compressionQuality: quality) ?? image.jpegData(compressionQuality: 0.8)!
+        let maxBytes = 4_800_000  // keep headroom under 5 MB rule
+
+        while data.count > maxBytes && quality > 0.4 {
+            quality -= 0.1
+            if let d = downscaled.jpegData(compressionQuality: quality) {
+                data = d
+            } else {
+                break
+            }
+        }
+
+        // Recreate UIImage from final data to keep existing API (UIImage) unchanged
+        return UIImage(data: data) ?? downscaled
+    }
+    // END
+
+    // END PhotoCaptureUploadView
+}
+
+
+
+// ───── Preview Templates ─────
 #Preview("PhotoCaptureView – Demo") {
     PhotoCaptureView(images: .constant([]))
+}
+#Preview("PhotoCaptureUploadView – Demo (no upload)") {
+    // NOTE: This preview does not actually call Firebase.
+    // It just shows layout with dummy bindings.
+    PhotoCaptureUploadView(
+        imageURLs: .constant([]),
+        thumbURLs: .constant([]),
+        woId: "WO_PREVIEW",
+        woItemId: UUID()
+    )
+        .padding()
 }
 // END FILE

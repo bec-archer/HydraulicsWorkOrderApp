@@ -36,11 +36,13 @@ struct WorkOrderCardView: View {
 
         if let s = workOrder.imageURL {
             resolve(s)
-        } else if let s = workOrder.items.first?.imageUrls.first {
+        } else if let s = workOrder.items.first?.thumbUrls.first ?? workOrder.items.first?.imageUrls.first {
             resolve(s)
         } else {
             self.resolvedImageURL = nil
         }
+
+
     }
 
 // End resolveImageURL
@@ -57,6 +59,13 @@ struct WorkOrderCardView: View {
                     .font(.largeTitle)
                     .foregroundColor(.gray)
             )
+    }
+    // ───── Change Observers (lightweight helpers) ─────
+    private func firstItemImageCount() -> Int {
+        workOrder.items.first?.imageUrls.count ?? 0
+    }
+    private func firstItemThumbCount() -> Int {
+        workOrder.items.first?.thumbUrls.count ?? 0
     }
 
 
@@ -149,7 +158,17 @@ struct WorkOrderCardView: View {
             resolveImageURL()
         }
         // Re-resolve when the first WO_Item’s image count changes (new upload finished)
-        .onChange(of: workOrder.items.first?.imageUrls.count ?? 0) { _, _ in
+        .onChange(of: firstItemImageCount()) { _, _ in
+            resolveImageURL()
+        }
+        // Re-resolve when the first WO_Item’s thumb count changes
+        .onChange(of: firstItemThumbCount()) { _, _ in
+            resolveImageURL()
+        }
+
+        
+        // Re-resolve when the first WO_Item’s thumb count changes
+        .onChange(of: workOrder.items.first?.thumbUrls.count ?? 0) { _, _ in
             resolveImageURL()
         }
 

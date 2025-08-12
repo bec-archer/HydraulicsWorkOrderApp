@@ -16,11 +16,16 @@ struct SettingsView: View {
 
     var body: some View {
         Form {
-            // ───── Login Bypass ─────
+            // ───── Developer Settings ─────
             Section(header: Text("Developer Settings")) {
                 Toggle("Bypass Login Screen", isOn: $devSettings.skipLogin)
                 Toggle("Bypass Tag Scan Requirement", isOn: $devSettings.skipTagScan)
+
+                // 🔐 Enable anonymous Firebase Auth so image uploads work with strict rules
+                Toggle("Enable Anonymous Firebase Auth", isOn: $devSettings.enableAnonAuth)
+                    .accessibilityHint("Turn on to sign in anonymously at launch so Firebase Storage uploads are allowed")
             }
+
         }
         .navigationTitle("Settings")
     }

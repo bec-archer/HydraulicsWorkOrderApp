@@ -11,8 +11,9 @@ struct WO_Item: Identifiable, Codable, Equatable {
     var reasonNotes: String? = nil
 
     var imageUrls: [String] = []
+    var thumbUrls: [String] = []       // 🆕 store thumbnails for fast UI
     var localImages: [UIImage] = []    // ✅ No longer using @TransientImageStorage
-
+    // 🆕 Store local images for offline use
     var lastModified: Date = Date()
     var dropdownSchemaVersion: Int = 1
     var lastModifiedBy: String? = nil
@@ -22,9 +23,36 @@ struct WO_Item: Identifiable, Codable, Equatable {
 extension WO_Item {
     enum CodingKeys: String, CodingKey {
         case id, tagId, type, dropdowns, reasonsForService, reasonNotes,
-             imageUrls, lastModified, dropdownSchemaVersion, lastModifiedBy
+             imageUrls, thumbUrls, lastModified, dropdownSchemaVersion, lastModifiedBy
     }
 }
+
+// ───── Back-compat Codable init (defaults missing keys) ─────
+extension WO_Item {
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+
+        self.id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        self.tagId = try c.decodeIfPresent(String.self, forKey: .tagId)
+        self.type = try c.decodeIfPresent(String.self, forKey: .type) ?? ""
+
+        self.dropdowns = try c.decodeIfPresent([String:String].self, forKey: .dropdowns) ?? [:]
+        self.reasonsForService = try c.decodeIfPresent([String].self, forKey: .reasonsForService) ?? []
+        self.reasonNotes = try c.decodeIfPresent(String.self, forKey: .reasonNotes)
+
+        // 🔑 Back-compat: default to [] when key missing
+        self.imageUrls = try c.decodeIfPresent([String].self, forKey: .imageUrls) ?? []
+        self.thumbUrls = try c.decodeIfPresent([String].self, forKey: .thumbUrls) ?? []
+
+        self.lastModified = try c.decodeIfPresent(Date.self, forKey: .lastModified) ?? Date()
+        self.dropdownSchemaVersion = try c.decodeIfPresent(Int.self, forKey: .dropdownSchemaVersion) ?? 1
+        self.lastModifiedBy = try c.decodeIfPresent(String.self, forKey: .lastModifiedBy)
+
+        // 🔒 Local-only: never decoded/encoded
+        self.localImages = []
+    }
+}
+
 
 // ───── Preview Stub ─────
 extension WO_Item {

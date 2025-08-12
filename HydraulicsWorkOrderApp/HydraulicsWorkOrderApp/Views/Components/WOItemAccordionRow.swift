@@ -62,36 +62,14 @@ struct WOItemAccordionRow: View {
                 }
                 .padding(.top, 6)
 
-                // Image capture + QR scan row
-                HStack {
-                    PhotoCaptureView(images: imagesBinding)
-                        .onChange(of: imagesBinding.wrappedValue.count) { _, _ in
-                            Task { await uploadNewLocalImages() }
-                        }
+                // (QR button moved inline inside PhotoCaptureUploadView’s header row)
 
-                    Spacer()
-
-                    Button {
-                        // TODO: Implement QR code scanner logic
-                        if indexIsValid {
-                            print("Scan QR Code tapped for item \(items[index].id)")
-                        }
-                    } label: {
-                        Text("Scan QR Code")
-                            .font(.callout).fontWeight(.semibold)
-                            .padding(.horizontal, 12).padding(.vertical, 8)
-                            .background(Color(hex: "#007AFF"))
-                            .foregroundColor(.white)
-                            .cornerRadius(8)
-                    }
-                    .buttonStyle(.plain)
-                }
-                .padding(.top, 6)
 
                 // Inline form
-                AddWOItemFormView(item: itemBinding)
+                AddWOItemFormView(item: itemBinding, woId: woId)   // ⬅️ pass parent WorkOrder ID through
                     .padding(.top, 6)
                 // END expanded content
+
             }
 
             if isUploadingImages {
