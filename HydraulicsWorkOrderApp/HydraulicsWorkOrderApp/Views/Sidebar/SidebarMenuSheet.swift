@@ -57,9 +57,8 @@ struct SidebarMenuSheet: View {
                     .padding(.vertical, 4)
 
                     // Settings
-                    Button {
-                        appState.currentView = .settings
-                        dismiss()
+                    NavigationLink {
+                        SettingsView()   // pushes Settings inside this sheet's NavigationStack
                     } label: {
                         HStack(spacing: 12) {
                             Image(systemName: "gearshape")
@@ -69,6 +68,7 @@ struct SidebarMenuSheet: View {
                         }
                         .padding(.vertical, 4)
                     }
+
                 }
                 // ───── END Section: Navigation ─────
 
