@@ -18,25 +18,74 @@ struct RouterView: View {
         // 🧭 Debug: Print current view state to console
         let _ = print("🧭 RouterView displaying: \(appState.currentView)")
 
-        return Group {
-            switch appState.currentView {
-            case .login:
-                LoginView()
+        // ───── Split View Shell: Sidebar (left) + Detail (right) ─────
+        NavigationSplitView {
 
-            case .activeWorkOrders:
-                ActiveWorkOrdersView()
+            // ───── Sidebar: Routes aligned to AppState ─────
+            List(selection: .constant(UUID())) {
 
-            case .newWorkOrder:
-                NewWorkOrderView()
+                // MAIN
+                Section("Main") {
+                    Button {
+                        appState.currentView = .activeWorkOrders
+                    } label: {
+                        Label("Active WorkOrders", systemImage: "square.grid.2x2")
+                    }
 
-            case .settings:
-                SettingsView()
+                    Button {
+                        appState.currentView = .newWorkOrder
+                    } label: {
+                        Label("New Work Order", systemImage: "plus.square.on.square")
+                    }
+                }
 
-            @unknown default:
-                Text("⚠️ Unknown AppScreen state")
+                // ADMIN / TOOLS
+                Section("Admin & Tools") {
+                    Button {
+                        appState.currentView = .settings
+                    } label: {
+                        Label("Settings", systemImage: "gearshape.fill")
+                    }
+
+                    // Placeholders (keep visible for roadmap; disabled = no compile impact)
+                    Label("Customers (coming soon)", systemImage: "person.2")
+                        .foregroundStyle(.secondary)
+                    Label("Dropdown Manager (coming soon)", systemImage: "chevron.down.square")
+                        .foregroundStyle(.secondary)
+                    Label("Deleted WorkOrders (coming soon)", systemImage: "trash")
+                        .foregroundStyle(.secondary)
+                }
             }
+            .navigationTitle("Sidebar")
+            // END Sidebar
+
+        } detail: {
+
+            // ───── Detail: your existing switch stays intact ─────
+            Group {
+                switch appState.currentView {
+                case .login:
+                    LoginView()
+
+                case .activeWorkOrders:
+                    ActiveWorkOrdersView()
+
+                case .newWorkOrder:
+                    NewWorkOrderView()
+
+                case .settings:
+                    SettingsView()
+
+                @unknown default:
+                    Text("⚠️ Unknown AppScreen state")
+                }
+            }
+            // END Detail
+
         }
+        // ───── END Split View Shell ─────
     }
+
 }
 // END struct
 
