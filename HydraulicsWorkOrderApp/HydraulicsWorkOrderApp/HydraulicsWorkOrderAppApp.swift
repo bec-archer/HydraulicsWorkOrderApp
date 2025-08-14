@@ -16,9 +16,17 @@ struct HydraulicsWorkOrderAppApp: App {
 
     var body: some Scene {
         WindowGroup {
-            // ───── Dev Login Toggle Logic ─────
-            RouterView()
-                .environmentObject(AppState.shared)
+
+            // ───── Dev Login Toggle Logic (Bypass → ActiveWorkOrdersView) ─────
+            Group {
+                if DevSettingsManager.shared.skipLogin {
+                    ActiveWorkOrdersView()
+                } else {
+                    RouterView()
+                }
+            }
+            .environmentObject(AppState.shared)
+            // END Dev Login Toggle
 
         }
         // END .body

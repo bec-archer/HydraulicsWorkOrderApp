@@ -25,10 +25,22 @@ class AppState: ObservableObject {
     static let shared = AppState() // Singleton for global access
     
     @Published var currentView: AppScreen = .newWorkOrder
-    
+
     // ───── Current Logged-in User Info ─────
     @Published var currentUserName: String = ""
     @Published var currentUserRole: UserRole = .tech
+
+    // ───── SuperAdmin Security (dev toggles) ─────
+    // Set this to YOUR SuperAdmin PIN for now. Later we’ll wire it to your real user store.
+    @Published var superAdminPIN: String = "56743"
+
+    // Centralized check used by dev-only controls (e.g., bypass login)
+    func verifySuperAdmin(pin: String) -> Bool {
+        // Don’t require role here while login is bypassed; just match the PIN.
+        // When login is enforced, you can tighten with: `&& currentUserRole == .superadmin`
+        return pin == superAdminPIN
+    }
+
 
     private init() {}  // Singleton enforcement
     
