@@ -273,6 +273,22 @@ struct NewWorkOrderView: View {
     // ───── Toolbar Content (extracted) ─────
     @ToolbarContentBuilder
     private func toolbarContent() -> some ToolbarContent {
+
+        // Left: Sidebar toggle (single source of truth, yellow)
+        ToolbarItem(placement: .navigationBarLeading) {
+            Button {
+                appState.toggleSidebar()
+            } label: {
+                Image(systemName: "sidebar.leading")
+                    .font(.title2.weight(.semibold))
+                    .symbolRenderingMode(.monochrome)
+                    .foregroundStyle(Color(red: 1.0, green: 0.7725, blue: 0.0)) // #FFC500
+                    .padding(.horizontal, 4)
+                    .accessibilityLabel("Toggle Sidebar")
+            }
+        }
+
+        // Right: Check In button (only when valid)
         if canShowCheckInButtons {
             ToolbarItem(placement: .confirmationAction) {
                 Button {
@@ -288,6 +304,7 @@ struct NewWorkOrderView: View {
         }
     }
     // END Toolbar Content
+
 
 
     // ───── Sticky Check-In (extracted) ─────
@@ -491,7 +508,9 @@ struct NewWorkOrderView: View {
 
 }
 // END struct
-
 // ───── PREVIEW ─────
-
-// END Preview
+#Preview {
+    NewWorkOrderView()
+        .environmentObject(AppState.shared)
+}
+// END PREVIEW

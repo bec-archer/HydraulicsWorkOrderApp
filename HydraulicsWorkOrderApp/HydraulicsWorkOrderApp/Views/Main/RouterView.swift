@@ -19,7 +19,7 @@ struct RouterView: View {
         let _ = print("🧭 RouterView displaying: \(appState.currentView)")
 
         // ───── Split View Shell: Sidebar (left) + Detail (right) ─────
-        NavigationSplitView {
+        NavigationSplitView(columnVisibility: $appState.splitVisibility) {
 
             // ───── Sidebar: Routes aligned to AppState ─────
             List(selection: .constant(UUID())) {
@@ -81,6 +81,17 @@ struct RouterView: View {
                 }
             }
             // END Detail
+            // Global toolbar: real sidebar toggle (iPad)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        appState.toggleSidebar()
+                    } label: {
+                        Image(systemName: "sidebar.leading")
+                    }
+                    .accessibilityLabel("Toggle Sidebar")
+                }
+            }
 
         }
         // ───── END Split View Shell ─────

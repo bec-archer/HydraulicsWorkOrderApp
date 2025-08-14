@@ -19,9 +19,6 @@ struct ActiveWorkOrdersView: View {
     @State private var isLoading = true
     @State private var showError = false
     @State private var errorMessage = ""
-    
-    @State private var showSidebarSheet = false
-
 
     let columns = [
         GridItem(.flexible()),
@@ -29,140 +26,114 @@ struct ActiveWorkOrdersView: View {
     ]
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                // ───── Loading / Empty States ─────
-                if isLoading {
-                    VStack(spacing: 12) {
-                        ProgressView()
-                        Text("Loading Active WorkOrders…")
-                            .foregroundStyle(.secondary)
+        NavigationSplitView(columnVisibility: $appState.splitVisibility) {
+            // ───── Sidebar Content ─────
+            SidebarMenuView() // Persistent sidebar
+        } detail: {
+            NavigationStack {
+                
+                ScrollView {
+                    // ───── Loading / Empty States ─────
+                    if isLoading {
+                        VStack(spacing: 12) {
+                            ProgressView()
+                            Text("Loading Active WorkOrders…")
+                                .foregroundStyle(.secondary)
+                        }
+                        .frame(maxWidth: .infinity, minHeight: 240)
+                        .padding(.top, 32)
                     }
-                    .frame(maxWidth: .infinity, minHeight: 240)
-                    .padding(.top, 32)
-                }
-
-                let active = db.workOrders
-                    .filter { !$0.isDeleted && $0.status != "Closed" }
-                    .sorted {
-                        if $0.flagged != $1.flagged { return $0.flagged && !$1.flagged }
-                        return $0.timestamp < $1.timestamp
-                    }
-
-                if !isLoading && active.isEmpty {
-                    VStack(spacing: 8) {
-                        Image(systemName: "tray")
-                            .font(.largeTitle)
-                            .foregroundStyle(.secondary)
-                        Text("No Active WorkOrders")
-                            .font(.headline)
-                        Text("Tap + New to check one in.")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
-                    .frame(maxWidth: .infinity, minHeight: 240)
-                    .padding(.top, 32)
-                }
-                // ───── END Loading / Empty States ─────
-
-                LazyVGrid(columns: columns, spacing: 16) {
-
-                    // ───── Data Source: Active only, sorted (flagged first, then oldest → newest) ─────
+                    
                     let active = db.workOrders
                         .filter { !$0.isDeleted && $0.status != "Closed" }
                         .sorted {
-                            // Flagged first
                             if $0.flagged != $1.flagged { return $0.flagged && !$1.flagged }
-                            // Then oldest → newest by timestamp
                             return $0.timestamp < $1.timestamp
                         }
-                    ForEach(active) { wo in
-                        NavigationLink {
-                            // ───── Detail with Delete wiring ─────
-                            WorkOrderDetailView(workOrder: wo) { target in
-                                // Bypass login is on during dev — use appState.currentUserName (can be blank)
-                                WorkOrdersDatabase.shared.softDelete(target, by: appState.currentUserName) { result in
-                                    switch result {
-                                    case .success:
-                                        break // The detail view will dismiss itself after calling this
-                                    case .failure(let err):
-                                        errorMessage = err.localizedDescription
-                                        showError = true
+                    
+                    if !isLoading && active.isEmpty {
+                        VStack(spacing: 8) {
+                            Image(systemName: "tray")
+                                .font(.largeTitle)
+                                .foregroundStyle(.secondary)
+                            Text("No Active WorkOrders")
+                                .font(.headline)
+                            Text("Tap + New to check one in.")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+                        .frame(maxWidth: .infinity, minHeight: 240)
+                        .padding(.top, 32)
+                    }
+                    // ───── END Loading / Empty States ─────
+                    
+                    LazyVGrid(columns: columns, spacing: 16) {
+                        // ───── Data Source: Active only, sorted (flagged first, then oldest → newest) ─────
+                        let active = db.workOrders
+                            .filter { !$0.isDeleted && $0.status != "Closed" }
+                            .sorted {
+                                // Flagged first
+                                if $0.flagged != $1.flagged { return $0.flagged && !$1.flagged }
+                                // Then oldest → newest by timestamp
+                                return $0.timestamp < $1.timestamp
+                            }
+                        ForEach(active) { wo in
+                            NavigationLink {
+                                // ───── Detail with Delete wiring ─────
+                                WorkOrderDetailView(workOrder: wo) { target in
+                                    WorkOrdersDatabase.shared.softDelete(target, by: appState.currentUserName) { result in
+                                        switch result {
+                                        case .success:
+                                            break // The detail view will dismiss itself after calling this
+                                        case .failure(let err):
+                                            errorMessage = err.localizedDescription
+                                            showError = true
+                                        }
                                     }
                                 }
+                                // END delete wiring
+                            } label: {
+                                WorkOrderCardView(workOrder: wo)
                             }
-                            // END delete wiring
-                        } label: {
-                            WorkOrderCardView(workOrder: wo)
                         }
+                        // END data source
                     }
-
-
-                    // END data source
-
+                    .padding()
                 }
+                .navigationTitle("Active Work Orders")
+                
+                // ───── Toolbar: single yellow sidebar button (leading) + New Work Order (trailing) ─────
+                .toolbar {
+                    // Left: Sidebar toggle OLD
 
-                .padding()
-            }
-            .navigationTitle("Active Work Orders")
-
-            // ───── Toolbar: Sidebar (left) + New Work Order (right) ─────
-            .toolbar {
-                // Left: Sidebar button (hamburger)
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button {
-                        // Open our custom sidebar sheet
-                        showSidebarSheet = true
-                    } label: {
-                        // Large, legible tap target
-                        Image(systemName: "line.3.horizontal")
-                            .font(.title2.weight(.semibold))
-                            .padding(.horizontal, 4)
-                            .accessibilityLabel("Open Sidebar")
+                    // Right: + New Work Order
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        NavigationLink {
+                            NewWorkOrderView()
+                        } label: {
+                            Text("+ New Work Order")
+                                .modifier(UIConstants.Buttons.yellowButtonStyle())
+                        }
+                        .buttonStyle(.plain)
                     }
                 }
-
-                // Right: + New Work Order
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    NavigationLink {
-                        NewWorkOrderView()
-                    } label: {
-                        Text("+ New Work Order")
-                            .modifier(UIConstants.Buttons.yellowButtonStyle())
-                    }
-                    .buttonStyle(.plain)
+                // ───── END toolbar ─────
+                
+                // ───── Initial load / refresh / alerts ─────
+                .task { await loadWorkOrders() }
+                .refreshable { await loadWorkOrders() }
+                .alert("Delete Failed", isPresented: $showError) {
+                    Button("OK", role: .cancel) {}
+                } message: {
+                    Text(errorMessage)
                 }
-            }
-            // ───── END toolbar ─────
-
-            // ───── Sidebar Sheet Presentation ─────
-            .sheet(isPresented: $showSidebarSheet) {
-                SidebarMenuSheet()
-                    .environmentObject(appState) // needed for routing out of the sheet
-                    .presentationDetents([.medium, .large])
-                    .presentationDragIndicator(.visible)
-            }
-            // ───── END Sidebar Sheet ─────
-
-            // ───── Initial load ─────
-
-            .task {
-
-                await loadWorkOrders()
-            }
-            // ───── Pull to refresh ─────
-            .refreshable {
-                await loadWorkOrders()
-            }
-            .alert("Delete Failed", isPresented: $showError) {
-
-                Button("OK", role: .cancel) {}
-            } message: {
-                Text(errorMessage)
+                // ───── END misc modifiers ─────
             }
         }
-        // END .body
     }
+    // END body
+
+// END body
 
     // ───── Load WorkOrders from Firestore ─────
     func loadWorkOrders() async {
@@ -187,7 +158,8 @@ struct ActiveWorkOrdersView: View {
 }
 
 // ───── Preview Template ─────
-
 #Preview(traits: .sizeThatFitsLayout) {
     ActiveWorkOrdersView()
+        .environmentObject(AppState.shared)   // required for @EnvironmentObject AppState
 }
+
