@@ -17,6 +17,16 @@ import FirebaseStorage
 
 struct StorageManager {
     
+    // ───── Debug Toggle (flip to true to see Storage logs) ─────
+    // Keeping this here avoids scheme/env edits and keeps noise out by default.
+    static var verboseLogging: Bool = false
+
+    // Small helper so we never scatter `if DEBUG` across the file
+    @inline(__always) private func dprint(_ message: @autoclosure () -> String) {
+        if StorageManager.verboseLogging { Swift.print(message()) }
+    }
+    // END
+
     init() {
         // Short, predictable retries for a snappy UX
         Storage.storage().maxUploadRetryTime = 15
@@ -25,6 +35,7 @@ struct StorageManager {
 
     // ───── Singleton (stateless, but handy) ─────
     static let shared = StorageManager()
+
 
     private let root = Storage.storage().reference()
     // ───── Track In-Flight Uploads to Prevent Duplicates ─────
@@ -53,19 +64,25 @@ struct StorageManager {
         let path = intakePath(woId: woId, woItemId: woItemId, filename: filename)
 
         // ───── Prevent Duplicate Uploads ─────
-        var isDuplicate = false
+        var insertedKey = false
         StorageManager.inFlightQueue.sync {
-            if StorageManager.inFlightUploads.contains(path) {
-                isDuplicate = true
-            } else {
-                _ = StorageManager.inFlightUploads.insert(path) // discard return
+            if !StorageManager.inFlightUploads.contains(path) {
+                _ = StorageManager.inFlightUploads.insert(path)
+                insertedKey = true
             }
         }
-        if isDuplicate {
-            print("⚠️ Skipping duplicate upload for \(path)")
+        guard insertedKey else {
+            dprint("⚠️ Skipping duplicate upload for \(path)")
             return ""
         }
+        // Always remove the key on ANY exit (success, error, or early return)
+        defer {
+            StorageManager.inFlightQueue.sync {
+                _ = StorageManager.inFlightUploads.remove(path)
+            }
+        }
         // END Prevent Duplicate Uploads
+
 
 
         // 1) Compress for network (resizes + strips metadata)
@@ -82,8 +99,7 @@ struct StorageManager {
         }
 
         let data = compressed.fullData
-        print("📦 Uploading image ~\(compressed.approxKB) KB, px=\(Int(compressed.fullPixelSize.width))×\(Int(compressed.fullPixelSize.height))")
-
+        dprint("📦 Uploading image ~\(compressed.approxKB) KB, px=\(Int(compressed.fullPixelSize.width))×\(Int(compressed.fullPixelSize.height))")
 
         // 2) Build path using centralized helper (same timestamp as de‑dupe)
         let ref = root.child(path)
@@ -99,11 +115,6 @@ struct StorageManager {
 
         // 5) Fetch download URL
         let url = try await ref.downloadURL()
-        // ───── Remove from In-Flight Tracker ─────
-        StorageManager.inFlightQueue.sync {
-            _ = StorageManager.inFlightUploads.remove(path) // discard return
-        }
-        // END
 
         return url.absoluteString
     }
@@ -127,20 +138,24 @@ struct StorageManager {
         let combinedKey = "\(fullPath)|\(thumbPath)"
 
         // ───── Prevent Duplicate Uploads ─────
-        var isDuplicate = false
+        var insertedKey = false
         StorageManager.inFlightQueue.sync {
-            if StorageManager.inFlightUploads.contains(combinedKey) {
-                isDuplicate = true
-            } else {
-                _ = StorageManager.inFlightUploads.insert(combinedKey) // discard return
+            if !StorageManager.inFlightUploads.contains(combinedKey) {
+                _ = StorageManager.inFlightUploads.insert(combinedKey)
+                insertedKey = true
             }
         }
-        if isDuplicate {
-            print("⚠️ Skipping duplicate upload for \(combinedKey)")
+        guard insertedKey else {
+            dprint("⚠️ Skipping duplicate upload for \(combinedKey)")
             return ("", "")
         }
+        // Always remove the key on ANY exit (success, error, or early return)
+        defer {
+            StorageManager.inFlightQueue.sync {
+                _ = StorageManager.inFlightUploads.remove(combinedKey)
+            }
+        }
         // END Prevent Duplicate Uploads
-
 
         // ───── 1) Compress (full + thumb) ─────
         guard let compressed = ImageCompressionManager.compressForUpload(
@@ -168,17 +183,17 @@ struct StorageManager {
         let fullUIImage = UIImage(data: compressed.fullData) ?? image
         let cappedFullData = jpegDataUnderLimit(fullUIImage) ?? compressed.fullData
 
-        print("📤 Uploading FULL ~\(cappedFullData.count / 1024) KB → \(fullPath)")
+        dprint("📤 Uploading FULL ~\(cappedFullData.count / 1024) KB → \(fullPath)")
         do {
             _ = try await fullRef.putDataAsync(cappedFullData, metadata: meta)
         } catch {
             // One quick retry (transient network hiccups happen)
-            print("⚠️ Full upload failed, retrying once: \(error.localizedDescription)")
+            dprint("⚠️ Full upload failed, retrying once: \(error.localizedDescription)")
             _ = try await fullRef.putDataAsync(cappedFullData, metadata: meta)
         }
 
 
-        print("📤 Uploading THUMB ~\(compressed.thumbnailData.count / 1024) KB → \(thumbPath)")
+        dprint("📤 Uploading THUMB ~\(compressed.thumbnailData.count / 1024) KB → \(thumbPath)")
         _ = try await thumbRef.putDataAsync(compressed.thumbnailData, metadata: meta)
 
         // ───── 5) URLs ─────
@@ -186,11 +201,6 @@ struct StorageManager {
         async let thumbURLTask = thumbRef.downloadURL()
         let (fullURL, thumbURL) = try await (fullURLTask, thumbURLTask)
         
-        // ───── Remove from In-Flight Tracker ─────
-        StorageManager.inFlightQueue.sync {
-            _ = StorageManager.inFlightUploads.remove(combinedKey) // discard return
-        }
-        // END
 
         return (fullURL.absoluteString, thumbURL.absoluteString)
     }
