@@ -102,8 +102,25 @@ struct ActiveWorkOrdersView: View {
                 .padding()
             }
             .navigationTitle("Active Work Orders")
+
+            // ───── Top-Right: + New Work Order ─────
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    NavigationLink {
+                        NewWorkOrderView()
+                    } label: {
+                        Text("+ New Work Order")
+                            .modifier(UIConstants.Buttons.yellowButtonStyle())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            // ───── END toolbar ─────
+
             // ───── Initial load ─────
+
             .task {
+
                 await loadWorkOrders()
             }
             // ───── Pull to refresh ─────
