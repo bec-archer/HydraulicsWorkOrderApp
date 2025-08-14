@@ -71,181 +71,120 @@ struct NewWorkOrderView: View {
     }
 
     // END Readiness Helpers
+    
+    // ───── Customer Lookup Section (extracted to ease type-checking) ─────
+    @ViewBuilder
+    private func customerLookupSection() -> some View {
+        // Required field header
+        HStack(spacing: 4) {
+            Text("Customer")
+                .font(.headline)
+            Text("*")
+                .foregroundColor(.red)
+                .font(.headline)
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 8)
+
+        GroupBox {
+            if let customer = selectedCustomer {
+                // Selected customer summary with inline Clear
+                HStack(alignment: .center, spacing: 8) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(customer.name).font(.headline)
+                        Text(customer.phone).font(.subheadline).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Button {
+                        selectedCustomer = nil
+                        customerSearch.resetSearch()
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundColor(.red)
+                            .imageScale(.large)
+                            .padding(.leading, 4)
+                            .accessibilityLabel("Clear selected customer")
+                    }
+                }
+                .padding(.vertical, 4)
+            } else {
+                VStack(alignment: .leading, spacing: 8) {
+                    // TextField OUTSIDE Form to avoid accessory constraint thrash
+                    TextField("Search by name or phone", text: $customerSearch.searchText)
+                        .textFieldStyle(.roundedBorder)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled(true)
+                        .keyboardType(.default)
+
+                    if !customerSearch.matchingCustomers.isEmpty {
+                        ForEach(customerSearch.matchingCustomers, id: \.id) { customer in
+                            Button {
+                                customerSearch.isPickingCustomer = true
+                                selectCustomer(customer)
+                                customerSearch.resetSearch()
+                                DispatchQueue.main.async { customerSearch.isPickingCustomer = false }
+                                print("👆 PICKED:", customer.id.uuidString, customer.name, customer.phone)
+                            } label: {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(customer.name)
+                                    Text(customer.phone).font(.caption).foregroundStyle(.secondary)
+                                }
+                                .padding(.vertical, 4)
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    } else if !customerSearch.searchText.isEmpty {
+                        Button {
+                            showingNewCustomerModal = true
+                        } label: {
+                            Label("Add New Customer", systemImage: "plus.circle")
+                                .foregroundStyle(.blue)
+                        }
+                        .padding(.top, 4)
+                    }
+                }
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 8)
+        .animation(nil, value: customerSearch.matchingCustomers.count) // no implicit animation during typing
+    }
+    // END Customer Lookup Section
+
 
     // ───── BODY ─────
     var body: some View {
         NavigationStack {
-            // ───── CUSTOMER LOOKUP (Plain container to avoid Form/keyboard cycles) ─────
-            // Required field header
-            HStack(spacing: 4) {
-                Text("Customer")
-                    .font(.headline)
-                Text("*")
-                    .foregroundColor(.red)
-                    .font(.headline)
-            }
-            .padding(.horizontal, 16)
-            .padding(.top, 8)
+            // ───── CUSTOMER LOOKUP (extracted) ─────
+            customerLookupSection()
+            // END Customer Lookup
 
-            GroupBox {
-
-                if let customer = selectedCustomer {
-                    // Selected customer summary with inline Clear
-                    HStack(alignment: .center, spacing: 8) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(customer.name).font(.headline)
-                            Text(customer.phone).font(.subheadline).foregroundStyle(.secondary)
-                        }
-                        Spacer()
-                        Button {
-                            selectedCustomer = nil
-                            customerSearch.resetSearch()
-                        } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .foregroundColor(.red)
-                                .imageScale(.large)
-                                .padding(.leading, 4)
-                                .accessibilityLabel("Clear selected customer")
-                        }
-                    }
-                    .padding(.vertical, 4)
-
-                } else {
-                    VStack(alignment: .leading, spacing: 8) {
-                        // TextField OUTSIDE Form to avoid accessory constraint thrash
-                        TextField("Search by name or phone", text: $customerSearch.searchText)
-                            .textFieldStyle(.roundedBorder)
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled(true)
-                            .keyboardType(.default)
-
-                        if !customerSearch.matchingCustomers.isEmpty {
-                            // Stable identity list
-                            ForEach(customerSearch.matchingCustomers, id: \.id) { customer in
-                                Button {
-                                    customerSearch.isPickingCustomer = true
-                                    selectCustomer(customer)
-                                    customerSearch.resetSearch()
-                                    DispatchQueue.main.async { customerSearch.isPickingCustomer = false }
-                                    print("👆 PICKED:", customer.id.uuidString, customer.name, customer.phone)
-                                } label: {
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(customer.name)
-                                        Text(customer.phone).font(.caption).foregroundStyle(.secondary)
-                                    }
-                                    .padding(.vertical, 4)
-                                    .contentShape(Rectangle())
-                                }
-                                .buttonStyle(.plain)
-                            }
-                        } else if !customerSearch.searchText.isEmpty {
-                            Button {
-                                showingNewCustomerModal = true
-                            } label: {
-                                Label("Add New Customer", systemImage: "plus.circle")
-                                    .foregroundStyle(.blue)
-                            }
-                            .padding(.top, 4)
-                        }
-                    }
-                }
-            }
-            .padding(.horizontal, 16)
-            .padding(.top, 8)
-            .animation(nil, value: customerSearch.matchingCustomers.count) // no implicit animation during typing
-            // END Customer Lookup (Plain)
             
             // ───── WO_Items (Accordion List) ─────
             ScrollView {
-                VStack(spacing: 12) {
-                    ForEach(items.indices, id: \.self) { idx in
-                        WOItemAccordionRow(
-                            index: idx,
-                            woId: draftWOId,               // ⬅️ pass parent WO id
-                            items: $items,
-                            expandedIndex: $expandedIndex,
-                            onDelete: { indexToDelete in
-                                handleDeleteWOItem(indexToDelete)
-                            }
-                        )
-
-                        .padding(12)
-                        .background(
-                            RoundedRectangle(cornerRadius: 14)
-                                .fill(Color(.systemBackground))
-                                .shadow(color: .black.opacity(0.06), radius: 4, x: 0, y: 2)
-                        )
-                    }
-
-                    // ➕ Add Item button
-                    Button {
-                        withAnimation {
-                            items.append(WO_Item.blank())
-                            expandedIndex = items.indices.last
-                        }
-                    } label: {
-                        Label("Add Item", systemImage: "plus.circle.fill")
-                            .font(.headline)
-                            .padding(.vertical, 10)
-                            .frame(maxWidth: .infinity)
-                            .background(Color.yellow.opacity(0.25))
-                            .clipShape(RoundedRectangle(cornerRadius: 12))
-                    }
-                    .buttonStyle(.plain)
-                    .padding(.top, 4)
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
+                woItemsSection()
             }
             // END WO_Items (Accordion List)
+
 
             
             .navigationTitle("New Work Order")
             
-                // ───── Toolbar: Check In (Save) ─────
-                .toolbar {
-                    if canShowCheckInButtons {
-                        ToolbarItem(placement: .confirmationAction) {
-                            Button("Check In Work Order") {
-                                saveWorkOrder {
-                                    appState.currentView = .activeWorkOrders
-                                }
-                            }
-                            .buttonStyle(PrimaryButtonStyle(compact: true))
-                        }
-                    }
-                }
-                // END toolbar
+            // ───── Toolbar: Check In (Save) ─────
+            .toolbar { toolbarContent() }
+            // END toolbar
 
-            
-                // ───── Sticky Bottom Save Button (backup to toolbar) ─────
-                .safeAreaInset(edge: .bottom) {
-                    if canShowCheckInButtons {
-                        Button {
-                            saveWorkOrder {
-                                appState.currentView = .activeWorkOrders
-                            }
-                        } label: {
-                            Text("Check In Work Order")
-                                .font(.headline)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 14)
-                                .background(Color.yellow)
-                                .foregroundColor(.black)
-                                .clipShape(RoundedRectangle(cornerRadius: 14))
-                                .padding(.horizontal, 16)
-                                .padding(.top, 4)
-                        }
-                        .buttonStyle(.plain)
-                        .background(.ultraThinMaterial) // keeps it readable over scroll
-                    }
-                }
-                // END sticky bottom button
+            // ───── Sticky Bottom Save Button (backup to toolbar) ─────
+            .safeAreaInset(edge: .bottom) { stickyCheckIn() }
+            // END sticky bottom button
 
-
-
-            
-            .alert(Text("Status"), isPresented: $showAlert) {
+            // ───── Quiet iPad keyboard accessory + make keyboard dismiss on scroll ─────
+            .modifier(KeyboardToolbarHidden())
+            .scrollDismissesKeyboard(.immediately)
+            // END keyboard/scroll settings
+         
+         .alert(Text("Status"), isPresented: $showAlert) {
                 Button("OK", role: .cancel) {}
             } message: {
                 Text(alertMessage)
@@ -267,31 +206,12 @@ struct NewWorkOrderView: View {
                 }
             }
 
-
-
             // END onChange
+
             // ───── Toast Banner Overlay ─────
-            .overlay(
-                Group {
-                    if showSaveBanner {
-                        VStack {
-                            Spacer()
-                            Text("✅ WO-\(savedWONumber) Saved!")
-                                .font(.subheadline)
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 10)
-                                .background(Color.green.opacity(0.95))
-                                .foregroundColor(.white)
-                                .cornerRadius(12)
-                                .shadow(radius: 4)
-                                .padding(.bottom, 30)
-                                .transition(.move(edge: .bottom).combined(with: .opacity))
-                                .animation(.easeInOut(duration: 0.3), value: showSaveBanner)
-                        }
-                    }
-                }
-            )
+            .overlay(saveBannerOverlay())
             // END overlay
+
 
             // ───── New Customer Modal Sheet (attached to NavigationStack) ─────
             .sheet(isPresented: $showingNewCustomerModal) {
@@ -306,6 +226,129 @@ struct NewWorkOrderView: View {
 
     }
     // END .body
+    
+    // ───── Extracted WO_Items Section (reduces type-checker load) ─────
+    @ViewBuilder
+    private func woItemsSection() -> some View {
+        VStack(spacing: 12) {
+
+            // Using Array(...) makes the sequence concrete and faster to type-check
+            ForEach(Array(items.indices), id: \.self) { idx in
+                WOItemAccordionRow(
+                    index: idx,
+                    woId: draftWOId,               // ⬅️ pass parent WO id
+                    items: $items,
+                    expandedIndex: $expandedIndex,
+                    onDelete: { indexToDelete in
+                        handleDeleteWOItem(indexToDelete)
+                    }
+                )
+                .padding(12)
+                .background(
+                    RoundedRectangle(cornerRadius: 14)
+                        .fill(Color(.systemBackground))
+                        .shadow(color: .black.opacity(0.06), radius: 4, x: 0, y: 2)
+                )
+            }
+
+            // ➕ Add Item button
+            Button {
+                withAnimation {
+                    items.append(WO_Item.blank())
+                    expandedIndex = items.indices.last
+                }
+            } label: {
+                Label("Add Item", systemImage: "plus.circle.fill")
+                    .font(.headline)
+                    .padding(.vertical, 10)
+                    .frame(maxWidth: .infinity)
+                    .background(Color.yellow.opacity(0.25))
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+            }
+            .buttonStyle(.plain)
+            .padding(.top, 4)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+    }
+    // END Extracted WO_Items Section
+    // ───── Toolbar Content (extracted) ─────
+    @ToolbarContentBuilder
+    private func toolbarContent() -> some ToolbarContent {
+        if canShowCheckInButtons {
+            ToolbarItem(placement: .confirmationAction) {
+                Button("Check In Work Order") {
+                    saveWorkOrder {
+                        appState.currentView = .activeWorkOrders
+                    }
+                }
+                .buttonStyle(PrimaryButtonStyle(compact: true))
+            }
+        }
+    }
+    // END Toolbar Content
+
+    // ───── Sticky Check-In (extracted) ─────
+    @ViewBuilder
+    private func stickyCheckIn() -> some View {
+        if canShowCheckInButtons {
+            Button {
+                saveWorkOrder {
+                    appState.currentView = .activeWorkOrders
+                }
+            } label: {
+                Text("Check In Work Order")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .background(Color.yellow)
+                    .foregroundColor(.black)
+                    .clipShape(RoundedRectangle(cornerRadius: 14))
+                    .padding(.horizontal, 16)
+                    .padding(.top, 4)
+            }
+            .buttonStyle(.plain)
+            .background(.ultraThinMaterial)
+        } else {
+            EmptyView()
+        }
+    }
+    // END Sticky Check-In
+
+    // ───── Save Banner Overlay (extracted) ─────
+    @ViewBuilder
+    private func saveBannerOverlay() -> some View {
+        Group {
+            if showSaveBanner {
+                VStack {
+                    Spacer()
+                    Text("✅ WO-\(savedWONumber) Saved!")
+                        .font(.subheadline)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                        .background(Color.green.opacity(0.95))
+                        .foregroundColor(.white)
+                        .cornerRadius(12)
+                        .shadow(radius: 4)
+                        .padding(.bottom, 30)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                        .animation(.easeInOut(duration: 0.3), value: showSaveBanner)
+                }
+            }
+        }
+    }
+    // END Save Banner Overlay
+    
+    // ───── Availability-Safe: Hide Keyboard Toolbar on iPad (no‑op fallback) ─────
+    private struct KeyboardToolbarHidden: ViewModifier {
+        func body(content: Content) -> some View {
+            // Some toolchains don’t expose ToolbarPlacement.keyboard at compile time.
+            // To unblock builds, this is a no‑op. We’ll re‑enable the hide call when
+            // you’re building against an iOS 16+ SDK that supports it.
+            content
+        }
+    }
+    // END Availability-Safe
 
     // ───── Selection Helper ─────
     private func selectCustomer(_ customer: Customer) {
@@ -341,7 +384,7 @@ struct NewWorkOrderView: View {
         // - createdBy / lastModifiedBy will come from UserManager
         // - dropdownSchemaVersion hard-coded to 1 until DropdownSchema exists
         let wo = WorkOrder(
-            id: draftWOId,                    // keep ID consistent with Storage folder
+            id: nil,                    // keep ID consistent with Storage folder
           // if your model uses String; otherwise keep UUID()
             createdBy: "Tech",                // ⬅️ move this up, right after id
             customerId: customer.id.uuidString,
