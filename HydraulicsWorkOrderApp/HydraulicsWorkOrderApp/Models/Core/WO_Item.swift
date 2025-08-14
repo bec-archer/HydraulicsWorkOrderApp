@@ -17,14 +17,23 @@ struct WO_Item: Identifiable, Codable, Equatable {
     var lastModified: Date = Date()
     var dropdownSchemaVersion: Int = 1
     var lastModifiedBy: String? = nil
+
+    // 🆕 Per‑item status updates (Checked In → In Progress → Done → …)
+    var statusHistory: [WO_Status] = []
+
+    // 🆕 Per‑item notes/timeline (free‑form + system status notes live together)
+    var notes: [WO_Note] = []
+
 }
 
 // Ignore localImages in Codable
 extension WO_Item {
     enum CodingKeys: String, CodingKey {
         case id, tagId, type, dropdowns, reasonsForService, reasonNotes,
-             imageUrls, thumbUrls, lastModified, dropdownSchemaVersion, lastModifiedBy
+             imageUrls, thumbUrls, lastModified, dropdownSchemaVersion, lastModifiedBy,
+             statusHistory, notes
     }
+
 }
 
 // ───── Back-compat Codable init (defaults missing keys) ─────
@@ -47,6 +56,11 @@ extension WO_Item {
         self.lastModified = try c.decodeIfPresent(Date.self, forKey: .lastModified) ?? Date()
         self.dropdownSchemaVersion = try c.decodeIfPresent(Int.self, forKey: .dropdownSchemaVersion) ?? 1
         self.lastModifiedBy = try c.decodeIfPresent(String.self, forKey: .lastModifiedBy)
+        // Back‑compat: default to empty if missing
+        self.statusHistory = try c.decodeIfPresent([WO_Status].self, forKey: .statusHistory) ?? []
+        // Back‑compat: default to an empty notes array if missing
+        self.notes = try c.decodeIfPresent([WO_Note].self, forKey: .notes) ?? []
+
 
         // 🔒 Local-only: never decoded/encoded
         self.localImages = []

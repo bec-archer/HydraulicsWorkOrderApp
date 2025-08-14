@@ -18,9 +18,9 @@ struct StatusBadge: View {
 
     var color: Color {
         switch status.lowercased() {
-        case "checked in": return .blue
+        case "checked in": return .green
         case "in progress": return .orange
-        case "done": return .green
+        case "done": return .teal
         case "completed": return .gray
         default: return .secondary
         }

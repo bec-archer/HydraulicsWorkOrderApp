@@ -74,10 +74,22 @@ final class WorkOrdersDatabase: ObservableObject {
     // ───── ADD NEW WORK ORDER TO FIRESTORE ─────
     func addWorkOrder(_ workOrder: WorkOrder, completion: @escaping (Result<Void, Error>) -> Void) {
         do {
+            // Ensure there's at least one creation note like: "Checked In" by <user> at <timestamp>
+            var woForWrite = workOrder
+            if woForWrite.notes.isEmpty {
+                let creationNote = WO_Note(
+                    user: woForWrite.createdBy,
+                    text: "Checked In",
+                    timestamp: woForWrite.timestamp
+                )
+                woForWrite.notes = [creationNote]
+            }
+    
             // Declare outside so the closure can read it without capture-order issues
             var docRef: DocumentReference?
+    
+            docRef = try db.collection(collectionName).addDocument(from: woForWrite) { error in
 
-            docRef = try db.collection(collectionName).addDocument(from: workOrder) { error in
                 if let error = error {
                     completion(.failure(error))
                     return
@@ -85,7 +97,7 @@ final class WorkOrdersDatabase: ObservableObject {
 
                 // Success: update local cache with the Firestore documentID
                 DispatchQueue.main.async {
-                    var woWithId = workOrder
+                    var woWithId = woForWrite
                     woWithId.id = docRef?.documentID            // @DocumentID var id: String?
                     self.workOrders.append(woWithId)
                 }
