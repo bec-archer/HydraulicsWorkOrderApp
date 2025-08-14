@@ -19,14 +19,9 @@ struct ActiveWorkOrdersView: View {
     @State private var isLoading = true
     @State private var showError = false
     @State private var errorMessage = ""
+    
+    @State private var showSidebarSheet = false
 
-    // ───── Sidebar Sheet State ─────
-    @State private var showSidebar = false
-    // END state
-
-    // ───── Settings Sheet State ─────
-    @State private var showSettings = false
-    // END state
 
     let columns = [
         GridItem(.flexible()),
@@ -111,25 +106,23 @@ struct ActiveWorkOrdersView: View {
             }
             .navigationTitle("Active Work Orders")
 
-            // ───── Top Bar: Sidebar (left) + New Work Order (right) ─────
+            // ───── Toolbar: Sidebar (left) + New Work Order (right) ─────
             .toolbar {
-
-                // Left: Sidebar (hamburger)
+                // Left: Sidebar button (hamburger)
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button {
-                        showSidebar = true
+                        // Open our custom sidebar sheet
+                        showSidebarSheet = true
                     } label: {
+                        // Large, legible tap target
                         Image(systemName: "line.3.horizontal")
-                            .font(.title3.weight(.semibold))
-                            .padding(8) // larger tap target
-                            .background(Color.yellow.opacity(0.15))
-                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            .font(.title2.weight(.semibold))
+                            .padding(.horizontal, 4)
+                            .accessibilityLabel("Open Sidebar")
                     }
-                    .accessibilityLabel("Open Sidebar")
-                    .buttonStyle(.plain)
                 }
 
-                // Right: + New Work Order (existing)
+                // Right: + New Work Order
                 ToolbarItem(placement: .navigationBarTrailing) {
                     NavigationLink {
                         NewWorkOrderView()
@@ -142,62 +135,12 @@ struct ActiveWorkOrdersView: View {
             }
             // ───── END toolbar ─────
 
-            // ───── END toolbar ─────
-
-            // ───── Settings Sheet ─────
-            .sheet(isPresented: $showSettings) {
-                SettingsView()
-                    .tint(Color("AppleNotesYellow")) // uses your theme if defined
-            }
-            // ───── END Settings Sheet ─────
-
-            // ───── Sidebar Sheet ─────
-            .sheet(isPresented: $showSidebar) {
-                NavigationStack {
-                    List {
-                        // MAIN
-                        Section("Main") {
-                            Button {
-                                appState.currentView = .activeWorkOrders
-                                showSidebar = false
-                            } label: {
-                                Label("Active WorkOrders", systemImage: "square.grid.2x2")
-                            }
-
-                            Button {
-                                appState.currentView = .newWorkOrder
-                                showSidebar = false
-                            } label: {
-                                Label("New Work Order", systemImage: "plus.square.on.square")
-                            }
-                        }
-
-                        // ADMIN / DEV
-                        Section("Admin & Tools") {
-                            Button {
-                                appState.currentView = .settings
-                                showSidebar = false
-                            } label: {
-                                Label("Settings", systemImage: "gearshape.fill")
-                            }
-
-                            // Placeholders (disabled until those screens exist)
-                            Label("Customers (coming soon)", systemImage: "person.2")
-                                .foregroundStyle(.secondary)
-                            Label("Dropdown Manager (coming soon)", systemImage: "chevron.down.square")
-                                .foregroundStyle(.secondary)
-                            Label("Deleted WorkOrders (coming soon)", systemImage: "trash")
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    .navigationTitle("Sidebar")
-                    .toolbar {
-                        ToolbarItem(placement: .topBarTrailing) {
-                            Button("Close") { showSidebar = false }
-                        }
-                    }
-                    .tint(Color("AppleNotesYellow")) // project theme accent
-                }
+            // ───── Sidebar Sheet Presentation ─────
+            .sheet(isPresented: $showSidebarSheet) {
+                SidebarMenuSheet()
+                    .environmentObject(appState) // needed for routing out of the sheet
+                    .presentationDetents([.medium, .large])
+                    .presentationDragIndicator(.visible)
             }
             // ───── END Sidebar Sheet ─────
 
