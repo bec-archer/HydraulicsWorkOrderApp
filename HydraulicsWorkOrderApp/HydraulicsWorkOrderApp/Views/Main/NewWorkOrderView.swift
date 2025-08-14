@@ -259,14 +259,12 @@ struct NewWorkOrderView: View {
                 }
             } label: {
                 Label("Add Item", systemImage: "plus.circle.fill")
-                    .font(.headline)
-                    .padding(.vertical, 10)
+                    .modifier(UIConstants.Buttons.yellowButtonStyle())
                     .frame(maxWidth: .infinity)
-                    .background(Color.yellow.opacity(0.25))
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
             }
             .buttonStyle(.plain)
             .padding(.top, 4)
+
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
@@ -277,41 +275,53 @@ struct NewWorkOrderView: View {
     private func toolbarContent() -> some ToolbarContent {
         if canShowCheckInButtons {
             ToolbarItem(placement: .confirmationAction) {
-                Button("Check In Work Order") {
+                Button {
                     saveWorkOrder {
                         appState.currentView = .activeWorkOrders
                     }
+                } label: {
+                    Text("Check In Work Order")
+                        .modifier(UIConstants.Buttons.yellowButtonStyle())
                 }
-                .buttonStyle(PrimaryButtonStyle(compact: true))
+                .buttonStyle(.plain)
             }
         }
     }
     // END Toolbar Content
 
+
     // ───── Sticky Check-In (extracted) ─────
     @ViewBuilder
     private func stickyCheckIn() -> some View {
         if canShowCheckInButtons {
-            Button {
-                saveWorkOrder {
-                    appState.currentView = .activeWorkOrders
+            // ───── Sticky bar container (material + divider) ─────
+            VStack(spacing: 10) {
+                // Thin divider to separate from content above (iPad friendly)
+                Divider()
+                    .padding(.top, 2)
+
+                // Primary action
+                Button {
+                    saveWorkOrder {
+                        appState.currentView = .activeWorkOrders
+                    }
+                } label: {
+                    Text("Check In Work Order")
+                        .modifier(UIConstants.Buttons.yellowButtonStyle())
+                        .frame(maxWidth: .infinity)
+                        .accessibilityIdentifier("checkInWorkOrder_sticky")
                 }
-            } label: {
-                Text("Check In Work Order")
-                    .font(.headline)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 14)
-                    .background(Color.yellow)
-                    .foregroundColor(.black)
-                    .clipShape(RoundedRectangle(cornerRadius: 14))
-                    .padding(.horizontal, 16)
-                    .padding(.top, 4)
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
+            .padding(.horizontal, 16)
+            .padding(.top, 4)
+            .padding(.bottom, 10)     // a bit of breathing room above the Home indicator
             .background(.ultraThinMaterial)
+            // ───── END sticky bar container ─────
         } else {
             EmptyView()
         }
+
     }
     // END Sticky Check-In
 
@@ -477,30 +487,7 @@ struct NewWorkOrderView: View {
     }
     // END: Delete / Reset WO_Item
     
-    // ───── PrimaryButtonStyle (shared for toolbar + sticky) ─────
-    private struct PrimaryButtonStyle: ButtonStyle {
-        var compact: Bool = false      // toolbar-sized if true
-        var fillWidth: Bool = false    // full-width if true
 
-        func makeBody(configuration: Configuration) -> some View {
-            configuration.label
-                .font(.headline)
-                .padding(.horizontal, compact ? 14 : 16)
-                .padding(.vertical,   compact ?  8 : 14)
-                .frame(maxWidth: fillWidth ? .infinity : nil)
-                // Apple Notes yellow (#FFC500) without needing Color(hex:)
-                .background(Color(red: 1.0, green: 0.7725, blue: 0.0))
-                .foregroundColor(.black)
-                .clipShape(RoundedRectangle(cornerRadius: 12))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color.black.opacity(0.1), lineWidth: 1)
-                )
-                .opacity(configuration.isPressed ? 0.88 : 1)
-                .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
-        }
-    }
-    // END PrimaryButtonStyle
 
 }
 // END struct
