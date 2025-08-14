@@ -38,35 +38,9 @@
 		8996D33F2E46D185005DE3D4 /* FirestoreTestView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirestoreTestView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
-/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		892AA0C32E4E4C0D00FE7BAA /* Exceptions for "HydraulicsWorkOrderApp" folder in "HydraulicsWorkOrderApp" target */ = {
-			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
-			membershipExceptions = (
-				"Utilities/Extensions/Toolbar+SidebarToggle.swift",
-				"Utilities/Extensions/View+If.swift",
-			);
-			target = 8996D2AA2E46348B005DE3D4 /* HydraulicsWorkOrderApp */;
-		};
-/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
-
-/* Begin PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet section */
-		892AA0C42E4E4C0D00FE7BAA /* Exceptions for "HydraulicsWorkOrderApp" folder in "Copy Bundle Resources" phase from "HydraulicsWorkOrderApp" target */ = {
-			isa = PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet;
-			buildPhase = 8996D2A92E46348B005DE3D4 /* Resources */;
-			membershipExceptions = (
-				"Utilities/Extensions/Toolbar+SidebarToggle.swift",
-				"Utilities/Extensions/View+If.swift",
-			);
-		};
-/* End PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet section */
-
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		8996D2AD2E46348B005DE3D4 /* HydraulicsWorkOrderApp */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-				892AA0C32E4E4C0D00FE7BAA /* Exceptions for "HydraulicsWorkOrderApp" folder in "HydraulicsWorkOrderApp" target */,
-				892AA0C42E4E4C0D00FE7BAA /* Exceptions for "HydraulicsWorkOrderApp" folder in "Copy Bundle Resources" phase from "HydraulicsWorkOrderApp" target */,
-			);
 			path = HydraulicsWorkOrderApp;
 			sourceTree = "<group>";
 		};

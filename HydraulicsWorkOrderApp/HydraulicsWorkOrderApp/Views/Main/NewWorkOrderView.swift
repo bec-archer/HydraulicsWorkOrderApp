@@ -180,7 +180,6 @@ struct NewWorkOrderView: View {
             // END sticky bottom button
 
             // ───── Quiet iPad keyboard accessory + make keyboard dismiss on scroll ─────
-            .modifier(KeyboardToolbarHidden())
             .scrollDismissesKeyboard(.immediately)
             // END keyboard/scroll settings
          
@@ -328,7 +327,9 @@ struct NewWorkOrderView: View {
             .padding(.top, 4)
             .padding(.bottom, 10)     // a bit of breathing room above the Home indicator
             .background(.ultraThinMaterial)
+            .ignoresSafeArea(.keyboard, edges: .bottom) // prevent keyboard from pushing this into accessory space
             // ───── END sticky bar container ─────
+
         } else {
             EmptyView()
         }
@@ -360,16 +361,16 @@ struct NewWorkOrderView: View {
     }
     // END Save Banner Overlay
     
-    // ───── Availability-Safe: Hide Keyboard Toolbar on iPad (no‑op fallback) ─────
+    // ───── Availability-Safe: Hide Keyboard Toolbar (SDK-agnostic no-op) ─────
     private struct KeyboardToolbarHidden: ViewModifier {
+        @ViewBuilder
         func body(content: Content) -> some View {
-            // Some toolchains don’t expose ToolbarPlacement.keyboard at compile time.
-            // To unblock builds, this is a no‑op. We’ll re‑enable the hide call when
-            // you’re building against an iOS 16+ SDK that supports it.
-            content
+            content // no-op to avoid referencing .keyboard on older SDKs
         }
     }
-    // END Availability-Safe
+    // END
+
+
 
     // ───── Selection Helper ─────
     private func selectCustomer(_ customer: Customer) {

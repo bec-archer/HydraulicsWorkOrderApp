@@ -104,8 +104,11 @@ struct PhotoCaptureView: View {
                 .padding(.vertical, 2)
             
         }
-        // ───── Unified Sheet Presenter ─────
-        .sheet(item: $activeSheet) { sheet in
+                // Keep the sticky controls out of keyboard accessory layout + hide accessory bar (iOS 16+)
+                .ignoresSafeArea(.keyboard, edges: .bottom)
+                // ───── Unified Sheet Presenter ─────
+                .sheet(item: $activeSheet) { sheet in
+
             switch sheet {
             case .library:
                 LibrarySheet(selectionLimit: 8) { newImages in
@@ -469,6 +472,18 @@ struct PhotoCaptureUploadView: View {
 
     // END PhotoCaptureUploadView
 }
+
+// ───── Availability-Safe: Hide Keyboard Toolbar (SDK-agnostic no-op) ─────
+// NOTE: Some Xcode/iOS SDK combos don't expose `.keyboard` at compile time.
+// To keep builds green everywhere, this modifier does nothing for now.
+// If/when you move to an SDK that supports it, we can re-enable the call.
+private struct KeyboardToolbarHidden: ViewModifier {
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        content
+    }
+}
+// END
 
 
 

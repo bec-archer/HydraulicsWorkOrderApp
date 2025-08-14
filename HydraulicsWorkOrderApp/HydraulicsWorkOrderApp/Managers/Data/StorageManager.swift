@@ -27,6 +27,11 @@ struct StorageManager {
     static let shared = StorageManager()
 
     private let root = Storage.storage().reference()
+    // ───── Track In-Flight Uploads to Prevent Duplicates ─────
+    private static var inFlightUploads = Set<String>()
+    private static let inFlightQueue = DispatchQueue(label: "StorageManager.inFlightQueue")
+    // END
+
 
     // ───── Path Builder (centralized) ─────
     // Organized by WorkOrder → WO_Item → filename
@@ -39,6 +44,30 @@ struct StorageManager {
     // Stores under: intake/{woId}/{woItemId}/yyyyMMdd_HHmmss_SSS.jpg
     // Returns the public download URL string on success.
     func uploadWOItemImage(_ image: UIImage, woId: String, woItemId: UUID) async throws -> String {
+
+        // ───── Shared timestamp for both de‑dupe & path ─────
+        let df = DateFormatter()
+        df.dateFormat = "yyyyMMdd_HHmmss_SSS"
+        let stamp = df.string(from: Date())
+        let filename = "\(stamp).jpg"
+        let path = intakePath(woId: woId, woItemId: woItemId, filename: filename)
+
+        // ───── Prevent Duplicate Uploads ─────
+        var isDuplicate = false
+        StorageManager.inFlightQueue.sync {
+            if StorageManager.inFlightUploads.contains(path) {
+                isDuplicate = true
+            } else {
+                _ = StorageManager.inFlightUploads.insert(path) // discard return
+            }
+        }
+        if isDuplicate {
+            print("⚠️ Skipping duplicate upload for \(path)")
+            return ""
+        }
+        // END Prevent Duplicate Uploads
+
+
         // 1) Compress for network (resizes + strips metadata)
         //    Target ~100–400KB for typical iPad photos
         guard let compressed = ImageCompressionManager.compressForUpload(
@@ -51,16 +80,14 @@ struct StorageManager {
             throw NSError(domain: "StorageManager", code: -1,
                           userInfo: [NSLocalizedDescriptionKey: "Image compression failed"])
         }
+
         let data = compressed.fullData
         print("📦 Uploading image ~\(compressed.approxKB) KB, px=\(Int(compressed.fullPixelSize.width))×\(Int(compressed.fullPixelSize.height))")
 
 
-        // 2) Build path using centralized helper
-        let df = DateFormatter()
-        df.dateFormat = "yyyyMMdd_HHmmss_SSS"
-        let filename = df.string(from: Date()) + ".jpg"
-        let path = intakePath(woId: woId, woItemId: woItemId, filename: filename)
+        // 2) Build path using centralized helper (same timestamp as de‑dupe)
         let ref = root.child(path)
+
 
         // 3) Metadata
         let metadata = StorageMetadata()
@@ -72,6 +99,12 @@ struct StorageManager {
 
         // 5) Fetch download URL
         let url = try await ref.downloadURL()
+        // ───── Remove from In-Flight Tracker ─────
+        StorageManager.inFlightQueue.sync {
+            _ = StorageManager.inFlightUploads.remove(path) // discard return
+        }
+        // END
+
         return url.absoluteString
     }
 
@@ -81,6 +114,33 @@ struct StorageManager {
     //  - thumb:  intake/{woId}/{woItemId}/thumbs/yyyyMMdd_HHmmss_SSS.jpg
     // Returns: (fullURL, thumbURL)
     func uploadWOItemImageWithThumbnail(_ image: UIImage, woId: String, woItemId: UUID) async throws -> (fullURL: String, thumbURL: String) {
+
+        // ───── Shared timestamp for both de‑dupe & paths ─────
+        let df = DateFormatter()
+        df.dateFormat = "yyyyMMdd_HHmmss_SSS"
+        let stamp = df.string(from: Date())
+        let fullName  = "\(stamp).jpg"
+        let thumbName = "\(stamp).jpg"
+
+        let fullPath  = intakePath(woId: woId, woItemId: woItemId, filename: fullName)
+        let thumbPath = intakePath(woId: woId, woItemId: woItemId, filename: "thumbs/\(thumbName)")
+        let combinedKey = "\(fullPath)|\(thumbPath)"
+
+        // ───── Prevent Duplicate Uploads ─────
+        var isDuplicate = false
+        StorageManager.inFlightQueue.sync {
+            if StorageManager.inFlightUploads.contains(combinedKey) {
+                isDuplicate = true
+            } else {
+                _ = StorageManager.inFlightUploads.insert(combinedKey) // discard return
+            }
+        }
+        if isDuplicate {
+            print("⚠️ Skipping duplicate upload for \(combinedKey)")
+            return ("", "")
+        }
+        // END Prevent Duplicate Uploads
+
 
         // ───── 1) Compress (full + thumb) ─────
         guard let compressed = ImageCompressionManager.compressForUpload(
@@ -94,15 +154,6 @@ struct StorageManager {
                           userInfo: [NSLocalizedDescriptionKey: "Image compression failed"])
         }
 
-        // ───── 2) Paths (shared timestamp) ─────
-        let df = DateFormatter()
-        df.dateFormat = "yyyyMMdd_HHmmss_SSS"
-        let stamp = df.string(from: Date())
-        let fullName = "\(stamp).jpg"
-        let thumbName = "\(stamp).jpg"
-
-        let fullPath  = intakePath(woId: woId, woItemId: woItemId, filename: fullName)
-        let thumbPath = intakePath(woId: woId, woItemId: woItemId, filename: "thumbs/\(thumbName)")
 
         let fullRef  = root.child(fullPath)
         let thumbRef = root.child(thumbPath)
@@ -134,6 +185,12 @@ struct StorageManager {
         async let fullURLTask  = fullRef.downloadURL()
         async let thumbURLTask = thumbRef.downloadURL()
         let (fullURL, thumbURL) = try await (fullURLTask, thumbURLTask)
+        
+        // ───── Remove from In-Flight Tracker ─────
+        StorageManager.inFlightQueue.sync {
+            _ = StorageManager.inFlightUploads.remove(combinedKey) // discard return
+        }
+        // END
 
         return (fullURL.absoluteString, thumbURL.absoluteString)
     }
