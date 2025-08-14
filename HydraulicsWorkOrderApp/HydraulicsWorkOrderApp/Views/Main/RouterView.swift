@@ -12,7 +12,7 @@
 import SwiftUI
 
 struct RouterView: View {
-    @EnvironmentObject var appState: AppState
+    @ObservedObject private var appState = AppState.shared
 
     var body: some View {
         // 🧭 Debug: Print current view state to console

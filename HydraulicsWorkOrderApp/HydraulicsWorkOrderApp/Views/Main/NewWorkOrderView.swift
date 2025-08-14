@@ -45,7 +45,7 @@ struct NewWorkOrderView: View {
         return digits.count >= 3 ? trimmed : ""   // digits ⇒ phone, else blank
     }
     @Environment(\.dismiss) private var dismiss
-    @EnvironmentObject var appState: AppState
+    @ObservedObject private var appState = AppState.shared
 
     // END Prefill Helpers
 
@@ -274,19 +274,8 @@ struct NewWorkOrderView: View {
     @ToolbarContentBuilder
     private func toolbarContent() -> some ToolbarContent {
 
-        // Left: Sidebar toggle (single source of truth, yellow)
-        ToolbarItem(placement: .navigationBarLeading) {
-            Button {
-                appState.toggleSidebar()
-            } label: {
-                Image(systemName: "sidebar.leading")
-                    .font(.title2.weight(.semibold))
-                    .symbolRenderingMode(.monochrome)
-                    .foregroundStyle(Color(red: 1.0, green: 0.7725, blue: 0.0)) // #FFC500
-                    .padding(.horizontal, 4)
-                    .accessibilityLabel("Toggle Sidebar")
-            }
-        }
+        // (Removed in NewWorkOrderView) Sidebar toggle intentionally hidden here to avoid duplicate buttons.
+
 
         // Right: Check In button (only when valid)
         if canShowCheckInButtons {
@@ -318,8 +307,12 @@ struct NewWorkOrderView: View {
                     .padding(.top, 2)
 
                 // Primary action
+                // Primary action
                 Button {
                     saveWorkOrder {
+                        // Prefer stack-based return when NewWorkOrderView was pushed from ActiveWorkOrdersView
+                        dismiss()
+                        // Also set router target if we’re inside RouterView (login not bypassed)
                         appState.currentView = .activeWorkOrders
                     }
                 } label: {
@@ -329,6 +322,7 @@ struct NewWorkOrderView: View {
                         .accessibilityIdentifier("checkInWorkOrder_sticky")
                 }
                 .buttonStyle(.plain)
+
             }
             .padding(.horizontal, 16)
             .padding(.top, 4)
@@ -410,81 +404,84 @@ struct NewWorkOrderView: View {
         // NOTE: Placeholder values where we haven't wired managers yet.
         // - createdBy / lastModifiedBy will come from UserManager
         // - dropdownSchemaVersion hard-coded to 1 until DropdownSchema exists
-        let wo = WorkOrder(
-            id: nil,                    // keep ID consistent with Storage folder
-          // if your model uses String; otherwise keep UUID()
-            createdBy: "Tech",                // ⬅️ move this up, right after id
-            customerId: customer.id.uuidString,
-            customerName: customer.name,
-            customerPhone: customer.phone,
-            WO_Type: "Intake",
-            imageURL: items.first?.thumbUrls.first ?? items.first?.imageUrls.first,
-            timestamp: Date(),
-            status: "Checked In",
-            WO_Number: generateLocalWONumber(),
-            flagged: flagged,
-            tagId: nil,
-            estimatedCost: nil,
-            finalCost: nil,
-            dropdowns: [:],
-            dropdownSchemaVersion: 1,
-            lastModified: Date(),
-            lastModifiedBy: "Tech",
-            tagBypassReason: nil,
-            isDeleted: false,
-            notes: [],
-            items: items        )
+        // ───── Async: Get next WO_Number then save ─────
+        WorkOrdersDatabase.shared.generateNextWONumber { result in
+            let nextNumber: String
+            switch result {
+            case .success(let num):
+                nextNumber = num
+            case .failure(let err):
+                // Fallback to time-based format to avoid blocking save
+                print("⚠️ Using fallback WO_Number due to query error: \(err.localizedDescription)")
+                let seq = Int(Date().timeIntervalSince1970.truncatingRemainder(dividingBy: 1000))
+                nextNumber = WorkOrderNumberGenerator.make(sequence: seq)
 
-
-        // ───── END Build WorkOrder ─────
-
-        // ───── Persist to Firestore (Codable) ─────
-        do {
-            let db = Firestore.firestore()
-            try db.collection("workOrders")
-                .document(draftWOId)
-                .setData(from: wo)
-
-            // If a success callback was provided (e.g., to dismiss), call it.
-            // Otherwise show the success alert (useful for unit/UI testing).
-            savedWONumber = wo.WO_Number
-            showSaveBanner = true
-
-            // Wait ~2 sec, then call the success callback (which routes away)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-                onSuccess?()
             }
 
-            // (Optional) Reset local form state for the next intake (kept as-is)
-            selectedCustomer = nil
-            customerSearch.resetSearch()
-            flagged = false
-            items = [WO_Item.blank()]
-            expandedIndex = 0
+            // Build WorkOrder with resolved number
+            let wo = WorkOrder(
+                id: nil,                    // keep ID consistent with Storage folder
+                createdBy: "Tech",
+                customerId: customer.id.uuidString,
+                customerName: customer.name,
+                customerPhone: customer.phone,
+                WO_Type: "Intake",
+                imageURL: items.first?.thumbUrls.first ?? items.first?.imageUrls.first,
+                timestamp: Date(),
+                status: "Checked In",
+                WO_Number: nextNumber,
+                flagged: flagged,
+                tagId: nil,
+                estimatedCost: nil,
+                finalCost: nil,
+                dropdowns: [:],
+                dropdownSchemaVersion: 1,
+                lastModified: Date(),
+                lastModifiedBy: "Tech",
+                tagBypassReason: nil,
+                isDeleted: false,
+                notes: [],
+                items: items
+            )
+            // ───── END Build WorkOrder ─────
 
-            draftWOId = UUID().uuidString
+            // ───── Persist to Firestore (Codable) ─────
+            do {
+                let db = Firestore.firestore()
+                try db.collection("workOrders")
+                    .document(draftWOId)
+                    .setData(from: wo)
+
+                // UI updates on main
+                DispatchQueue.main.async {
+                    savedWONumber = wo.WO_Number
+                    showSaveBanner = true
+
+                    // Route back to Active immediately (caller sets AppState)
+                    onSuccess?()
+
+                    // Reset local form state for the next intake
+                    selectedCustomer = nil
+                    customerSearch.resetSearch()
+                    flagged = false
+                    items = [WO_Item.blank()]
+                    expandedIndex = 0
+                    draftWOId = UUID().uuidString
+                }
 
 
-        } catch {
-            alertMessage = "❌ Failed to save WorkOrder: \(error.localizedDescription)"
-            showAlert = true
+            } catch {
+                DispatchQueue.main.async {
+                    alertMessage = "❌ Failed to save WorkOrder: \(error.localizedDescription)"
+                    showAlert = true
+                }
+            }
+            // ───── END Persist ─────
         }
-        // ───── END Persist ─────
+        // ───── END Async save ─────
+
     }
     // END Save Handler
-
-    // ───── Helper: Local WO Number (temp) ─────
-    private func generateLocalWONumber() -> String {
-        // Format: YYMMDD-### (temp counter = seconds mod 1000 to avoid collisions in dev)
-        let df = DateFormatter()
-        df.dateFormat = "yyMMdd"
-        let day = df.string(from: Date())
-        let suffix = String(format: "%03d", Int(Date().timeIntervalSince1970) % 1000)
-        return "\(day)-\(suffix)"
-    }
-    // END Helper
-
-
 
     // ───── Action: Delete / Reset WO_Item ─────
     private func handleDeleteWOItem(_ index: Int) {

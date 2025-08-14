@@ -69,16 +69,9 @@ struct ActiveWorkOrdersView: View {
                     
                     LazyVGrid(columns: columns, spacing: 16) {
                         // ───── Data Source: Active only, sorted (flagged first, then oldest → newest) ─────
-                        let active = db.workOrders
-                            .filter { !$0.isDeleted && $0.status != "Closed" }
-                            .sorted {
-                                // Flagged first
-                                if $0.flagged != $1.flagged { return $0.flagged && !$1.flagged }
-                                // Then oldest → newest by timestamp
-                                return $0.timestamp < $1.timestamp
-                            }
                         ForEach(active) { wo in
                             NavigationLink {
+
                                 // ───── Detail with Delete wiring ─────
                                 WorkOrderDetailView(workOrder: wo) { target in
                                     WorkOrdersDatabase.shared.softDelete(target, by: appState.currentUserName) { result in
@@ -101,24 +94,13 @@ struct ActiveWorkOrdersView: View {
                     .padding()
                 }
                 .navigationTitle("Active Work Orders")
-                
-                // ───── Toolbar: single yellow sidebar button (leading) + New Work Order (trailing) ─────
-                .toolbar {
-                    // Left: Sidebar toggle OLD
 
-                    // Right: + New Work Order
-                    ToolbarItem(placement: .navigationBarTrailing) {
-                        NavigationLink {
-                            NewWorkOrderView()
-                        } label: {
-                            Text("+ New Work Order")
-                                .modifier(UIConstants.Buttons.yellowButtonStyle())
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
+                // ───── Toolbar (local, iOS‑17‑safe) ─────
+                .modifier(ActiveWO_ToolbarModifier())
                 // ───── END toolbar ─────
-                
+
+
+
                 // ───── Initial load / refresh / alerts ─────
                 .task { await loadWorkOrders() }
                 .refreshable { await loadWorkOrders() }
@@ -130,7 +112,9 @@ struct ActiveWorkOrdersView: View {
                 // ───── END misc modifiers ─────
             }
         }
+        
     }
+    // END NavigationSplitView
     // END body
 
 // END body
@@ -156,6 +140,52 @@ struct ActiveWorkOrdersView: View {
     // END
 
 }
+// ───── Local Toolbar Modifier (keeps compiler happy, hides system toggle on iOS 17+) ─────
+private struct ActiveWO_ToolbarModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .toolbar {
+   
+
+                // Right: + New Work Order (LEAVE THIS THE FUCK ALONE)
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    NavigationLink {
+                        NewWorkOrderView()
+                    } label: {
+                        Text("+ New Work Order")
+                            .modifier(UIConstants.Buttons.yellowButtonStyle())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .applySidebarRemovalIfAvailable()
+    }
+}
+
+// Availability-safe removal of the auto-injected blue system toggle
+private extension View {
+    @ViewBuilder
+    func applySidebarRemovalIfAvailable() -> some View {
+        if #available(iOS 17.0, *) {
+            self.toolbar(removing: .sidebarToggle)
+        } else {
+            self
+        }
+    }
+}
+
+// Extension for NavigationSplitView specifically
+private extension View {
+    @ViewBuilder
+    func applySidebarRemovalIfAvailableOnSplit() -> some View {
+        if #available(iOS 17.0, *) {
+            self.toolbar(removing: .sidebarToggle)
+        } else {
+            self
+        }
+    }
+}
+// ───── END Local Toolbar Helpers ─────
 
 // ───── Preview Template ─────
 #Preview(traits: .sizeThatFitsLayout) {

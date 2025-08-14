@@ -26,6 +26,50 @@ final class WorkOrdersDatabase: ObservableObject {
     @Published var workOrders: [WorkOrder] = []
 
     private init() {}
+    // ───── Generate Next WO Number (YYmmdd-###) ─────
+    /// Looks up all WorkOrders whose WO_Number starts with today's prefix (UTC),
+    /// finds the highest sequence used, and returns the next one in format YYmmdd-###.
+    ///
+    /// Notes:
+    /// - Uses string range query: [prefix, prefix + "~") because "~" sorts after digits.
+    /// - We compute max sequence (not just count) so gaps won't cause duplicates.
+    /// - If you want to ignore deleted WOs, add: .whereField("isDeleted", isEqualTo: false)
+    // ───── Generate Next WO Number (YYmmdd-###) ─────
+    func generateNextWONumber(completion: @escaping (Result<String, Error>) -> Void) {
+        let prefix = WorkOrderNumberGenerator.dailyPrefix() // e.g., "250814"
+
+        // Range on WO_Number for today's docs, then order by WO_Number desc and take 1
+        let lower = prefix
+        let upper = "\(prefix)~" // tilde sorts after digits
+
+        db.collection(collectionName)
+            .whereField("WO_Number", isGreaterThanOrEqualTo: lower)
+            .whereField("WO_Number", isLessThan: upper)
+            .order(by: "WO_Number", descending: true)
+            .limit(to: 1)
+            .getDocuments { snapshot, error in
+
+                if let error = error {
+                    print("❌ generateNextWONumber query failed: \(error.localizedDescription)")
+                    completion(.failure(error))
+                    return
+                }
+
+                // Extract highest existing suffix (if any)
+                let latest = snapshot?.documents.first?["WO_Number"] as? String
+                let nextSeq: Int = {
+                    guard let s = latest else { return 1 }
+                    let parts = s.split(separator: "-")
+                    guard parts.count == 2, parts[0] == Substring(prefix), let n = Int(parts[1]) else { return 1 }
+                    return n + 1
+                }()
+
+                let number = WorkOrderNumberGenerator.build(prefix: prefix, sequence: nextSeq)
+                completion(.success(number))
+            }
+    }
+    // END Generate Next WO Number
+
 
     // ───── ADD NEW WORK ORDER TO FIRESTORE ─────
     func addWorkOrder(_ workOrder: WorkOrder, completion: @escaping (Result<Void, Error>) -> Void) {
