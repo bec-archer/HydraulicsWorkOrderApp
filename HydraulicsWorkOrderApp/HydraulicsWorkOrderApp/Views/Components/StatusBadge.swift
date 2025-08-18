@@ -18,13 +18,16 @@ struct StatusBadge: View {
 
     var color: Color {
         switch status.lowercased() {
-        case "checked in": return .green
-        case "in progress": return .orange
-        case "done": return .teal
-        case "completed": return .gray
-        default: return .secondary
+        case "checked in":   return UIConstants.StatusColors.checkedIn
+        case "disassembly":  return UIConstants.StatusColors.disassembly
+        case "in progress":  return UIConstants.StatusColors.inProgress
+        case "test failed":  return UIConstants.StatusColors.testFailed
+        case "completed":    return UIConstants.StatusColors.completed
+        case "closed":       return UIConstants.StatusColors.closed
+        default:             return UIConstants.StatusColors.fallback
         }
     }
+
 
     var body: some View {
         Text(status)

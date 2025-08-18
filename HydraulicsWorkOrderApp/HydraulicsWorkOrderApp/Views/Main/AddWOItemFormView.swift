@@ -181,15 +181,18 @@ Button {
             if item.reasonsForService.contains("Other (opens Service Notes)") || item.reasonsForService.contains("Other") {
                 TextField("Service Notes…", text: $reasonNotes)
                     .textFieldStyle(.roundedBorder)
-                    .onChange(of: reasonNotes) { newValue in
-                        item.reasonNotes = newValue; DispatchQueue.main.async { item.lastModified = Date() }
+                    .onChange(of: reasonNotes) {
+                        item.reasonNotes = reasonNotes
+                        DispatchQueue.main.async { item.lastModified = Date() }
                     }
+
                     .padding(.top, 2)
             }
         }
         // ───── Color Hex Persistence ─────
-        .onChange(of: item.dropdowns["color"] ?? "") { newValue in
-            let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        .onChange(of: item.dropdowns["color"] ?? "") {
+            let trimmed = (item.dropdowns["color"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+
             if trimmed.isEmpty {
                 item.dropdowns["colorHex"] = ""
             } else if let hex = dropdowns.options["color"]?.first(where: { $0.value == trimmed })?.colorHex {
@@ -200,8 +203,7 @@ Button {
                 item.dropdowns["colorHex"] = ""
             }
         }
-        .onChange(of: customColor) { _ in
-            let isOther = (item.dropdowns["color"] ?? "").caseInsensitiveCompare("Other") == .orderedSame
+        .onChange(of: customColor) {            let isOther = (item.dropdowns["color"] ?? "").caseInsensitiveCompare("Other") == .orderedSame
             if isOther { updateColorHexFromCustomColor() }
         }
         .onAppear {

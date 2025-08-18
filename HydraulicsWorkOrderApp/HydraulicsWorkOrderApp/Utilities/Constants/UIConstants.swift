@@ -20,6 +20,16 @@ struct UIConstants {
         static let border = Color(hex: "#E0E0E0")
         static let textPrimary = Color.black
     }
+    // ───── Status Colors ─────
+    struct StatusColors {
+        static let checkedIn    = Color.blue
+        static let disassembly  = Color.teal
+        static let inProgress   = Color(hex: "#FFC500") // Yellow
+        static let testFailed   = Color.red
+        static let completed    = Color.green
+        static let closed       = Color.gray
+        static let fallback     = Color.secondary
+    }
 
     // ───── Reusable Button Styles ─────
     struct Buttons {
