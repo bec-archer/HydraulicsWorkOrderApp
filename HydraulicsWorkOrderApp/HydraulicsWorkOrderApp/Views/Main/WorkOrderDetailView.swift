@@ -10,20 +10,20 @@ struct WorkOrderDetailView: View {
     var onDelete: ((WorkOrder) -> Void)? = nil
     var onAddItemNote: ((WO_Item, WO_Note) -> Void)? = nil
     var onUpdateItemStatus: ((WO_Item, WO_Status, WO_Note) -> Void)? = nil
-
+    
     @State private var woLocal: WorkOrder
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var appState: AppState
     @State private var showDeleteConfirm = false
-
+    
     private var canDelete: Bool {
-        #if DEBUG
+#if DEBUG
         return true
-        #else
+#else
         return appState.canDeleteWorkOrders()
-        #endif
+#endif
     }
-
+    
     init(
         workOrder: WorkOrder,
         onDelete: ((WorkOrder) -> Void)? = nil,
@@ -36,18 +36,18 @@ struct WorkOrderDetailView: View {
         self.onUpdateItemStatus = onUpdateItemStatus
         _woLocal = State(initialValue: workOrder)
     }
-
+    
     // ───── MAIN BODY ─────
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-
+                
                 // ───── Header Section ─────
                 headerSection()
-
+                
                 // ───── Work Order Items Section ─────
                 itemsSection()
-
+                
                 // ───── Global Notes Timeline View ─────
                 notesSection()
             }
@@ -78,7 +78,7 @@ struct WorkOrderDetailView: View {
             Text("This will remove the WorkOrder from Active. Managers/Admins can still access it in Deleted WorkOrders.")
         } // END alert
     } // END body
-
+    
     // ───── Header Section Extracted ─────
     @ViewBuilder
     private func headerSection() -> some View {
@@ -88,11 +88,11 @@ struct WorkOrderDetailView: View {
                     .font(.largeTitle.bold())
                 StatusBadge(status: woLocal.status)
             }
-
+            
             Text(woLocal.timestamp.formatted(date: .abbreviated, time: .shortened))
                 .font(.footnote)
                 .foregroundStyle(.secondary)
-
+            
             HStack(spacing: 12) {
                 HStack(spacing: 6) {
                     Image(systemName: "phone.fill")
@@ -117,7 +117,7 @@ struct WorkOrderDetailView: View {
                     }
                 }
                 .accessibilityLabel("Call or text customer")
-
+                
                 if woLocal.flagged {
                     Label("Flagged", systemImage: "flag.fill")
                         .padding(.horizontal, 10)
@@ -136,26 +136,23 @@ struct WorkOrderDetailView: View {
                 .strokeBorder(Color.primary.opacity(0.06))
         )
     }
-
+    
     // ───── Work Order Items Section Extracted ─────
     @ViewBuilder
     private func itemsSection() -> some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("WO Items")
                 .font(.title3.weight(.semibold))
-
+            
             ForEach(woLocal.items) { item in
                 ItemCard(
                     item: item,
-                    onAddNote: { item, text in
-                        let author = appState.currentUserName.isEmpty ? "Tech" : appState.currentUserName
-                        let note = WO_Note(user: author, text: text, timestamp: Date())
-
+                    onAddNote: { item, note in
                         if let idx = woLocal.items.firstIndex(where: { $0.id == item.id }) {
                             woLocal.items[idx].notes.append(note)
                             woLocal.lastModified = Date()
-                            woLocal.lastModifiedBy = author
-
+                            woLocal.lastModifiedBy = note.user
+                            
                             WorkOrdersDatabase.shared.addItemNote(
                                 woId: woLocal.id ?? "",
                                 itemId: item.id,
@@ -168,9 +165,8 @@ struct WorkOrderDetailView: View {
                                     print("❌ Failed to save note: \(err.localizedDescription)")
                                 }
                             }
-
                         }
-
+                        
                         onAddItemNote?(item, note)
                     },
                     onChangeStatus: { item, newStatus in
@@ -178,13 +174,13 @@ struct WorkOrderDetailView: View {
                         let ts = Date()
                         let statusEntry = WO_Status(status: newStatus, user: author, timestamp: ts, notes: nil)
                         let systemNote  = WO_Note(user: author, text: "Status changed to \(newStatus)", timestamp: ts)
-
+                        
                         if let idx = woLocal.items.firstIndex(where: { $0.id == item.id }) {
                             woLocal.items[idx].statusHistory.append(statusEntry)
                             woLocal.items[idx].notes.append(systemNote)
                             woLocal.lastModified = ts
                             woLocal.lastModifiedBy = author
-
+                            
                             WorkOrdersDatabase.shared.updateItemStatusAndNote(
                                 woId: woLocal.id ?? "",
                                 itemId: item.id,
@@ -198,66 +194,72 @@ struct WorkOrderDetailView: View {
                                     print("❌ Failed to save WO_Status: \(err.localizedDescription)")
                                 }
                             }
-
+                            
                         }
-
+                        
                         onUpdateItemStatus?(item, statusEntry, systemNote)
                     }
                 )
             }
         }
     }
-
+    
     // ───── Global Notes Timeline Section ─────
     @ViewBuilder
     private func notesSection() -> some View {
-        if woLocal.items.flatMap({ $0.notes }).isEmpty == false {
+        if !woLocal.items.flatMap({ $0.notes }).isEmpty {
             VStack(alignment: .leading, spacing: 12) {
                 Text("All Notes + Status Updates")
                     .font(.title3.bold())
-
+                
                 let sortedNotes = woLocal.items
                     .flatMap { $0.notes }
                     .sorted { $0.timestamp > $1.timestamp }
-
-                ForEach(sortedNotes) { note in
-                    Text("• \(note.text) — \(note.user), \(note.timestamp.formatted(date: .abbreviated, time: .shortened))")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                
+                ForEach(sortedNotes, id: \.id) { note in
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("• \(note.text)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Text("— \(note.user), \(note.timestamp.formatted(date: .abbreviated, time: .shortened))")
+                            .font(.caption2)
+                            .foregroundStyle(.gray)
+                    }
+                    .padding(.bottom, 8)
                 }
             }
             .padding(.top, 12)
         }
-    }
-} // END
-
-// ───── Preview Template ─────
-#Preview {
-    WorkOrderDetailView(
-        workOrder: WorkOrder(
-            id: UUID().uuidString,
-            createdBy: "Preview User",
-            customerId: "preview-customer-id",
-            customerName: "Maria Hydraulic",
-            customerPhone: "555-1212",
-            WO_Type: "Pump",
-            imageURL: nil,
-            timestamp: Date(),
-            status: "Checked In",
-            WO_Number: "250818-001",
-            flagged: true,
-            tagId: nil,
-            estimatedCost: nil,
-            finalCost: nil,
-            dropdowns: [:],
-            dropdownSchemaVersion: 1,
-            lastModified: Date(),
-            lastModifiedBy: "Preview User",
-            tagBypassReason: nil,
-            isDeleted: false,
-            notes: [],
-            items: []
+    } // END
+    
+    // ───── Preview Template ─────
+    #Preview {
+        WorkOrderDetailView(
+            workOrder: WorkOrder(
+                id: UUID().uuidString,
+                createdBy: "Preview User",
+                customerId: "preview-customer-id",
+                customerName: "Maria Hydraulic",
+                customerPhone: "555-1212",
+                WO_Type: "Pump",
+                imageURL: nil,
+                timestamp: Date(),
+                status: "Checked In",
+                WO_Number: "250818-001",
+                flagged: true,
+                tagId: nil,
+                estimatedCost: nil,
+                finalCost: nil,
+                dropdowns: [:],
+                dropdownSchemaVersion: 1,
+                lastModified: Date(),
+                lastModifiedBy: "Preview User",
+                tagBypassReason: nil,
+                isDeleted: false,
+                notes: [],
+                items: []
+            )
         )
-    )
-    .environmentObject(AppState.shared)
+        .environmentObject(AppState.shared)
+    }
 }

@@ -22,6 +22,9 @@ struct WO_Note: Identifiable, Codable, Equatable {
     var user: String            // Who wrote the note
     var text: String            // Content of the note
     var timestamp: Date         // When it was added
+    var imageURLs: [String] = []  // Optional image URLs attached to note
+
+    // When it was added
 
     // END
 }
@@ -32,7 +35,8 @@ extension WO_Note {
     static let sample = WO_Note(
         user: "Maria",
         text: "Customer says this one leaks worse under pressure.",
-        timestamp: Date()
+        timestamp: Date(),
+        imageURLs: []
     )
 }
 
