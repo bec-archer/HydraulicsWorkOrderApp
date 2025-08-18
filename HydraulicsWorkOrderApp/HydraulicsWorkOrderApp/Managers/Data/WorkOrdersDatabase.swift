@@ -233,6 +233,108 @@ final class WorkOrdersDatabase: ObservableObject {
     }
     // END soft delete
 
+    // ───── ADD PER-ITEM NOTE ─────
+    /// Append a WO_Note to a specific WO_Item inside a WorkOrder document.
+    /// - Parameters:
+    ///   - woId: Firestore documentID of the WorkOrder (workOrder.id)
+    ///   - itemId: UUID of the WO_Item to update
+    ///   - note: WO_Note to append
+    func addItemNote(woId: String, itemId: UUID, note: WO_Note, completion: @escaping (Result<Void, Error>) -> Void) {
+        let docRef = db.collection(collectionName).document(woId)
+
+        docRef.getDocument { [weak self] snap, err in
+            guard let self else { return }
+            if let err = err { completion(.failure(err)); return }
+            guard let snap, snap.exists else {
+                return completion(.failure(NSError(domain: "WorkOrdersDatabase",
+                                                   code: 404,
+                                                   userInfo: [NSLocalizedDescriptionKey: "WorkOrder \(woId) not found"])))
+            }
+
+            do {
+                var wo = try snap.data(as: WorkOrder.self)
+                if wo.id == nil { wo.id = woId } // backfill
+                // Find the WO_Item
+                guard let idx = wo.items.firstIndex(where: { $0.id == itemId }) else {
+                    return completion(.failure(NSError(domain: "WorkOrdersDatabase",
+                                                       code: 404,
+                                                       userInfo: [NSLocalizedDescriptionKey: "WO_Item \(itemId) not found in WorkOrder \(woId)"])))
+                }
+
+                // Append note
+                wo.items[idx].notes.append(note)
+                wo.lastModified = Date()
+                wo.lastModifiedBy = note.user
+
+                try docRef.setData(from: wo, merge: false) { err in
+                    if let err = err { completion(.failure(err)); return }
+
+                    // Update local cache so UI lists refresh
+                    DispatchQueue.main.async {
+                        if let cacheIdx = self.workOrders.firstIndex(where: { $0.id == wo.id }) {
+                            self.workOrders[cacheIdx] = wo
+                        }
+                    }
+                    completion(.success(()))
+                }
+            } catch {
+                completion(.failure(error))
+            }
+        }
+    }
+    // END addItemNote
+
+    // ───── UPDATE PER-ITEM STATUS + MIRRORED NOTE ─────
+    /// Appends a WO_Status to item.statusHistory and also appends a mirrored WO_Note to item.notes.
+    func updateItemStatusAndNote(woId: String,
+                                 itemId: UUID,
+                                 status: WO_Status,
+                                 mirroredNote: WO_Note,
+                                 completion: @escaping (Result<Void, Error>) -> Void) {
+        let docRef = db.collection(collectionName).document(woId)
+
+        docRef.getDocument { [weak self] snap, err in
+            guard let self else { return }
+            if let err = err { completion(.failure(err)); return }
+            guard let snap, snap.exists else {
+                return completion(.failure(NSError(domain: "WorkOrdersDatabase",
+                                                   code: 404,
+                                                   userInfo: [NSLocalizedDescriptionKey: "WorkOrder \(woId) not found"])))
+            }
+
+            do {
+                var wo = try snap.data(as: WorkOrder.self)
+                if wo.id == nil { wo.id = woId } // backfill
+
+                guard let idx = wo.items.firstIndex(where: { $0.id == itemId }) else {
+                    return completion(.failure(NSError(domain: "WorkOrdersDatabase",
+                                                       code: 404,
+                                                       userInfo: [NSLocalizedDescriptionKey: "WO_Item \(itemId) not found in WorkOrder \(woId)"])))
+                }
+
+                // Append status + mirrored system note
+                wo.items[idx].statusHistory.append(status)
+                wo.items[idx].notes.append(mirroredNote)
+                wo.lastModified = Date()
+                wo.lastModifiedBy = status.user
+
+                try docRef.setData(from: wo, merge: false) { err in
+                    if let err = err { completion(.failure(err)); return }
+
+                    // Update local cache
+                    DispatchQueue.main.async {
+                        if let cacheIdx = self.workOrders.firstIndex(where: { $0.id == wo.id }) {
+                            self.workOrders[cacheIdx] = wo
+                        }
+                    }
+                    completion(.success(()))
+                }
+            } catch {
+                completion(.failure(error))
+            }
+        }
+    }
+    // END updateItemStatusAndNote
 
     // END
 }
