@@ -17,17 +17,32 @@ import FirebaseFirestoreSwift
 // MARK: - WO_Note Model
 
 struct WO_Note: Identifiable, Codable, Equatable {
-    
-    var id: UUID = UUID()       // Local-only — not used as Firestore doc ID
-    var user: String            // Who wrote the note
-    var text: String            // Content of the note
-    var timestamp: Date         // When it was added
-    var imageURLs: [String] = []  // Optional image URLs attached to note
+    var id: UUID = UUID()
+    var user: String
+    var text: String
+    var timestamp: Date
+    var imageURLs: [String]
 
-    // When it was added
+    // ───── Custom Decoder to Handle Missing 'imageURLs' ─────
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id         = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        user       = try container.decode(String.self, forKey: .user)
+        text       = try container.decode(String.self, forKey: .text)
+        timestamp  = try container.decode(Date.self, forKey: .timestamp)
+        imageURLs  = try container.decodeIfPresent([String].self, forKey: .imageURLs) ?? []
+    }
 
-    // END
+    // Leave default initializer
+    init(id: UUID = UUID(), user: String, text: String, timestamp: Date, imageURLs: [String] = []) {
+        self.id = id
+        self.user = user
+        self.text = text
+        self.timestamp = timestamp
+        self.imageURLs = imageURLs
+    }
 }
+
 
 // MARK: - Sample
 
