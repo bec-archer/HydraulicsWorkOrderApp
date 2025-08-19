@@ -17,6 +17,7 @@ struct FullScreenImageViewer: View {
     @GestureState private var dragOffset: CGSize = .zero
     @GestureState private var pinchScale: CGFloat = 1.0
     @State private var loadedUIImage: UIImage? = nil // ✅ Manually loaded image
+    @State private var loadFailed = false
 
     var body: some View {
         GeometryReader { geometry in
@@ -47,11 +48,23 @@ struct FullScreenImageViewer: View {
                                 }
                         )
                         .position(x: geometry.size.width / 2, y: geometry.size.height / 2)
+                } else if loadFailed {
+                    VStack {
+                        Text("❌ Failed to load image")
+                            .foregroundColor(.white)
+                            .font(.headline)
+                        Text(imageURL.absoluteString)
+                            .foregroundColor(.gray)
+                            .font(.footnote)
+                            .multilineTextAlignment(.center)
+                            .padding()
+                    }
                 } else {
                     ProgressView()
                         .progressViewStyle(CircularProgressViewStyle(tint: .white))
                         .scaleEffect(1.5)
                 }
+
 
                 // ✖️ Close Button (top-right)
                 Button {
@@ -69,6 +82,14 @@ struct FullScreenImageViewer: View {
         }
         .onAppear {
             print("🧩 FullScreenImageViewer launched with imageURL: \(imageURL.absoluteString)")
+            
+#if DEBUG
+    // Show a quick placeholder, but still fetch the real image
+    if loadedUIImage == nil {
+        self.loadedUIImage = UIImage(systemName: "photo")
+    }
+#endif
+
 
             var request = URLRequest(url: imageURL)
             request.setValue("image/jpeg", forHTTPHeaderField: "Accept")
@@ -76,16 +97,21 @@ struct FullScreenImageViewer: View {
             URLSession.shared.dataTask(with: request) { data, response, error in
                 if let error = error {
                     print("❌ Image load error: \(error.localizedDescription)")
+                    DispatchQueue.main.async { self.loadFailed = true }
                     return
                 }
+
                 print("🌐 Response: \(String(describing: response))")
 
 
                 guard let data = data else {
-                    print("❌ No data returned")
+                    print("❌ No data received from: \(imageURL.absoluteString)")
+                    DispatchQueue.main.async {
+                        self.loadFailed = true
+                    }
                     return
                 }
-                print("❌ No data received from: \(imageURL.absoluteString)")
+
 
 
                 print("📦 Image data size: \(data.count) bytes")
