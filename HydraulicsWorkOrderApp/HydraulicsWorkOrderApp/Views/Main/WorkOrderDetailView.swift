@@ -80,6 +80,12 @@ struct WorkOrderDetailView: View {
         } message: {
             Text("This will remove the WorkOrder from Active. Managers/Admins can still access it in Deleted WorkOrders.")
         } // END alert
+        .fullScreenCover(isPresented: $showImageViewer) {
+            if let url = selectedImageURL {
+                FullScreenImageViewer(imageURL: url, isPresented: $showImageViewer)
+            }
+        }
+
     } // END body
     
     // ───── Header Section Extracted ─────
@@ -148,62 +154,78 @@ struct WorkOrderDetailView: View {
                 .font(.title3.weight(.semibold))
             
             ForEach(woLocal.items) { item in
-                ItemCard(
-                    item: item,
-                    onAddNote: { item, note in
-                        if let idx = woLocal.items.firstIndex(where: { $0.id == item.id }) {
-                            woLocal.items[idx].notes.append(note)
-                            woLocal.lastModified = Date()
-                            woLocal.lastModifiedBy = note.user
-                            
-                            WorkOrdersDatabase.shared.addItemNote(
-                                woId: woLocal.id ?? "",
-                                itemId: item.id,
-                                note: note
-                            ) { result in
-                                switch result {
-                                case .success:
-                                    print("✅ Note saved for \(item.type)")
-                                case .failure(let err):
-                                    print("❌ Failed to save note: \(err.localizedDescription)")
+                HStack {
+                    ItemCard(
+                        item: item,
+                        onImageTap: { url in
+                            selectedImageURL = url
+                            showImageViewer = true
+                        },
+                        onAddNote: { item, note in
+                            if let idx = woLocal.items.firstIndex(where: { $0.id == item.id }) {
+                                woLocal.items[idx].notes.append(note)
+                                woLocal.lastModified = Date()
+                                woLocal.lastModifiedBy = note.user
+
+                                WorkOrdersDatabase.shared.addItemNote(
+                                    woId: woLocal.id ?? "",
+                                    itemId: item.id,
+                                    note: note
+                                ) { result in
+                                    switch result {
+                                    case .success:
+                                        print("✅ Note saved for \(item.type)")
+                                    case .failure(let err):
+                                        print("❌ Failed to save note: \(err.localizedDescription)")
+                                    }
                                 }
                             }
-                        }
-                        
-                        onAddItemNote?(item, note)
-                    },
-                    onChangeStatus: { item, newStatus in
-                        let author = appState.currentUserName.isEmpty ? "Tech" : appState.currentUserName
-                        let ts = Date()
-                        let statusEntry = WO_Status(status: newStatus, user: author, timestamp: ts, notes: nil)
-                        let systemNote  = WO_Note(user: author, text: "Status changed to \(newStatus)", timestamp: ts)
-                        
-                        if let idx = woLocal.items.firstIndex(where: { $0.id == item.id }) {
-                            woLocal.items[idx].statusHistory.append(statusEntry)
-                            woLocal.items[idx].notes.append(systemNote)
-                            woLocal.lastModified = ts
-                            woLocal.lastModifiedBy = author
-                            
-                            WorkOrdersDatabase.shared.updateItemStatusAndNote(
-                                woId: woLocal.id ?? "",
-                                itemId: item.id,
-                                status: statusEntry,
-                                mirroredNote: systemNote
-                            ) { result in
-                                switch result {
-                                case .success:
-                                    print("✅ WO_Status saved for \(newStatus)")
-                                case .failure(let err):
-                                    print("❌ Failed to save WO_Status: \(err.localizedDescription)")
+                            onAddItemNote?(item, note)
+                        },
+                        onChangeStatus: { item, newStatus in
+                            let author = appState.currentUserName.isEmpty ? "Tech" : appState.currentUserName
+                            let ts = Date()
+                            let statusEntry = WO_Status(status: newStatus, user: author, timestamp: ts, notes: nil)
+                            let systemNote  = WO_Note(user: author, text: "Status changed to \(newStatus)", timestamp: ts)
+
+                            if let idx = woLocal.items.firstIndex(where: { $0.id == item.id }) {
+                                woLocal.items[idx].statusHistory.append(statusEntry)
+                                woLocal.items[idx].notes.append(systemNote)
+                                woLocal.lastModified = ts
+                                woLocal.lastModifiedBy = author
+
+                                WorkOrdersDatabase.shared.updateItemStatusAndNote(
+                                    woId: woLocal.id ?? "",
+                                    itemId: item.id,
+                                    status: statusEntry,
+                                    mirroredNote: systemNote
+                                ) { result in
+                                    switch result {
+                                    case .success:
+                                        print("✅ WO_Status saved for \(newStatus)")
+                                    case .failure(let err):
+                                        print("❌ Failed to save WO_Status: \(err.localizedDescription)")
+                                    }
                                 }
                             }
-                            
+
+                            onUpdateItemStatus?(item, statusEntry, systemNote)
                         }
-                        
-                        onUpdateItemStatus?(item, statusEntry, systemNote)
-                    }
-                )
+                    )
+                    .padding(12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color(.systemGray6)) // 🩶 Light gray background for card
+                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16)
+                            .strokeBorder(Color.gray.opacity(0.1))
+                    )
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                .padding(.horizontal, 0) // Optional: match container padding
             }
+
         }
     }
     

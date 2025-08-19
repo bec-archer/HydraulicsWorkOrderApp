@@ -31,6 +31,7 @@ struct WorkOrder: Identifiable, Codable, Equatable {
                    // For lookup and display
     var WO_Type: String                       // Cylinder, Pump, etc.
     var imageURL: String?                     // First image preview
+    var imageURLs: [String] = []              // All full-size images (if present)
     var timestamp: Date                       // Initial check-in time
     var status: String                        // Checked In, In Progress, etc.
     var WO_Number: String                     // Format: YYMMDD-001
@@ -68,6 +69,7 @@ struct WorkOrder: Identifiable, Codable, Equatable {
 
         case WO_Type
         case imageURL
+        case imageURLs
         case timestamp
         case status
         case WO_Number
@@ -108,6 +110,7 @@ struct WorkOrder: Identifiable, Codable, Equatable {
 
         self.WO_Type    = try c.decodeIfPresent(String.self, forKey: .WO_Type) ?? ""
         self.imageURL   = try c.decodeIfPresent(String.self, forKey: .imageURL)
+        self.imageURLs  = try c.decodeIfPresent([String].self, forKey: .imageURLs) ?? []
         self.timestamp  = try c.decodeIfPresent(Date.self,   forKey: .timestamp) ?? Date()
         self.status     = try c.decodeIfPresent(String.self, forKey: .status) ?? "Checked In"
         self.WO_Number  = try c.decodeIfPresent(String.self, forKey: .WO_Number) ?? ""

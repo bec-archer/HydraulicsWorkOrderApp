@@ -23,6 +23,16 @@ struct WO_Item: Identifiable, Codable, Equatable {
 
     // 🆕 Per‑item notes/timeline (free‑form + system status notes live together)
     var notes: [WO_Note] = []
+      
+    // 🆕 Preview/test fields (must match init)
+    var testResult: String? = nil
+    var partsUsed: String? = nil
+    var hoursWorked: String? = nil
+    var cost: String? = nil
+    var assignedTo: String = ""
+    var isFlagged: Bool = false
+    var tagReplacementHistory: [TagReplacement]? = nil
+
 
 }
 
@@ -64,6 +74,48 @@ extension WO_Item {
 
         // 🔒 Local-only: never decoded/encoded
         self.localImages = []
+    }
+}
+// ───── Explicit Init for Preview / Tests ─────
+extension WO_Item {
+    init(
+        id: UUID,
+        tagId: String?,
+        imageUrls: [String],
+        thumbUrls: [String],
+        type: String,
+        dropdowns: [String: String],
+        dropdownSchemaVersion: Int,
+        reasonsForService: [String],
+        reasonNotes: String?,
+        statusHistory: [WO_Status],
+        testResult: String?,
+        partsUsed: String?,
+        hoursWorked: String?,
+        cost: String?,
+        assignedTo: String,
+        isFlagged: Bool,
+        tagReplacementHistory: [TagReplacement]?
+    ) {
+        self.id = id
+        self.tagId = tagId
+        self.imageUrls = imageUrls
+        self.thumbUrls = thumbUrls
+        self.type = type
+        self.dropdowns = dropdowns
+        self.dropdownSchemaVersion = dropdownSchemaVersion
+        self.reasonsForService = reasonsForService
+        self.reasonNotes = reasonNotes
+        self.statusHistory = statusHistory
+        self.testResult = testResult
+        self.partsUsed = partsUsed
+        self.hoursWorked = hoursWorked
+        self.cost = cost
+        self.localImages = [] // local-only
+        self.lastModified = Date()
+        self.lastModifiedBy = "Preview"
+        self.isFlagged = isFlagged
+        self.notes = []
     }
 }
 
