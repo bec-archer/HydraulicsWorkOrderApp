@@ -24,6 +24,7 @@ struct WorkOrderCardView: View {
         // Helper that accepts either a Storage path ("intake/...jpg") or a full URL ("https://...")
         func resolve(_ s: String) {
             if s.lowercased().hasPrefix("http") {
+            print("🧩 Resolving full URL: \(s)")
                 // Already a full URL — no work needed
                 self.resolvedImageURL = URL(string: s)
             } else {
@@ -39,6 +40,7 @@ struct WorkOrderCardView: View {
         } else if let s = workOrder.items.first?.thumbUrls.first ?? workOrder.items.first?.imageUrls.first {
             resolve(s)
         } else {
+            print("🛑 No image URL or fallback available.")
             self.resolvedImageURL = nil
         }
 
@@ -168,9 +170,8 @@ struct WorkOrderCardView: View {
 
         
         // Re-resolve when the first WO_Item’s thumb count changes
-        .onChange(of: workOrder.items.first?.thumbUrls.count ?? 0) { _, _ in
-            resolveImageURL()
-        }
+        .onChange(of: workOrder.items.first?.thumbUrls) { _, _ in resolveImageURL() }
+        .onChange(of: workOrder.items.first?.imageUrls) { _, _ in resolveImageURL() }
 
         .padding()
         .background(Color.white)

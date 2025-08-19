@@ -13,49 +13,40 @@
 import SwiftUI
 import Foundation
 import FirebaseFirestoreSwift
+import FirebaseFirestore
 
 // MARK: - WO_Note Model
 
 struct WO_Note: Identifiable, Codable, Equatable {
-    var id: UUID = UUID()
-    var user: String
-    var text: String
-    var timestamp: Date
-    var imageURLs: [String]
+    
+    var id: UUID = UUID()       // Local-only — not used as Firestore doc ID
+    var user: String            // Who wrote the note
+    var text: String            // Content of the note
+    var timestamp: Date         // When it was added
+    var imageURLs: [String] = []  // Optional image URLs attached to note
 
-    // ───── Custom Decoder to Handle Missing 'imageURLs' ─────
-    init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        id         = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
-        user       = try container.decode(String.self, forKey: .user)
-        text       = try container.decode(String.self, forKey: .text)
-        timestamp  = try container.decode(Date.self, forKey: .timestamp)
-        imageURLs  = try container.decodeIfPresent([String].self, forKey: .imageURLs) ?? []
-    }
-
-    // Leave default initializer
-    init(id: UUID = UUID(), user: String, text: String, timestamp: Date, imageURLs: [String] = []) {
-        self.id = id
-        self.user = user
-        self.text = text
-        self.timestamp = timestamp
-        self.imageURLs = imageURLs
-    }
-}
-
-
-// MARK: - Sample
-
-extension WO_Note {
+    // MARK: - Sample
     static let sample = WO_Note(
-        user: "Maria",
-        text: "Customer says this one leaks worse under pressure.",
-        timestamp: Date(),
-        imageURLs: []
+        user: "John Doe",
+        text: "This is a sample note for preview purposes.",
+        timestamp: Date()
     )
 }
 
-// ───── Preview Template ─────
+// MARK: - Firebase Extension
+extension WO_Note {
+    func toDictionary() -> [String: Any] {
+        return [
+            "id": id.uuidString,
+            "user": user,
+            "text": text,
+            "timestamp": Timestamp(date: timestamp),
+            "imageURLs": imageURLs
+        ]
+    }
+}
+
+// MARK: - Preview
 
 #Preview {
     VStack(alignment: .leading) {
@@ -67,5 +58,4 @@ extension WO_Note {
             .font(.footnote)
     }
     .padding()
-   // .previewLayout(.sizeThatFits)
 }

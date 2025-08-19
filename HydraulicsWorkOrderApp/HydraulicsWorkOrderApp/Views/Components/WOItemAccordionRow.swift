@@ -1,239 +1,210 @@
-import Foundation
+//  WOItemAccordionRow.swift
+//  HydraulicsWorkOrderApp
+//
+//  Created by Bec Archer on 8/11/25.
+
+// ─────────────────────────────────────────────────────────────
+// 📄 WOItemAccordionRow.swift
+// Collapsible inline form for a single WO_Item.
+// ─────────────────────────────────────────────────────────────
+
 import SwiftUI
-import PhotosUI
-import UIKit
 
 struct WOItemAccordionRow: View {
-    // Two possible initialization patterns:
-    
-    // Simple mode with direct item binding
-    @Binding var item: WO_Item?
-    
-    // Advanced mode (with index-based access)
-    var index: Int
-    var woId: String
-    var items: Binding<[WO_Item]>
-    var expandedIndex: Binding<Int?>
-    var onDelete: ((Int) -> Void)?
-    
-    // Initialize with either pattern (simple or advanced)
-    init(item: Binding<WO_Item>) {
-        self._item = Binding(
-            get: { item.wrappedValue },
-            set: { item.wrappedValue = $0! }
+    let index: Int
+    let woId: String                     // ⬅️ parent WorkOrder ID
+    @Binding var items: [WO_Item]
+    @Binding var expandedIndex: Int?
+    let onDelete: (Int) -> Void
+
+
+    @State private var isUploadingImages = false
+
+    // ───── Index Safety Helpers ─────
+    private var indexIsValid: Bool { items.indices.contains(index) }
+
+    private var itemBinding: Binding<WO_Item> {
+        Binding(
+            get: { indexIsValid ? items[index] : WO_Item.blank() },
+            set: { newValue in if indexIsValid { items[index] = newValue } }
         )
-        self.index = 0
-        self.woId = ""
-        self.items = .constant([])
-        self.expandedIndex = .constant(nil)
-        self.onDelete = nil
     }
-    
-    init(index: Int, woId: String, items: Binding<[WO_Item]>, expandedIndex: Binding<Int?>, onDelete: ((Int) -> Void)?) {
-        self._item = .constant(nil)
-        self.index = index
-        self.woId = woId
-        self.items = items
-        self.expandedIndex = expandedIndex
-        self.onDelete = onDelete
+
+    private var imagesBinding: Binding<[UIImage]> {
+        Binding(
+            get: { indexIsValid ? items[index].localImages : [] },
+            set: { newValue in if indexIsValid { items[index].localImages = newValue } }
+        )
     }
-    
-    // UI state
-    @State private var internalIsExpanded = false
-    @State private var selectedPickerItem: PhotosPickerItem? = nil
-    
-    // Computed properties for handling both modes
-    private var isExpanded: Bool {
-        if item == nil {
-            return expandedIndex.wrappedValue == index
-        } else {
-            return internalIsExpanded
-        }
+    // ───── End Index Safety Helpers ─────
+
+    private var isExpanded: Binding<Bool> {
+        Binding(
+            get: { expandedIndex == index },
+            set: { newValue in
+                withAnimation { expandedIndex = newValue ? index : nil }
+            }
+        )
     }
-    
-    private var currentItem: Binding<WO_Item> {
-        if item == nil {
-            // Using advanced mode with array binding
-            return items[index]
-        } else {
-            // Using simple mode with direct binding
-            return Binding(
-                get: { self.item! },
-                set: { self.item = $0 }
-            )
-        }
-    }
-    
+
+    // ───── BODY ─────
     var body: some View {
-        VStack(alignment: .leading) {
-            Button(action: {
-                if item == nil {
-                    withAnimation {
-                        expandedIndex.wrappedValue = isExpanded ? nil : index
+        DisclosureGroup(isExpanded: isExpanded) {
+            if !indexIsValid {
+                EmptyView()
+            } else {
+                // ───── Expanded Content (Photos + Form) ─────
+
+                // Required field header
+                HStack(spacing: 4) {
+                    Text("Photos").font(.headline)
+                    Text("*").foregroundColor(.red).font(.headline)
+                }
+                .padding(.top, 6)
+
+                // (QR button moved inline inside PhotoCaptureUploadView’s header row)
+
+
+                // Inline form
+                AddWOItemFormView(item: itemBinding, woId: woId)   // ⬅️ pass parent WorkOrder ID through
+                    .padding(.top, 6)
+                // END expanded content
+
+            }
+
+            if isUploadingImages {
+                HStack(spacing: 8) {
+                    ProgressView()
+                    Text("Uploading photos…")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.vertical, 4)
+            }
+
+            // ───── Danger Zone: Delete ─────
+            HStack {
+                Spacer()
+                Button { onDelete(index) } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 28, height: 28)
+                        .background(Color.red, in: Circle())
+                }
+                .accessibilityLabel("Delete Item")
+                .buttonStyle(.plain)
+            }
+            // END Danger Zone
+        } label: {
+            // ───── WO_Item Header Label ─────
+            let headerItem = indexIsValid ? items[index] : WO_Item.blank()
+
+            HStack(spacing: 8) {
+                Text(headerTitle(for: headerItem))
+                    .font(hasUserEnteredData(headerItem) ? .headline : .body)
+                    .foregroundStyle(hasUserEnteredData(headerItem) ? .primary : .secondary)
+
+                Spacer()
+
+                if let summary = summaryText(for: headerItem) {
+                    Text(summary)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+
+                if let thumb = headerItem.localImages.first {
+                    VStack(spacing: 2) {
+                        Image(uiImage: thumb)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: 36, height: 36)
+                            .clipShape(RoundedRectangle(cornerRadius: 6))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 6)
+                                    .stroke(Color(hex: "#E0E0E0"))
+                            )
+                        Text("\(headerItem.localImages.count) pic\(headerItem.localImages.count == 1 ? "" : "s")")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
                     }
                 } else {
-                    withAnimation {
-                        internalIsExpanded.toggle()
-                    }
+                    Image(systemName: "chevron.down")
+                        .imageScale(.small)
+                        .foregroundStyle(.secondary)
                 }
-            }) {
-                HStack {
-                    Text(currentItem.wrappedValue.type.isEmpty ? "Unnamed Item" : currentItem.wrappedValue.type)
-                        .font(.headline)
-                    Spacer()
-                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                }
-                .padding()
-            }
-            
-            if isExpanded {
-                VStack(alignment: .leading, spacing: 12) {
-                    // Type Field (only in advanced mode)
-                    if item == nil {
-                        TextField("Item Type", text: currentItem.type)
-                            .textFieldStyle(.roundedBorder)
-                            .padding(.horizontal)
-                    }
-                    
-                    // Image Upload Section
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack {
-                            ForEach(currentItem.wrappedValue.imageUrls, id: \.self) { url in
-                                StorageAsyncImage(pathOrUrl: url)
-                                    .frame(width: 100, height: 100)
-                                    .cornerRadius(8)
-                            }
-                            
-                            PhotosPicker(selection: $selectedPickerItem, matching: .images) {
-                                VStack {
-                                    Image(systemName: "plus")
-                                        .font(.largeTitle)
-                                        .foregroundColor(.gray)
-                                    Text("Add Photo")
-                                        .font(.caption)
-                                }
-                                .frame(width: 100, height: 100)
-                                .background(Color(.systemGray5))
-                                .cornerRadius(8)
-                            }
-                        }
-                        .padding(.horizontal)
-                    }
-                    
-                    // Delete Button (only in advanced mode)
-                    if item == nil, let onDelete = onDelete {
-                        Button(role: .destructive) {
-                            onDelete(index)
-                        } label: {
-                            Label("Delete Item", systemImage: "trash")
-                                .foregroundColor(.red)
-                                .padding(.horizontal)
-                        }
-                    }
-                }
-                .padding(.bottom)
             }
         }
-        .onChange(of: selectedPickerItem) { _ in
-            if selectedPickerItem != nil {
-                processSelectedPhoto()
-            }
-        }
+        // END DisclosureGroup
     }
-    
-    private func processSelectedPhoto() {
-        guard let pickerItem = selectedPickerItem else { return }
-        
-        Task {
-            do {
-                let data = try await pickerItem.loadTransferable(type: Data.self)
-                guard let data = data, let image = UIImage(data: data) else {
-                    print("Failed to load image data")
-                    await MainActor.run { selectedPickerItem = nil }
-                    return
+    // END .body
+
+    // ───── Helper: Did user enter anything yet? ─────
+    private func hasUserEnteredData(_ item: WO_Item) -> Bool {
+        if let tag = item.tagId, !tag.trimmingCharacters(in: .whitespaces).isEmpty { return true }
+        if !item.imageUrls.isEmpty { return true }
+        if !item.type.trimmingCharacters(in: .whitespaces).isEmpty { return true }
+        if item.dropdowns.values.contains(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty }) { return true }
+        if !item.reasonsForService.isEmpty { return true }
+        if let notes = item.reasonNotes, !notes.trimmingCharacters(in: .whitespaces).isEmpty { return true }
+        return false
+    }
+
+    // ───── Helper: Header Title for WO_Item Row ─────
+    private func headerTitle(for item: WO_Item) -> String {
+        hasUserEnteredData(item) ? "Item" : "New Item"
+    }
+
+    // ───── Helper: Optional summary text ─────
+    private func summaryText(for item: WO_Item) -> String? {
+        guard hasUserEnteredData(item) else { return nil }
+        var bits: [String] = []
+        if let t = (item.type.isEmpty ? item.dropdowns["type"] : item.type), !t.isEmpty { bits.append(t) }
+        if let size = item.dropdowns["size"], !size.isEmpty { bits.append(size) }
+        if let color = item.dropdowns["color"], !color.isEmpty { bits.append(color) }
+        return bits.isEmpty ? nil : bits.joined(separator: " • ")
+    }
+
+    // ───── Image Upload Handler ─────
+    private func uploadNewLocalImages() async {
+        // If our row was deleted or reordered mid-flight, bail.
+        guard indexIsValid else { return }
+
+        let alreadyUploaded = items[index].imageUrls.count
+        let localCount = items[index].localImages.count
+        guard localCount > alreadyUploaded else { return }
+
+        let pending = items[index].localImages.indices.filter { $0 >= alreadyUploaded }
+        guard !pending.isEmpty else { return }
+
+        await MainActor.run { isUploadingImages = true }
+
+        for idx in pending {
+            // Re-check index every iteration in case user deletes the row
+            guard indexIsValid, idx < items[index].localImages.count else { continue }
+            let image = items[index].localImages[idx]
+
+            if let urlString = try? await StorageManager.shared.uploadWOItemImage(image, woId: woId, woItemId: items[index].id) {
+
+                await MainActor.run {
+                    if indexIsValid { items[index].imageUrls.append(urlString) }
                 }
-                
-                // Now we have the image, let's upload it
-                await uploadImage(image)
-            } catch {
-                print("Error loading image: \(error)")
-                await MainActor.run { selectedPickerItem = nil }
             }
         }
+
+        await MainActor.run { isUploadingImages = false }
     }
-    
-    private func uploadImage(_ image: UIImage) async {
-        // Using completion handler pattern from StorageManager but within Task
-        await withCheckedContinuation { continuation in
-            StorageManager.shared.uploadWOItemImageWithThumbnail(
-                image: image,
-                itemId: currentItem.wrappedValue.id
-            ) { result in
-                switch result {
-                case .success(let (path, thumbPath)):
-                    Task {
-                        await MainActor.run {
-                            var updatedItem = currentItem.wrappedValue
-                            updatedItem.imageUrls.append(path)
-                            updatedItem.thumbUrls.append(thumbPath)
-                            updatedItem.localImages.append(image)
-                            updatedItem.lastModified = Date()
-                            
-                            // Update the appropriate binding
-                            if item == nil {
-                                // Update in array (advanced mode)
-                                items.wrappedValue[index] = updatedItem
-                            } else {
-                                // Update direct binding (simple mode)
-                                item = updatedItem
-                            }
-                            
-                            selectedPickerItem = nil
-                        }
-                    }
-                case .failure(let error):
-                    print("Upload failed: \(error.localizedDescription)")
-                    Task {
-                        await MainActor.run { selectedPickerItem = nil }
-                    }
-                }
-                continuation.resume()
-            }
-        }
-    }
+    // END Handler
 }
 
-struct StorageAsyncImage: View {
-    let pathOrUrl: String
-    @State private var resolvedURL: URL? = nil
-    
-    var body: some View {
-        Group {
-            if let resolvedURL {
-                AsyncImage(url: resolvedURL) { image in
-                    image.resizable()
-                        .scaledToFill()
-                } placeholder: {
-                    ProgressView()
-                }
-            } else {
-                ProgressView()
-                    .onAppear {
-                        loadImage()
-                    }
-            }
-        }
-    }
-    
-    private func loadImage() {
-        StorageImageResolver.resolve(pathOrUrl) { url in
-            DispatchQueue.main.async {
-                self.resolvedURL = url
-            }
-        }
-    }
-}
-
+// ───── Preview Template ─────
 #Preview {
-    WOItemAccordionRow(item: .constant(WO_Item.sample))
+    WOItemAccordionRow(
+        index: 0,
+        woId: "SAMPLE_WO_ID",
+        items: .constant([WO_Item.sample]),
+        expandedIndex: .constant(0),
+        onDelete: { _ in }
+    )
 }
+// END FILE

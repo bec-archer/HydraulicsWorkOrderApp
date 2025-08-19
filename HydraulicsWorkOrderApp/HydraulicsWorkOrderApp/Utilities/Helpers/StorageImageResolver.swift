@@ -23,15 +23,13 @@ struct StorageImageResolver {
         }
         
         // Get a reference for either gs:// or relative path
-        let storage: Storage = Storage.storage(url: "gs://hydraulicsworkorderapp.appspot.com")
-        
         let storageRef: StorageReference
         if pathOrUrl.lowercased().hasPrefix("gs://") {
-            storageRef = storage.reference(forURL: pathOrUrl)
+            storageRef = Storage.storage().reference(forURL: pathOrUrl)
         } else {
-            storageRef = storage.reference(withPath: pathOrUrl)
+            storageRef = Storage.storage().reference(withPath: pathOrUrl)
         }
-
+        
         // Fetch a one-time download URL
         storageRef.downloadURL { url, error in
             if let error = error {

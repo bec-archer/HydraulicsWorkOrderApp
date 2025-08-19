@@ -15,6 +15,9 @@ struct WorkOrderDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var appState: AppState
     @State private var showDeleteConfirm = false
+    @State private var showImageViewer = false
+    @State private var selectedImageURL: URL? = nil
+
     
     private var canDelete: Bool {
 #if DEBUG
@@ -207,30 +210,14 @@ struct WorkOrderDetailView: View {
     // ───── Global Notes Timeline Section ─────
     @ViewBuilder
     private func notesSection() -> some View {
-        if !woLocal.items.flatMap({ $0.notes }).isEmpty {
-            VStack(alignment: .leading, spacing: 12) {
-                Text("All Notes + Status Updates")
-                    .font(.title3.bold())
-                
-                let sortedNotes = woLocal.items
-                    .flatMap { $0.notes }
-                    .sorted { $0.timestamp > $1.timestamp }
-                
-                ForEach(sortedNotes, id: \.id) { note in
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("• \(note.text)")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        Text("— \(note.user), \(note.timestamp.formatted(date: .abbreviated, time: .shortened))")
-                            .font(.caption2)
-                            .foregroundStyle(.gray)
-                    }
-                    .padding(.bottom, 8)
-                }
-            }
-            .padding(.top, 12)
+        let allNotes = woLocal.items.flatMap { $0.notes }
+        if !allNotes.isEmpty {
+            NotesTimelineView(notes: allNotes)
+                .padding(.top, 12)
         }
-    } // END
+    }
+    // END
+
     
     // ───── Preview Template ─────
     #Preview {

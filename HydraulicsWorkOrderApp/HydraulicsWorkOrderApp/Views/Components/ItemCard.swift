@@ -17,9 +17,12 @@ struct ItemCard: View {
     @State private var selectedImages: [UIImage] = []
     @State private var showPhotoPicker = false
     @State private var photoItems: [PhotosPickerItem] = []
+    @State private var showImageViewer = false
+    @State private var selectedImageURL: URL? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
+            // ───── Header Section ─────
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("\(item.type) \(item.dropdowns["size"] ?? "")")
@@ -42,7 +45,7 @@ struct ItemCard: View {
                                     .fill(Color(hex: hex))
                                     .frame(width: 14, height: 14)
                                     .overlay(Circle().stroke(Color.black.opacity(0.1), lineWidth: 0.5))
-                                    .accessibilityLabel("\(color) color swatch")
+                                    .accessibilityLabel(Text(verbatim: color + " color swatch"))
                             }
                         }
                     }
@@ -68,33 +71,49 @@ struct ItemCard: View {
             }
 
             // ───── Thumbnail Carousel (scrollable) ─────
-            let urls = item.thumbUrls.isEmpty ? item.imageUrls : item.thumbUrls
+            let thumbURLs = item.thumbUrls
+            let fullURLs = item.imageUrls
 
-            if !urls.isEmpty {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                        ForEach(urls, id: \.self) { urlString in
-                            if let url = URL(string: urlString) {
-                                AsyncImage(url: url) { image in
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(Array(fullURLs.enumerated()), id: \.offset) { index, fullURL in
+                        let thumbURL = thumbURLs.indices.contains(index) ? thumbURLs[index] : fullURL
+
+                        if let thumb = URL(string: thumbURL),
+                           let full = URL(string: fullURL) {
+
+                            AsyncImage(url: thumb) { phase in
+                                switch phase {
+                                case .empty:
+                                    RoundedRectangle(cornerRadius: 10)
+                                        .fill(Color.gray.opacity(0.2))
+                                        .frame(width: 120, height: 120)
+
+                                case .success(let image):
                                     image
                                         .resizable()
                                         .aspectRatio(contentMode: .fill)
                                         .frame(width: 120, height: 120)
                                         .clipped()
                                         .cornerRadius(10)
-                                } placeholder: {
+                                        .onTapGesture {
+                                            print("🖼 Thumbnail tapped: \(full.absoluteString)")
+                                            selectedImageURL = full
+                                            showImageViewer = true
+                                        }
+
+                                case .failure:
                                     RoundedRectangle(cornerRadius: 10)
-                                        .fill(Color.gray.opacity(0.2))
+                                        .fill(Color.red.opacity(0.2))
                                         .frame(width: 120, height: 120)
+
+                                @unknown default:
+                                    EmptyView()
                                 }
                             }
                         }
                     }
                 }
-            } else {
-                RoundedRectangle(cornerRadius: 10)
-                    .fill(Color.gray.opacity(0.1))
-                    .frame(height: 160)
             }
 
             // ───── Status History List ─────
@@ -124,8 +143,8 @@ struct ItemCard: View {
                 if !selectedImages.isEmpty {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 8) {
-                            ForEach(selectedImages, id: \.self) { image in
-                                Image(uiImage: image)
+                            ForEach(0..<selectedImages.count, id: \.self) { index in
+                                Image(uiImage: selectedImages[index])
                                     .resizable()
                                     .aspectRatio(contentMode: .fill)
                                     .frame(width: 60, height: 60)
@@ -156,23 +175,43 @@ struct ItemCard: View {
                 matching: .images,
                 photoLibrary: .shared()
             )
-            .onChange(of: photoItems) { newItems in
-                for item in newItems {
-                    Task {
-                        if let data = try? await item.loadTransferable(type: Data.self),
-                           let image = UIImage(data: data) {
-                            selectedImages.append(image)
-                        } else {
-                            print("❌ Failed to load image from PhotosPickerItem")
-                        }
-                    }
-                }
+            // Fix for deprecated onChange API
+            .onChange(of: photoItems) { _, newItems in
+                loadSelectedImages(from: newItems)
             }
         } // END VStack
+        .onAppear {
+            print("🧪 ItemCard loaded for item \(item.id)")
+            print("📷 imageUrls:", item.imageUrls)
+            print("📷 thumbUrls:", item.thumbUrls)
+        }
         .padding()
         .background(.thinMaterial)
         .clipShape(RoundedRectangle(cornerRadius: 12))
+        .fullScreenCover(isPresented: $showImageViewer) {
+            if let url = selectedImageURL {
+                ImageViewer(imageURL: url, isPresented: $showImageViewer)
+            }
+        }
     } // END .body
+    
+    // ───── Load Images from PhotosPicker ─────
+    private func loadSelectedImages(from items: [PhotosPickerItem]) {
+        selectedImages.removeAll()
+
+        for item in items {
+            Task {
+                if let data = try? await item.loadTransferable(type: Data.self),
+                   let image = UIImage(data: data) {
+                    DispatchQueue.main.async {
+                        selectedImages.append(image)
+                    }
+                } else {
+                    print("❌ Failed to load image from PhotosPickerItem")
+                }
+            }
+        }
+    }
 
     // ───── Status-Based Color Mapping ─────
     func statusColor(for status: String?) -> Color {
@@ -183,9 +222,9 @@ struct ItemCard: View {
         case "test failed":  return UIConstants.StatusColors.testFailed
         case "completed":    return UIConstants.StatusColors.completed
         case "closed":       return UIConstants.StatusColors.closed
-        default:              return UIConstants.StatusColors.fallback
+        default:             return UIConstants.StatusColors.fallback
         }
-    } // END
+    }
 
     // ───── Image Upload Handler ─────
     func uploadImagesAndCreateNote(for item: WO_Item) {
@@ -198,27 +237,25 @@ struct ItemCard: View {
 
         let group = DispatchGroup()
 
-        print("🖼 selectedImages count: \(selectedImages.count)")
-        for image in selectedImages {
+        for (index, image) in selectedImages.enumerated() {
             group.enter()
 
             guard let data = image.jpegData(compressionQuality: 0.7) else {
-            print("❌ Failed to convert UIImage to JPEG")
                 group.leave()
                 continue
             }
 
-            let path = "intake/\(item.id.uuidString)/note_\(noteId).jpg"
+            let path = "intake/\(item.id.uuidString)/note_\(noteId)_\(index).jpg"
             let ref = Storage.storage().reference().child(path)
 
             ref.putData(data, metadata: StorageMetadata()) { _, err in
-                if let err = err {
-                    print("❌ Upload failed: \(err.localizedDescription)")
+                if let error = err {
+                    print("❌ Image upload error: \(error.localizedDescription)")
                     group.leave()
                     return
                 }
+
                 ref.downloadURL { url, _ in
-                print("🌐 Download URL received: \(url?.absoluteString ?? "nil")")
                     if let url = url {
                         uploadedURLs.append(url.absoluteString)
                     }
@@ -226,53 +263,111 @@ struct ItemCard: View {
                 }
             }
         }
+
         group.notify(queue: .main) {
-            print("📸 Uploaded image URLs: \(uploadedURLs)") // ← add this line
+            let noteTextWithImages = uploadedURLs.isEmpty
+                ? noteText
+                : noteText + "\n\nAttached Images:\n" + uploadedURLs.joined(separator: "\n")
 
             let note = WO_Note(
                 id: noteId,
                 user: user,
-                text: noteText,
-                timestamp: ts,
-                imageURLs: uploadedURLs
+                text: noteTextWithImages,
+                timestamp: ts
             )
 
             onAddNote(item, note)
             noteText = ""
             selectedImages.removeAll()
         }
+    }
+}
 
-    } // END uploadImagesAndCreateNote
+// ───── Image Viewer Component ─────
+struct ImageViewer: View {
+    let imageURL: URL
+    @Binding var isPresented: Bool
+    @State private var scale: CGFloat = 1.0
+    @State private var lastScale: CGFloat = 1.0
+    @State private var offset: CGSize = .zero
+    @State private var lastOffset: CGSize = .zero
 
-} // END ItemCard
+    var body: some View {
+        ZStack {
+            Color.black.edgesIgnoringSafeArea(.all)
 
+            AsyncImage(url: imageURL) { phase in
+                switch phase {
+                case .empty:
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                case .success(let image):
+                    image
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .scaleEffect(scale)
+                        .offset(offset)
+                        .gesture(
+                            MagnificationGesture()
+                                .onChanged { value in
+                                    let delta = value / lastScale
+                                    lastScale = value
+                                    scale = min(max(scale * delta, 1), 4)
+                                }
+                                .onEnded { _ in
+                                    lastScale = 1.0
+                                }
+                        )
+                        .gesture(
+                            DragGesture()
+                                .onChanged { value in
+                                    offset = CGSize(
+                                        width: lastOffset.width + value.translation.width,
+                                        height: lastOffset.height + value.translation.height
+                                    )
+                                }
+                                .onEnded { _ in
+                                    lastOffset = offset
+                                }
+                        )
+                        .onTapGesture(count: 2) {
+                            if scale > 1 {
+                                withAnimation {
+                                    scale = 1
+                                    offset = .zero
+                                    lastOffset = .zero
+                                }
+                            } else {
+                                withAnimation {
+                                    scale = 2
+                                }
+                            }
+                        }
+                case .failure:
+                    Text("Failed to load image")
+                        .foregroundColor(.white)
+                @unknown default:
+                    EmptyView()
+                }
+            }
 
-// ───── Preview ─────
-#Preview(traits: .sizeThatFitsLayout) {
-    ItemCard(
-        item: WO_Item(
-            id: UUID(),
-            tagId: "ABC123",
-            type: "Cylinder",
-            dropdowns: ["size": "3", "color": "Yellow", "brand": "Deere"],
-            reasonsForService: [],
-            reasonNotes: nil,
-            imageUrls: [],
-            thumbUrls: [],
-            localImages: [],
-            lastModified: Date(),
-            dropdownSchemaVersion: 1,
-            lastModifiedBy: "PreviewUser",
-            statusHistory: [
-                WO_Status(status: "Checked In", user: "Maria", timestamp: Date(), notes: nil),
-                WO_Status(status: "In Progress", user: "Joe", timestamp: Date(), notes: "Started teardown")
-            ],
-            notes: [
-                WO_Note(id: UUID(), user: "Joe", text: "Needs bushing kit", timestamp: Date())
-            ]
-        ),
-        onAddNote: { _, _ in },
-        onChangeStatus: { _, _ in }
-    )
-    .padding()
+            VStack {
+                HStack {
+                    Spacer()
+                    Button(action: {
+                        isPresented = false
+                    }) {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 20, weight: .bold))
+                            .foregroundColor(.white)
+                            .padding(10)
+                            .background(Color.black.opacity(0.6))
+                            .clipShape(Circle())
+                    }
+                    .padding()
+                }
+                Spacer()
+            }
+        }
+    }
 }

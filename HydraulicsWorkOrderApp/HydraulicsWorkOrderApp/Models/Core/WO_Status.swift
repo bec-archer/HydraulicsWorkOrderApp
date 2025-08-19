@@ -13,7 +13,17 @@
 
 import Foundation
 import FirebaseFirestoreSwift
+import FirebaseFirestore
 
+extension WO_Status {
+    func toDictionary() -> [String: Any] {
+        return [
+            "status": status,
+            "user": user,
+            "timestamp": Timestamp(date: timestamp)
+        ]
+    }
+}
 // MARK: - WO_Status Model
 
 struct WO_Status: Codable, Equatable {
@@ -23,15 +33,4 @@ struct WO_Status: Codable, Equatable {
     var notes: String?            // Optional notes
 
     // END
-}
-
-// MARK: - Sample
-
-extension WO_Status {
-    static let sample = WO_Status(
-        status: "In Progress",
-        user: "Joe",
-        timestamp: Date(),
-        notes: "Started teardown"
-    )
 }

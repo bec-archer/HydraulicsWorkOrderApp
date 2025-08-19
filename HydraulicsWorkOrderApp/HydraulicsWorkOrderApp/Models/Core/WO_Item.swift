@@ -1,9 +1,4 @@
-//
-//  WO_Item.swift
-//  HydraulicsWorkOrderApp
-//
-//  Created by Bec Archer on 8/8/25.
-//import Foundation
+import Foundation
 import SwiftUI
 
 struct WO_Item: Identifiable, Codable, Equatable {

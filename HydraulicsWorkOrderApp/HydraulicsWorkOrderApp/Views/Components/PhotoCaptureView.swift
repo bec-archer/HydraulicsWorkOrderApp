@@ -5,6 +5,7 @@
 //  Created by Bec Archer on 8/10/25.
 //
 //
+
 import SwiftUI
 import PhotosUI
 import UIKit
@@ -174,15 +175,10 @@ struct PhotoCaptureView: View {
                 for result in results {
                     let provider = result.itemProvider
                     group.enter()
-                    
-                    if provider.canLoadObject(ofClass: UIImage.self) {
-                        provider.loadObject(ofClass: UIImage.self) { object, _ in
-                            if let img = object as? UIImage {
-                                gathered.append(img)
-                            }
-                            group.leave()
+                    provider.loadObject(ofClass: UIImage.self) { object, _ in
+                        if let img = object as? UIImage {
+                            gathered.append(img)
                         }
-                    } else {
                         group.leave()
                     }
                 }
@@ -415,42 +411,33 @@ struct PhotoCaptureUploadView: View {
             
             Task {
                 for img in toUpload {
-                    // Ensure image is < 5 MB per Storage rules before uploading
-                    let preparedImage = compressForFirebase(img)
-                    await uploadImage(preparedImage)
+                    do {
+                        // 🔧 Ensure image is < 5 MB per Storage rules before uploading
+                        let prepared = compressForFirebase(img)
+
+                        let (fullURL, thumbURL) = try await StorageManager.shared
+                            .uploadWOItemImageWithThumbnail(prepared, woId: woId, woItemId: woItemId)
+                        
+                        // Hop to main to update bindings
+                        await MainActor.run {
+                            imageURLs.append(fullURL)
+                            thumbURLs.append(thumbURL)
+                            uploadedCount += 1
+                        }
+                    } catch {
+                        await MainActor.run {
+                            uploadErrors.append(error.localizedDescription)
+                            uploadedCount += 1   // mark as processed to avoid re-looping
+                        }
+                    }
                 }
                 
                 await MainActor.run { isUploading = false }
             }
+
         }
         // END .body
     }
-    
-    // Upload the image using StorageManager's actual API
-    private func uploadImage(_ image: UIImage) async {
-        await withCheckedContinuation { continuation in
-            StorageManager.shared.uploadWOItemImageWithThumbnail(
-                image: image,
-                itemId: woItemId
-            ) { result in
-                switch result {
-                case .success(let (path, thumbPath)):
-                    DispatchQueue.main.async {
-                        imageURLs.append(path)
-                        thumbURLs.append(thumbPath)
-                        uploadedCount += 1
-                    }
-                case .failure(let error):
-                    DispatchQueue.main.async {
-                        uploadErrors.append(error.localizedDescription)
-                        uploadedCount += 1   // mark as processed to avoid re-looping
-                    }
-                }
-                continuation.resume()
-            }
-        }
-    }
-    
     // ───── Image Compressor (< 5 MB for Firebase Storage rules) ─────
     private func compressForFirebase(_ image: UIImage) -> UIImage {
         // Downscale longest edge to ~2000 px to shrink big photos
