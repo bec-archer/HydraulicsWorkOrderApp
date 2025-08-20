@@ -20,9 +20,10 @@ struct ActiveWorkOrdersView: View {
     @State private var showError = false
     @State private var errorMessage = ""
 
+    // Use explicit per-column spacing + a sensible minimum width to prevent overlap on iPad
     let columns = [
-        GridItem(.flexible()),
-        GridItem(.flexible())
+        GridItem(.flexible(minimum: 320), spacing: 24, alignment: .top),
+        GridItem(.flexible(minimum: 320), spacing: 24, alignment: .top)
     ]
 
     var body: some View {
@@ -67,7 +68,7 @@ struct ActiveWorkOrdersView: View {
                     }
                     // ───── END Loading / Empty States ─────
                     
-                    LazyVGrid(columns: columns, spacing: 16) {
+                    LazyVGrid(columns: columns, alignment: .center, spacing: 24) {
                         // ───── Data Source: Active only, sorted (flagged first, then oldest → newest) ─────
                         ForEach(active, id: \.id) { wo in
                             NavigationLink {
@@ -91,7 +92,8 @@ struct ActiveWorkOrdersView: View {
                         }
                         // END data source
                     }
-                    .padding()
+                    .padding(.horizontal, 24)
+                    .padding(.vertical, 16)
                 }
                 .navigationTitle("Active Work Orders")
 

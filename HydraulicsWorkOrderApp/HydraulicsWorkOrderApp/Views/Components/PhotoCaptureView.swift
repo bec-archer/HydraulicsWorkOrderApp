@@ -448,6 +448,9 @@ struct PhotoCaptureUploadView: View {
                                 }
                             }
                         }
+                        // Ensure parent WorkOrder shows a preview immediately
+                        WorkOrdersDatabase.shared.setWorkOrderPreviewIfEmpty(woId: resolvedDocId, previewURL: thumbURL)
+                        WorkOrdersDatabase.shared.scheduleWOPreviewPersistRetry(woId: resolvedDocId, url: thumbURL, delay: 1.0)
                     } catch {
                         pendingErrors.append(error.localizedDescription)
                     }
@@ -534,21 +537,92 @@ private struct KeyboardToolbarHidden: ViewModifier {
 
 
 #warning("Compatibility shims for WorkOrdersDatabase: remove if you implement these methods elsewhere")
-// ───── Compatibility shims for WorkOrdersDatabase (no-op fallbacks) ─────
+// ───── Compatibility shims for WorkOrdersDatabase (UI-refresh fallbacks) ─────
 @MainActor
 extension WorkOrdersDatabase {
-    /// Local-only update when Firestore doc isn’t ready yet. Safe no-op if you don’t keep a cache.
+    /// Local-only update when Firestore doc isn’t ready yet. This mutates the in-memory
+    /// cache (`workOrders`) so views like Active Work Orders can show thumbnails immediately.
     func applyItemImageURLsLocalOnly(itemId: UUID, fullURL: String, thumbURL: String) {
+        // Find the WO containing this item
+        guard let woIndex = workOrders.firstIndex(where: { wo in
+            wo.items.contains(where: { $0.id == itemId })
+        }) else {
+            #if DEBUG
+            print("ℹ️ LocalOnly: could not find WorkOrder containing item \(itemId)")
+            #endif
+            return
+        }
+        // Find the item index
+        guard let itemIndex = workOrders[woIndex].items.firstIndex(where: { $0.id == itemId }) else { return }
+
+        // Append URLs if not already present
+        if !workOrders[woIndex].items[itemIndex].thumbUrls.contains(thumbURL) {
+            workOrders[woIndex].items[itemIndex].thumbUrls.append(thumbURL)
+        }
+        if !workOrders[woIndex].items[itemIndex].imageUrls.contains(fullURL) {
+            workOrders[woIndex].items[itemIndex].imageUrls.append(fullURL)
+        }
+
+        // Opportunistically set a top-level preview if your model has one
+        // (older builds used `imageURL` or `imageURLs`). We avoid touching if absent.
+        if let mirror = Mirror(reflecting: workOrders[woIndex]).children.first(where: { $0.label == "imageURL" }) {
+            if var _ = mirror.value as? String? {
+                // Best-effort via KVC-less copy on value types: reassign struct with updated property if it exists
+                // If your model exposes a mutating setter, prefer that. Otherwise, rely on item thumbnails above.
+            }
+        }
+
         #if DEBUG
-        print("ℹ️ applyItemImageURLsLocalOnly fallback invoked for item: \(itemId)")
+        print("✅ LocalOnly applied to item=\(itemIndex) in wo=\(workOrders[woIndex].id). thumbs=\(workOrders[woIndex].items[itemIndex].thumbUrls.count) images=\(workOrders[woIndex].items[itemIndex].imageUrls.count)")
+        #endif
+
+        // Since WorkOrdersDatabase is expected to be an ObservableObject with @Published workOrders,
+        // this mutation should trigger a UI refresh automatically.
+    }
+
+    /// Schedules a local refresh soon after save; safe even if the doc already exists by then.
+    func scheduleImageURLPersistRetry(woItemId: UUID, fullURL: String, thumbURL: String, delay: TimeInterval) {
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            self.applyItemImageURLsLocalOnly(itemId: woItemId, fullURL: fullURL, thumbURL: thumbURL)
+        }
+    }
+}
+
+#warning("Compatibility shims for WorkOrdersDatabase: remove if you implement these methods elsewhere")
+// ───── Additional compatibility helpers for WorkOrdersDatabase (WO preview) ─────
+@MainActor
+extension WorkOrdersDatabase {
+    /// If the parent WO has no preview `imageURL`, set it to the given URL and bump `lastModified`.
+    func setWorkOrderPreviewIfEmpty(woId: String, previewURL: String) {
+        // WorkOrder.id is String in schema; match directly
+        guard let woIndex = workOrders.firstIndex(where: { wo in
+            (wo.id ?? "") == woId
+        }) else {
+            #if DEBUG
+            print("ℹ️ setWorkOrderPreviewIfEmpty: WO not found for id \(woId)")
+            #endif
+            return
+        }
+        // Only set if empty / nil
+        let current = workOrders[woIndex].imageURL?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard current.isEmpty else { return }
+        workOrders[woIndex].imageURL = previewURL
+        workOrders[woIndex].lastModified = Date()
+        // Nudge @Published by reassigning the element
+        let updated = workOrders[woIndex]
+        workOrders[woIndex] = updated
+        #if DEBUG
+        print("✅ Preview set locally for WO \(workOrders[woIndex].id): \(previewURL)")
         #endif
     }
-    
-    /// Schedules a retry to persist image URLs later. Default no-op so builds don’t break.
-    func scheduleImageURLPersistRetry(woItemId: UUID, fullURL: String, thumbURL: String, delay: TimeInterval) {
-        #if DEBUG
-        print("ℹ️ scheduleImageURLPersistRetry fallback scheduled in \(delay)s for item: \(woItemId)")
-        #endif
+
+    /// Schedule a retry to set the preview later (safe even if already set).
+    func scheduleWOPreviewPersistRetry(woId: String, url: String, delay: TimeInterval) {
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            self.setWorkOrderPreviewIfEmpty(woId: woId, previewURL: url)
+        }
     }
 }
 

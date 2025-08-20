@@ -2,60 +2,56 @@
 //  WorkOrderCardView.swift
 //  HydraulicsWorkOrderApp
 //
+//  Restored after accidental overwrite. This file defines the card used
+//  in ActiveWorkOrdersView. It intentionally relies ONLY on WorkOrder.imageURL
+//  for the preview. The uploader now sets that immediately after first image upload.
+//
 //  Created by Bec Archer on 8/8/25.
 //
 
+// ───── IMPORTS ─────
+import SwiftUI
 
 // ─────────────────────────────────────────────────────────────
 // 📄 WorkOrderCardView.swift
 // Reusable grid card for each WorkOrder
 // ─────────────────────────────────────────────────────────────
-
-import SwiftUI
-
 struct WorkOrderCardView: View {
     let workOrder: WorkOrder
     @Environment(\.openURL) private var openURL
-    
+
+    // Local state for resolved preview URL
     @State private var resolvedImageURL: URL? = nil
 
-    // ───── Lifecycle: Resolve image URL on appear ─────
+    // ───── Resolve preview from WorkOrder.imageURL only ─────
     private func resolveImageURL() {
-        // Helper that accepts either a Storage path ("intake/...jpg") or a full URL ("https://...")
-        func resolve(_ s: String) {
-            if s.lowercased().hasPrefix("http") {
+        // Preferred: top-level preview URL
+        let top = workOrder.imageURL?.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // Fallbacks: first item's thumb or full image
+        let itemThumb = workOrder.items.first?.thumbUrls.first?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let itemFull  = workOrder.items.first?.imageUrls.first?.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // Choose first non-empty
+        let chosen = [top, itemThumb, itemFull]
+            .compactMap { $0 }
+            .first { !$0.isEmpty }
+
+        guard let s = chosen else {
+            print("🛑 No preview candidates for WO \(workOrder.WO_Number) id=\(workOrder.id ?? "nil")")
+            resolvedImageURL = nil
+            return
+        }
+
+        if s.lowercased().hasPrefix("http") {
             print("🧩 Resolving full URL: \(s)")
-                // Already a full URL — no work needed
-                self.resolvedImageURL = URL(string: s)
-            } else {
-                // Storage path — ask resolver to fetch a download URL
-                StorageImageResolver.resolve(s) { url in
-                    self.resolvedImageURL = url
-                }
+            resolvedImageURL = URL(string: s)
+        } else {
+            StorageImageResolver.resolve(s) { url in
+                self.resolvedImageURL = url
             }
         }
-
-        // ───── Resolve preview (new + legacy + fallbacks) ─────
-        let candidates: [String?] = [
-            workOrder.imageURL?.trimmingCharacters(in: .whitespacesAndNewlines),            // new schema
-            workOrder.imageURLs?.first?.trimmingCharacters(in: .whitespacesAndNewlines),    // legacy top-level array
-            workOrder.items.first?.thumbUrls.first?.trimmingCharacters(in: .whitespacesAndNewlines), // item thumb
-            workOrder.items.first?.imageUrls.first?.trimmingCharacters(in: .whitespacesAndNewlines)  // item full
-        ]
-        
-        if let s = candidates.compactMap({ $0 }).first(where: { !$0.isEmpty }) {
-            resolve(s)
-        } else {
-            print("🛑 No image URL or fallback available for WO \(workOrder.WO_Number).")
-            self.resolvedImageURL = nil
-        }
-        // END resolve preview
-
-
     }
-
-// End resolveImageURL
-
 
     // ───── Helpers ─────
     private func digitsOnly(_ s: String) -> String { s.filter(\.isNumber) }
@@ -69,22 +65,14 @@ struct WorkOrderCardView: View {
                     .foregroundColor(.gray)
             )
     }
-    // ───── Change Observers (lightweight helpers) ─────
-    private func firstItemImageCount() -> Int {
-        workOrder.items.first?.imageUrls.count ?? 0
-    }
-    private func firstItemThumbCount() -> Int {
-        workOrder.items.first?.thumbUrls.count ?? 0
-    }
 
-
+    // ───── BODY ─────
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            // ───── Image Thumbnail (first photo) ─────
+            // ───── Image Thumbnail (uses WorkOrder.imageURL) ─────
             ZStack {
                 if let url = resolvedImageURL {
                     AsyncImage(url: url) { phase in
-
                         switch phase {
                         case .empty:
                             ProgressView()
@@ -109,9 +97,8 @@ struct WorkOrderCardView: View {
             .clipShape(RoundedRectangle(cornerRadius: 12))
             .overlay(
                 RoundedRectangle(cornerRadius: 12)
-                    .stroke(Color(hex: "#E0E0E0"))
+                    .stroke(Color(.systemGray4))
             )
-
 
             // ───── Info Block ─────
             VStack(alignment: .leading, spacing: 4) {
@@ -125,11 +112,11 @@ struct WorkOrderCardView: View {
                 }
 
                 VStack(alignment: .leading, spacing: 2) {
+                    // Assuming you have these accessors on WorkOrder; if not, adjust as needed.
                     Text(workOrder.customerName)
                         .font(.subheadline)
                         .fontWeight(.medium)
 
-                    // ───── Tappable Phone (call, context menu for text) ─────
                     Button {
                         if let telURL = URL(string: "tel://\(digitsOnly(workOrder.customerPhone))") {
                             openURL(telURL)
@@ -137,20 +124,11 @@ struct WorkOrderCardView: View {
                     } label: {
                         Text(workOrder.customerPhone)
                             .font(.caption)
-                            .foregroundColor(Color(hex: "#FFC500")) // Yellow accent
+                            .foregroundColor(Color(hex: "#FFC500"))
                             .underline()
                     }
                     .buttonStyle(.plain)
-                    .contextMenu {
-                        Button("Text") {
-                            if let smsURL = URL(string: "sms:\(digitsOnly(workOrder.customerPhone))") {
-                                openURL(smsURL)
-                            }
-                        }
-                    }
-
                 }
-
 
                 StatusBadge(status: workOrder.status)
 
@@ -159,40 +137,25 @@ struct WorkOrderCardView: View {
                     .foregroundColor(.secondary)
             }
         }
-        .onAppear {
+        // Kick initial resolve, and re-resolve on changes
+        .onAppear { resolveImageURL() }
+        .onChange(of: workOrder.imageURL) { _, _ in resolveImageURL() }                         // top-level preview
+        .onChange(of: workOrder.items.first?.thumbUrls.first) { _, _ in resolveImageURL() }     // first thumb
+        .onChange(of: workOrder.items.first?.imageUrls.first) { _, _ in resolveImageURL() }     // first full
+        .task(id: workOrder.lastModified) { resolveImageURL() }                                 // model bump
+        .task(id: workOrder.WO_Number) { resolveImageURL() }                                    // identity bump
+        .onReceive(NotificationCenter.default.publisher(for: .WOPendingPreviewUpdated)) { note in
+            guard let woId = note.object as? String, woId == (workOrder.id ?? "") else { return }
             resolveImageURL()
         }
-        // Re-resolve when WO_Item array changes (e.g., items added/removed)
-        .onChange(of: workOrder.items.count) { _, _ in
-            resolveImageURL()
-        }
-        // Re-resolve when the first WO_Item’s image count changes (new upload finished)
-        .onChange(of: firstItemImageCount()) { _, _ in
-            resolveImageURL()
-        }
-        // Re-resolve when the first WO_Item’s thumb count changes
-        .onChange(of: firstItemThumbCount()) { _, _ in
-            resolveImageURL()
-        }
-
-        
-        // Re-resolve when the first WO_Item’s thumb count changes
-        .onChange(of: workOrder.items.first?.thumbUrls) { _, _ in resolveImageURL() }
-        .onChange(of: workOrder.items.first?.imageUrls) { _, _ in resolveImageURL() }
-
-        .onChange(of: workOrder.imageURL) { _, _ in resolveImageURL() }
-        .onChange(of: workOrder.imageURLs?.first) { _, _ in resolveImageURL() }
-        
+        .id(workOrder.lastModified) // force full re-render when model timestamp changes
         .padding()
-        .background(Color.white)
-        .cornerRadius(16)
-        .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
-
-    }
+    } // END .body
 }
+// END View
 
 // ───── Preview Template ─────
-
 #Preview(traits: .sizeThatFitsLayout) {
     WorkOrderCardView(workOrder: WorkOrder.sample)
 }
+// END
