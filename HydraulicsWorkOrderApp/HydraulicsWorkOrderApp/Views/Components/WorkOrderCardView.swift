@@ -22,18 +22,16 @@ struct WorkOrderCardView: View {
 
     // Local state for resolved preview URL
     @State private var resolvedImageURL: URL? = nil
+    @State private var isPressed: Bool = false
 
-    // ───── Resolve preview from WorkOrder.imageURL only ─────
+    // ───── Resolve preview (local coalesce: legacy-aware) ─────
     private func resolveImageURL() {
-        // Preferred: top-level preview URL
         let top = workOrder.imageURL?.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        // Fallbacks: first item's thumb or full image
+        let legacy = workOrder.imageURLs?.first?.trimmingCharacters(in: .whitespacesAndNewlines)
         let itemThumb = workOrder.items.first?.thumbUrls.first?.trimmingCharacters(in: .whitespacesAndNewlines)
         let itemFull  = workOrder.items.first?.imageUrls.first?.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        // Choose first non-empty
-        let chosen = [top, itemThumb, itemFull]
+        let chosen = [legacy, itemThumb, itemFull, top]
             .compactMap { $0 }
             .first { !$0.isEmpty }
 
@@ -76,24 +74,27 @@ struct WorkOrderCardView: View {
                         switch phase {
                         case .empty:
                             ProgressView()
-                                .frame(maxWidth: .infinity, minHeight: 140)
+                                .frame(maxWidth: .infinity, minHeight: 180, maxHeight: 180)
                         case .success(let image):
                             image
                                 .resizable()
                                 .scaledToFill()
-                                .frame(maxWidth: .infinity, minHeight: 140)
+                                .frame(maxWidth: .infinity, minHeight: 180, maxHeight: 180) // fixed thumbnail height
                                 .clipped()
                         case .failure:
                             placeholderImage
+                                .frame(maxWidth: .infinity, minHeight: 180, maxHeight: 180)
                         @unknown default:
                             placeholderImage
+                                .frame(maxWidth: .infinity, minHeight: 180, maxHeight: 180)
                         }
                     }
                 } else {
                     placeholderImage
+                        .frame(maxWidth: .infinity, minHeight: 180, maxHeight: 180)
                 }
             }
-            .aspectRatio(4/3, contentMode: .fit)
+            .frame(height: 180) // enforce uniform card image height
             .clipShape(RoundedRectangle(cornerRadius: 12))
             .overlay(
                 RoundedRectangle(cornerRadius: 12)
@@ -105,6 +106,8 @@ struct WorkOrderCardView: View {
                 HStack {
                     Text("WO \(workOrder.WO_Number)")
                         .font(.headline)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
                     if workOrder.flagged {
                         Image(systemName: "flag.fill")
                             .foregroundColor(.red)
@@ -116,6 +119,8 @@ struct WorkOrderCardView: View {
                     Text(workOrder.customerName)
                         .font(.subheadline)
                         .fontWeight(.medium)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
 
                     Button {
                         if let telURL = URL(string: "tel://\(digitsOnly(workOrder.customerPhone))") {
@@ -126,6 +131,8 @@ struct WorkOrderCardView: View {
                             .font(.caption)
                             .foregroundColor(Color(hex: "#FFC500"))
                             .underline()
+                            .lineLimit(1)
+                            .truncationMode(.middle)
                     }
                     .buttonStyle(.plain)
                 }
@@ -135,13 +142,15 @@ struct WorkOrderCardView: View {
                 Text(workOrder.timestamp.formatted(date: .abbreviated, time: .shortened))
                     .font(.caption)
                     .foregroundColor(.secondary)
+                    .lineLimit(1)
             }
         }
         // Kick initial resolve, and re-resolve on changes
         .onAppear { resolveImageURL() }
         .onChange(of: workOrder.imageURL) { _, _ in resolveImageURL() }                         // top-level preview
-        .onChange(of: workOrder.items.first?.thumbUrls.first) { _, _ in resolveImageURL() }     // first thumb
-        .onChange(of: workOrder.items.first?.imageUrls.first) { _, _ in resolveImageURL() }     // first full
+        .onChange(of: workOrder.items.first?.thumbUrls) { _, _ in resolveImageURL() }           // any thumb change
+        .onChange(of: workOrder.items.first?.imageUrls) { _, _ in resolveImageURL() }           // any full change
+        .onChange(of: workOrder.imageURLs) { _, _ in resolveImageURL() }                        // legacy plural
         .task(id: workOrder.lastModified) { resolveImageURL() }                                 // model bump
         .task(id: workOrder.WO_Number) { resolveImageURL() }                                    // identity bump
         .onReceive(NotificationCenter.default.publisher(for: .WOPendingPreviewUpdated)) { note in
@@ -150,6 +159,32 @@ struct WorkOrderCardView: View {
         }
         .id(workOrder.lastModified) // force full re-render when model timestamp changes
         .padding()
+        .background(Color.white)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        // ───── Pressed-State Border (outer card) ─────
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(isPressed ? Color(.systemGray2) : Color.clear, lineWidth: isPressed ? 2 : 0)
+        )
+        // ───── Subtle Depth ─────
+        .shadow(color: Color.black.opacity(isPressed ? 0.18 : 0.12), radius: isPressed ? 8 : 6, x: 0, y: isPressed ? 4 : 3)
+        // ───── Press Animation ─────
+        .scaleEffect(isPressed ? 0.98 : 1.0)
+        .animation(.spring(response: 0.26, dampingFraction: 0.82, blendDuration: 0.2), value: isPressed)
+        .padding(.vertical, 6)
+        .padding(.horizontal, 6)
+        // ───── Press Feedback that doesn't steal taps ─────
+        .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous)) // ensure whole card is tappable
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 0)
+                .onChanged { _ in
+                    if !isPressed { isPressed = true }
+                }
+                .onEnded { _ in
+                    isPressed = false
+                }
+        )
+        .onDisappear { isPressed = false }
     } // END .body
 }
 // END View

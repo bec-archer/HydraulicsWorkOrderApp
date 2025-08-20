@@ -449,8 +449,8 @@ struct PhotoCaptureUploadView: View {
                             }
                         }
                         // Ensure parent WorkOrder shows a preview immediately
-                        WorkOrdersDatabase.shared.setWorkOrderPreviewIfEmpty(woId: resolvedDocId, previewURL: thumbURL)
-                        WorkOrdersDatabase.shared.scheduleWOPreviewPersistRetry(woId: resolvedDocId, url: thumbURL, delay: 1.0)
+                        WorkOrdersDatabase.shared.setWorkOrderPreviewIfEmpty(containingItem: woItemId, previewURL: thumbURL)
+                        WorkOrdersDatabase.shared.scheduleWOPreviewPersistRetry(containingItem: woItemId, url: thumbURL, delay: 1.0)
                     } catch {
                         pendingErrors.append(error.localizedDescription)
                     }
@@ -622,6 +622,35 @@ extension WorkOrdersDatabase {
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
             self.setWorkOrderPreviewIfEmpty(woId: woId, previewURL: url)
+        }
+    }
+
+    /// Variant that resolves the parent WorkOrder by walking items (avoids id type mismatches).
+    func setWorkOrderPreviewIfEmpty(containingItem itemId: UUID, previewURL: String) {
+        guard let woIndex = workOrders.firstIndex(where: { wo in
+            wo.items.contains(where: { $0.id == itemId })
+        }) else {
+            #if DEBUG
+            print("ℹ️ setWorkOrderPreviewIfEmpty(containingItem:): parent WO not found for item \(itemId)")
+            #endif
+            return
+        }
+        let current = workOrders[woIndex].imageURL?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard current.isEmpty else { return }
+        workOrders[woIndex].imageURL = previewURL
+        workOrders[woIndex].lastModified = Date()
+        let updated = workOrders[woIndex]
+        workOrders[woIndex] = updated
+        #if DEBUG
+        print("✅ Preview set (via item) for WO \(workOrders[woIndex].WO_Number): \(previewURL)")
+        #endif
+    }
+
+    /// Retry helper that uses item containment to find the parent WorkOrder later.
+    func scheduleWOPreviewPersistRetry(containingItem itemId: UUID, url: String, delay: TimeInterval) {
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            self.setWorkOrderPreviewIfEmpty(containingItem: itemId, previewURL: url)
         }
     }
 }
