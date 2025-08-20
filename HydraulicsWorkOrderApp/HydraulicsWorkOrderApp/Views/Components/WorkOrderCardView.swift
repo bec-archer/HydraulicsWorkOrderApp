@@ -35,14 +35,21 @@ struct WorkOrderCardView: View {
             }
         }
 
-        if let s = workOrder.imageURL {
-            resolve(s)
-        } else if let s = workOrder.items.first?.thumbUrls.first ?? workOrder.items.first?.imageUrls.first {
+        // ───── Resolve preview (new + legacy + fallbacks) ─────
+        let candidates: [String?] = [
+            workOrder.imageURL?.trimmingCharacters(in: .whitespacesAndNewlines),            // new schema
+            workOrder.imageURLs?.first?.trimmingCharacters(in: .whitespacesAndNewlines),    // legacy top-level array
+            workOrder.items.first?.thumbUrls.first?.trimmingCharacters(in: .whitespacesAndNewlines), // item thumb
+            workOrder.items.first?.imageUrls.first?.trimmingCharacters(in: .whitespacesAndNewlines)  // item full
+        ]
+        
+        if let s = candidates.compactMap({ $0 }).first(where: { !$0.isEmpty }) {
             resolve(s)
         } else {
-            print("🛑 No image URL or fallback available.")
+            print("🛑 No image URL or fallback available for WO \(workOrder.WO_Number).")
             self.resolvedImageURL = nil
         }
+        // END resolve preview
 
 
     }
@@ -173,6 +180,9 @@ struct WorkOrderCardView: View {
         .onChange(of: workOrder.items.first?.thumbUrls) { _, _ in resolveImageURL() }
         .onChange(of: workOrder.items.first?.imageUrls) { _, _ in resolveImageURL() }
 
+        .onChange(of: workOrder.imageURL) { _, _ in resolveImageURL() }
+        .onChange(of: workOrder.imageURLs?.first) { _, _ in resolveImageURL() }
+        
         .padding()
         .background(Color.white)
         .cornerRadius(16)

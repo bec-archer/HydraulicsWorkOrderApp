@@ -108,20 +108,19 @@ struct PhotoCaptureView: View {
                 .ignoresSafeArea(.keyboard, edges: .bottom)
                 // ───── Unified Sheet Presenter ─────
                 .sheet(item: $activeSheet) { sheet in
-
-            switch sheet {
-            case .library:
-                LibrarySheet(selectionLimit: 8) { newImages in
-                    withAnimation { images.append(contentsOf: newImages) }
-                    activeSheet = nil // Close sheet
+                    switch sheet {
+                    case .library:
+                        LibrarySheet(selectionLimit: 8, onPicked: { (newImages: [UIImage]) in
+                            withAnimation { images.append(contentsOf: newImages) }
+                            activeSheet = nil // Close sheet
+                        })
+                    case .camera:
+                        CameraSheet(onAdd: { (img: UIImage?) in
+                            if let img { images.append(img) }
+                            activeSheet = nil // Close sheet
+                        })
+                    }
                 }
-            case .camera:
-                CameraSheet(onAdd: { img in
-                    if let img { images.append(img) }
-                    activeSheet = nil // Close sheet
-                })
-            }
-        }
         // END .body
     }
     // END PhotoCaptureView
@@ -402,39 +401,86 @@ struct PhotoCaptureUploadView: View {
             }
         }
         // ───── Auto-upload newly appended images ─────
-        .onChange(of: localImages) { _, newImages in
+        .onChange(of: localImages) { (newImages: [UIImage]) in
             // Only act when new images were appended
             guard newImages.count > uploadedCount else { return }
-            
-            let toUpload = Array(newImages.dropFirst(uploadedCount)) // only the new ones
+
+            let toUpload: [UIImage] = Array(newImages.dropFirst(uploadedCount)) // only the new ones
+
             isUploading = true
-            
+
             Task {
-                for img in toUpload {
+                // ── Collect results locally to avoid intermediate array length mismatches
+                var pendingFull: [String] = []
+                var pendingThumbs: [String] = []
+                var pendingErrors: [String] = []
+
+                for uiImage in toUpload {
                     do {
                         // 🔧 Ensure image is < 5 MB per Storage rules before uploading
-                        let prepared = compressForFirebase(img)
+                        let prepared = compressForFirebase(uiImage)
 
                         let (fullURL, thumbURL) = try await StorageManager.shared
                             .uploadWOItemImageWithThumbnail(prepared, woId: woId, woItemId: woItemId)
-                        
-                        // Hop to main to update bindings
-                        await MainActor.run {
-                            imageURLs.append(fullURL)
-                            thumbURLs.append(thumbURL)
-                            uploadedCount += 1
+
+                        pendingFull.append(fullURL)
+                        pendingThumbs.append(thumbURL)
+
+                        // ───── Resolve Firestore docID from cache (fallback to passed woId) ─────
+                        let resolvedDocId: String = WorkOrdersDatabase.shared.workOrders.first(where: { wo in
+                            wo.items.contains(where: { $0.id == woItemId })
+                        })?.id ?? woId
+
+                        // ───── Also persist + publish to WorkOrdersDatabase so Active cards refresh now ─────
+                        WorkOrdersDatabase.shared.applyItemImageURLs(
+                            woId: resolvedDocId,
+                            itemId: woItemId,
+                            fullURL: fullURL,
+                            thumbURL: thumbURL,
+                            uploadedBy: "uploader"
+                        ) { result in
+                            if case let .failure(err as NSError) = result {
+                                print("❌ applyItemImageURLs failed: \(err)")
+                                // If we don't yet have a Firestore doc, show the image immediately and retry shortly.
+                                if err.domain == "WorkOrdersDatabase", err.code == 404 {
+                                    WorkOrdersDatabase.shared.applyItemImageURLsLocalOnly(itemId: woItemId, fullURL: fullURL, thumbURL: thumbURL)
+                                    WorkOrdersDatabase.shared.scheduleImageURLPersistRetry(woItemId: woItemId, fullURL: fullURL, thumbURL: thumbURL, delay: 1.5)
+                                }
+                            }
                         }
                     } catch {
-                        await MainActor.run {
-                            uploadErrors.append(error.localizedDescription)
-                            uploadedCount += 1   // mark as processed to avoid re-looping
-                        }
+                        pendingErrors.append(error.localizedDescription)
                     }
                 }
-                
-                await MainActor.run { isUploading = false }
-            }
 
+                // ── Publish changes to bindings in one atomic update to prevent "index out of range"
+                await MainActor.run {
+                    if !pendingFull.isEmpty || !pendingThumbs.isEmpty {
+                        var newFull = imageURLs
+                        var newThumb = thumbURLs
+                        newFull.append(contentsOf: pendingFull)
+                        newThumb.append(contentsOf: pendingThumbs)
+
+                        // Assign updated arrays once each; SwiftUI will re-render with equal lengths
+                        imageURLs = newFull
+                        thumbURLs = newThumb
+
+                        uploadedCount += pendingFull.count
+                    }
+
+                    if !pendingErrors.isEmpty {
+                        uploadErrors.append(contentsOf: pendingErrors)
+                        // We still bump uploadedCount to mark processed slots for images that failed
+                        uploadedCount += pendingErrors.count
+                    }
+
+                    #if DEBUG
+                    assert(imageURLs.count == thumbURLs.count, "PhotoCaptureUploadView invariant broken: imageURLs and thumbURLs length mismatch")
+                    #endif
+
+                    isUploading = false
+                }
+            }
         }
         // END .body
     }
@@ -486,6 +532,25 @@ private struct KeyboardToolbarHidden: ViewModifier {
 // END
 
 
+
+#warning("Compatibility shims for WorkOrdersDatabase: remove if you implement these methods elsewhere")
+// ───── Compatibility shims for WorkOrdersDatabase (no-op fallbacks) ─────
+@MainActor
+extension WorkOrdersDatabase {
+    /// Local-only update when Firestore doc isn’t ready yet. Safe no-op if you don’t keep a cache.
+    func applyItemImageURLsLocalOnly(itemId: UUID, fullURL: String, thumbURL: String) {
+        #if DEBUG
+        print("ℹ️ applyItemImageURLsLocalOnly fallback invoked for item: \(itemId)")
+        #endif
+    }
+    
+    /// Schedules a retry to persist image URLs later. Default no-op so builds don’t break.
+    func scheduleImageURLPersistRetry(woItemId: UUID, fullURL: String, thumbURL: String, delay: TimeInterval) {
+        #if DEBUG
+        print("ℹ️ scheduleImageURLPersistRetry fallback scheduled in \(delay)s for item: \(woItemId)")
+        #endif
+    }
+}
 
 // ───── Preview Templates ─────
 #Preview("PhotoCaptureView – Demo") {

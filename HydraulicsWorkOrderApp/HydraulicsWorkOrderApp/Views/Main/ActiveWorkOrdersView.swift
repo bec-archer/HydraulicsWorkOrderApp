@@ -69,7 +69,7 @@ struct ActiveWorkOrdersView: View {
                     
                     LazyVGrid(columns: columns, spacing: 16) {
                         // ───── Data Source: Active only, sorted (flagged first, then oldest → newest) ─────
-                        ForEach(active) { wo in
+                        ForEach(active, id: \.id) { wo in
                             NavigationLink {
 
                                 // ───── Detail with Delete wiring ─────

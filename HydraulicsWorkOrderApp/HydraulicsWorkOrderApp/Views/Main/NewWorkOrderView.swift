@@ -244,7 +244,7 @@ struct NewWorkOrderView: View {
                         handleDeleteWOItem(indexToDelete)
                     }
                 )
-                .id($woItem.id) // stabilize identity per WO_Item
+                .id(woItem.id) // stabilize identity per WO_Item (use value, not Binding)
                 .padding(12)
                 .background(
                     RoundedRectangle(cornerRadius: 14)
@@ -438,8 +438,9 @@ struct NewWorkOrderView: View {
             }
 
             // Build WorkOrder with resolved number
+            // Build WorkOrder with resolved number
             let wo = WorkOrder(
-                id: nil,                    // keep ID consistent with Storage folder
+                id: nil,                                   // @DocumentID → Firestore assigns; don’t seed this
                 createdBy: "Tech",
                 customerId: customer.id.uuidString,
                 customerName: customer.name,
@@ -464,43 +465,39 @@ struct NewWorkOrderView: View {
             )
             // ───── END Build WorkOrder ─────
 
-            // ───── Persist to Firestore (Codable) ─────
-            do {
-                let db = Firestore.firestore()
-                try db.collection("workOrders")
-                    .document(draftWOId)
-                    .setData(from: wo)
-
-                // UI updates on main
-                DispatchQueue.main.async {
-                    savedWONumber = wo.WO_Number
-                    showSaveBanner = true
-
-                    // Route back to Active immediately (caller sets AppState)
-                    onSuccess?()
-
-                    // Defer teardown one tick to let SwiftUI finish tearing down item subviews.
+            // ───── Persist via WorkOrdersDatabase (auto-ID; prevents overwrite) ─────
+            WorkOrdersDatabase.shared.addWorkOrder(wo) { result in
+                switch result {
+                case .success(_): // ignore returned docId if any
                     DispatchQueue.main.async {
-                        withAnimation(.none) {
-                            // Reset local form state for the next intake
-                            selectedCustomer = nil
-                            customerSearch.resetSearch()
-                            flagged = false
-                            items = [WO_Item.blank()]
-                            expandedIndex = 0
-                            draftWOId = UUID().uuidString
+                        savedWONumber = wo.WO_Number
+                        showSaveBanner = true
+
+                        // 🚩 Make a fresh storage namespace immediately for the NEXT WorkOrder
+                        draftWOId = UUID().uuidString
+
+                        // Route back to Active immediately (caller sets AppState)
+                        onSuccess?()
+
+                        // Defer form reset one tick to avoid tearing down subviews mid-update
+                        DispatchQueue.main.async {
+                            withAnimation(.none) {
+                                selectedCustomer = nil
+                                customerSearch.resetSearch()
+                                flagged = false
+                                items = [WO_Item.blank()]
+                                expandedIndex = 0
+                            }
                         }
                     }
-                }
-
-
-            } catch {
-                DispatchQueue.main.async {
-                    alertMessage = "❌ Failed to save WorkOrder: \(error.localizedDescription)"
-                    showAlert = true
+                case .failure(let error):
+                    DispatchQueue.main.async {
+                        alertMessage = "❌ Failed to save WorkOrder: \(error.localizedDescription)"
+                        showAlert = true
+                    }
                 }
             }
-            // ───── END Persist ─────
+            // ───── END Persist via WorkOrdersDatabase ─────
         }
         // ───── END Async save ─────
 

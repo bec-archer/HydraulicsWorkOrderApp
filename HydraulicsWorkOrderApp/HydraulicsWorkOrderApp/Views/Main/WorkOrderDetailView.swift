@@ -4,6 +4,7 @@
 
 import SwiftUI
 import Foundation
+import UIKit
 
 // ───── WorkOrder Wrapper Class ─────
 class WorkOrderWrapper: ObservableObject {
@@ -179,69 +180,70 @@ struct WorkOrderDetailView: View {
                 .font(.title3.weight(.semibold))
             
             // ───── Per‑Item Cards ─────
-            ForEach(woWrapper.wo.items) { item in
+            ForEach(Array(woWrapper.wo.items.enumerated()), id: \.element.id) { idx, item in
                 VStack(alignment: .leading, spacing: 10) {
-                    // ItemCard for each WO_Item (full‑width)
-                    if let idx = woWrapper.wo.items.firstIndex(where: { $0.id == item.id }) {
-                        ItemCard(
-                            item: item,
-                            imageURLs: Binding(
-                                get: { woWrapper.wo.items[idx].imageUrls },
-                                set: { woWrapper.wo.items[idx].imageUrls = $0 }
-                            ),
-                            thumbURLs: Binding(
-                                get: { woWrapper.wo.items[idx].thumbUrls },
-                                set: { woWrapper.wo.items[idx].thumbUrls = $0 }
-                            ),
-                            woId: woWrapper.wo.id,
-                            onImageTap: { url in
-                                selectedImageURL = url
-                                DispatchQueue.main.async {
-                                    print("🧷 Will present viewer for: \(url.absoluteString)")
-                                    showImageViewer = true
-                                }
-                            },
-                            onAddNote: { item, note in
-                                // Append to the correct WO_Item in-memory
-                                if let noteIdx = woWrapper.wo.items.firstIndex(where: { $0.id == item.id }) {
-                                    woWrapper.wo.items[noteIdx].notes.append(note)
-                                    woWrapper.wo.lastModified = Date()
-                                    woWrapper.wo.lastModifiedBy = note.user
-                                    
-                                    // Persist to your DB; assumes database layer accepts note.imageURLs
-                                    WorkOrdersDatabase.shared.addItemNote(
-                                        woId: woWrapper.wo.id ?? "",
-                                        itemId: item.id,
-                                        note: note
-                                    ) { result in
-                                        switch result {
-                                        case .success:
-                                            print("✅ Note saved for \(item.type) – images: \(note.imageURLs.count)")
-                                        case .failure(let err):
-                                            print("❌ Failed to save note: \(err.localizedDescription)")
-                                        }
-                                    }
-                                }
-                                // Bubble to any external listener if provided
-                                onAddItemNote?(item, note)
-                            },
-                            onChangeStatus: { item, newStatus in
-                                /* unchanged */
-                            }
-                        )
-                        .padding(12)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Color(.systemGray6))
-                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 16)
-                                .strokeBorder(Color.gray.opacity(0.1))
-                        )
-                        
-                        // ───── Per‑Item Notes & Status Timeline ─────
-                        itemTimelineCard(for: item)
-                            .frame(maxWidth: .infinity)
+                    // Precompute bindings & handlers to reduce type-checking load
+                    let imageURLsBinding: Binding<[String]> = Binding(
+                        get: { woWrapper.wo.items[idx].imageUrls },
+                        set: { woWrapper.wo.items[idx].imageUrls = $0 }
+                    )
+                    let thumbURLsBinding: Binding<[String]> = Binding(
+                        get: { woWrapper.wo.items[idx].thumbUrls },
+                        set: { woWrapper.wo.items[idx].thumbUrls = $0 }
+                    )
+                    let handleImageTap: (URL) -> Void = { url in
+                        selectedImageURL = url
+                        DispatchQueue.main.async {
+                            print("🧷 Will present viewer for: \(url.absoluteString)")
+                            showImageViewer = true
+                        }
                     }
+                    let handleAddNote: (WO_Item, WO_Note) -> Void = { item, note in
+                        if let itemIdx = woWrapper.wo.items.firstIndex(where: { $0.id == item.id }) {
+                            woWrapper.wo.items[itemIdx].notes.append(note)
+                            woWrapper.wo.lastModified = Date()
+                            woWrapper.wo.lastModifiedBy = note.user
+
+                            let woIdString   = woWrapper.wo.id ?? ""                   // use existing String id or empty fallback
+                            WorkOrdersDatabase.shared.addItemNote(
+                                woId: woIdString,
+                                itemId: item.id,
+                                note: note
+                            ) { result in
+                                switch result {
+                                case .success:
+                                    print("✅ Note saved for \(item.type) – images: \(note.imageURLs.count)")
+                                case .failure(let err):
+                                    print("❌ Failed to save note: \(err.localizedDescription)")
+                                }
+                            }
+                        }
+                        onAddItemNote?(item, note)
+                    }
+                    
+                    ItemCard(
+                        item: item,
+                        imageURLs: imageURLsBinding,
+                        thumbURLs: thumbURLsBinding,
+                        woId: (woWrapper.wo.id ?? ""),
+                        onImageTap: handleImageTap,
+                        onAddNote: handleAddNote,
+                        onChangeStatus: { item, newStatus in
+                            /* unchanged */
+                        }
+                    )
+                    .padding(12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color(.systemGray6))
+                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16)
+                            .strokeBorder(Color.gray.opacity(0.1))
+                    )
+                    
+                    // ───── Per‑Item Notes & Status Timeline ─────
+                    itemTimelineCard(for: item)
+                        .frame(maxWidth: .infinity)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 0)
@@ -374,19 +376,18 @@ struct WorkOrderDetailView: View {
             VStack(alignment: .leading, spacing: 12) {
                 Text("Images")
                     .font(.headline)
-                
+
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 10) {
-                        ForEach(Array(item.thumbUrls.enumerated()), id: \.offset) { idx, thumb in
+                        // Keep thumbnails and full-size URLs paired to avoid mismatch or index drift
+                        ForEach(Array(zip(item.thumbUrls, item.imageUrls)), id: \.1) { (thumb, full) in
                             if let thumbURL = URL(string: thumb) {
                                 Button {
-                                    // Prefer matching full‑size URL at same index; fallback to thumb
-                                    let target = (item.imageUrls.indices.contains(idx) ? item.imageUrls[idx] : thumb)
-                                    if let fullURL = URL(string: target) {
+                                    // Prefer full paired URL; fall back to thumb if full is invalid
+                                    let target = URL(string: full) ?? URL(string: thumb)
+                                    if let fullURL = target {
                                         selectedImageURL = fullURL
-                                        DispatchQueue.main.async {
-                                            showImageViewer = true
-                                        }
+                                        DispatchQueue.main.async { showImageViewer = true }
                                     }
                                 } label: {
                                     AsyncImage(url: thumbURL) { phase in
@@ -413,6 +414,44 @@ struct WorkOrderDetailView: View {
                         }
                     }
                     .padding(.vertical, 2)
+                }
+
+                // Legacy fallback (rare): if we had thumbs but no paired full-size URLs yet,
+                // show standalone thumbs so the UI still renders something.
+                if item.imageUrls.isEmpty {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 10) {
+                            ForEach(item.thumbUrls, id: \.self) { thumb in
+                                if let thumbURL = URL(string: thumb) {
+                                    Button {
+                                        selectedImageURL = thumbURL
+                                        DispatchQueue.main.async { showImageViewer = true }
+                                    } label: {
+                                        AsyncImage(url: thumbURL) { phase in
+                                            switch phase {
+                                            case .empty:
+                                                ProgressView().frame(width: 96, height: 96)
+                                            case .success(let image):
+                                                image
+                                                    .resizable()
+                                                    .scaledToFill()
+                                                    .frame(width: 96, height: 96)
+                                                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                                            case .failure:
+                                                Color.gray
+                                                    .frame(width: 96, height: 96)
+                                                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                                            @unknown default:
+                                                EmptyView()
+                                            }
+                                        }
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                        }
+                        .padding(.vertical, 2)
+                    }
                 }
             }
             .padding(12)

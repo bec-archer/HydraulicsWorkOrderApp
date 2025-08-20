@@ -4,29 +4,32 @@ import SwiftUI
 import PhotosUI
 import UIKit
 
-// ───── Image URL Resolver (thumb → full) ─────
-// Returns a valid URL for the tapped index, preferring full-size imageUrls,
-// falling back to thumbUrls if needed. Logs what was tapped (temporary).
+// ───── Image URL Resolver (thumb ↔ full, zipped) ─────
+// Keeps thumbnail and full-size arrays paired to prevent mismatches.
+// Uses zip so UI never indexes past bounds even if one array lags temporarily.
 private func resolvedURL(for item: WO_Item, at index: Int) -> URL? {
-    if item.imageUrls.indices.contains(index) {
-        let full = item.imageUrls[index]
+    let pairs = Array(zip(item.thumbUrls, item.imageUrls))
+    
+    // Preferred: use zipped pair at index
+    if pairs.indices.contains(index) {
+        let (_, full) = pairs[index]
         if let url = URL(string: full), !full.isEmpty {
-            print("🖼️ tapped(full): \(full)") // TEMP logger
+            print("🖼️ tapped(full paired): \(full)")
             return url
         }
     }
-    if item.thumbUrls.indices.contains(index) {
-        let thumb = item.thumbUrls[index]
-        if let url = URL(string: thumb), !thumb.isEmpty {
-            print("🖼️ tapped(thumb): \(thumb)") // TEMP logger
-            return url
-        }
-    }
-    if let first = item.imageUrls.first, let url = URL(string: first), !first.isEmpty {
-        print("🖼️ tapped(fallback-first): \(first)") // TEMP logger
+    
+    // Fallbacks: first valid full, then first valid thumb
+    if let firstFull = item.imageUrls.first, let url = URL(string: firstFull), !firstFull.isEmpty {
+        print("🖼️ tapped(fallback full first): \(firstFull)")
         return url
     }
-    print("🖼️ tapped: no valid URL at index \(index)")
+    if let firstThumb = item.thumbUrls.first, let url = URL(string: firstThumb), !firstThumb.isEmpty {
+        print("🖼️ tapped(fallback thumb first): \(firstThumb)")
+        return url
+    }
+    
+    print("🖼️ tapped: no valid URL for item \(item.id)")
     return nil
 }
 
@@ -70,13 +73,42 @@ struct ItemCard: View {
             // ───── Hero Image + Status Capsule Row ─────
             HStack(alignment: .center, spacing: 12) {
 
-                // Hero image (first intake image)
-                if let thumbStr = item.thumbUrls.first, let thumbURL = URL(string: thumbStr) {
+                // Hero image (first intake image) – keep thumb/full paired
+                let paired = Array(zip(item.thumbUrls, item.imageUrls))
+                if let (thumbStr, _) = paired.first, let thumbURL = URL(string: thumbStr) {
                     Button {
                         if let url = resolvedURL(for: item, at: 0) {
                             onImageTap?(url)
                         } else {
                             print("❌ No resolvable URL for item \(item.id) at index 0")
+                        }
+                    } label: {
+                        AsyncImage(url: thumbURL) { phase in
+                            switch phase {
+                            case .empty:
+                                ProgressView().frame(width: 200, height: 200)
+                            case .success(let image):
+                                image
+                                    .resizable()
+                                    .scaledToFill()
+                                    .frame(width: 200, height: 200)
+                                    .clipped()
+                                    .cornerRadius(12)
+                            case .failure:
+                                Color.gray
+                                    .frame(width: 200, height: 200)
+                                    .cornerRadius(12)
+                            @unknown default:
+                                EmptyView()
+                            }
+                        }
+                    }
+                    .buttonStyle(.plain)
+                } else if let thumbStr = item.thumbUrls.first, let thumbURL = URL(string: thumbStr) {
+                    // Legacy fallback: show first thumb if arrays are temporarily unpaired
+                    Button {
+                        if let url = resolvedURL(for: item, at: 0) {
+                            onImageTap?(url)
                         }
                     } label: {
                         AsyncImage(url: thumbURL) { phase in

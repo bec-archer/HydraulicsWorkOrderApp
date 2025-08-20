@@ -196,6 +196,97 @@ final class WorkOrdersDatabase: ObservableObject {
                 }
             }
     }
+    // ───── IMAGE URL MERGE + LOCAL PUBLISH ─────
+    /// Writes new image URLs for a specific WO_Item and ensures the Active list updates immediately.
+    /// - Parameters:
+    ///   - woId: Firestore documentID of the WorkOrder
+    ///   - itemId: UUID of the WO_Item receiving the image
+    ///   - fullURL: Public URL to the full-resolution image
+    ///   - thumbURL: Public URL to the generated thumbnail
+    /// - Behavior:
+    ///   - Inserts (deduped) into `items[idx].imageUrls` and (if available) `items[idx].thumbUrls`
+    ///   - Sets `workOrder.imageURL` if it is currently nil (so the card has something to show)
+    ///   - Persists to Firestore and then REPLACES the WorkOrder in the published cache on the main queue
+    func applyItemImageURLs(woId: String,
+                            itemId: UUID,
+                            fullURL: String,
+                            thumbURL: String,
+                            uploadedBy user: String = "system",
+                            completion: @escaping (Result<Void, Error>) -> Void) {
+        let docRef = db.collection(collectionName).document(woId)
+
+        docRef.getDocument { [weak self] snap, err in
+            guard let self else { return }
+            if let err = err { completion(.failure(err)); return }
+            guard let snap, snap.exists else {
+                return completion(.failure(NSError(domain: "WorkOrdersDatabase",
+                                                   code: 404,
+                                                   userInfo: [NSLocalizedDescriptionKey: "WorkOrder \(woId) not found"])))
+            }
+
+            do {
+                var wo = try snap.data(as: WorkOrder.self)
+                if wo.id == nil { wo.id = woId } // backfill the @DocumentID if needed
+
+                guard let idx = wo.items.firstIndex(where: { $0.id == itemId }) else {
+                    return completion(.failure(NSError(domain: "WorkOrdersDatabase",
+                                                       code: 404,
+                                                       userInfo: [NSLocalizedDescriptionKey: "WO_Item \(itemId) not found in WorkOrder \(woId)"])))
+                }
+
+                // ───── Insert URLs with de-dupe ─────
+                // Ensure full-size list exists and prepend newest
+                if wo.items[idx].imageUrls.first != fullURL {
+                    if !wo.items[idx].imageUrls.contains(fullURL) {
+                        wo.items[idx].imageUrls.insert(fullURL, at: 0)
+                    }
+                }
+
+                // Some builds include `thumbUrls` on WO_Item. If present, prepend newest thumbnail.
+                // We gate this with optional chaining to avoid compile errors if the property doesn't exist in your model.
+                if var thumbs = (wo.items[idx] as AnyObject).value(forKey: "thumbUrls") as? [String] {
+                    if thumbs.first != thumbURL && !thumbs.contains(thumbURL) {
+                        thumbs.insert(thumbURL, at: 0)
+                        (wo.items[idx] as AnyObject).setValue(thumbs, forKey: "thumbUrls")
+                    }
+                }
+
+                // If the card-level imageURL is still empty, set it to the fresh thumbnail
+                if (wo.imageURL == nil) || (wo.imageURL?.isEmpty == true) {
+                    wo.imageURL = thumbURL
+                }
+
+                wo.lastModified = Date()
+                wo.lastModifiedBy = user
+
+                try docRef.setData(from: wo, merge: false) { err in
+                    if let err = err { completion(.failure(err)); return }
+
+                    // ───── Publish replacement so SwiftUI re-renders immediately ─────
+                    self.replaceInCache(wo)
+                    completion(.success(()))
+                }
+            } catch {
+                completion(.failure(error))
+            }
+        }
+    }
+    // END image URL merge
+
+    // ───── LOCAL CACHE REPLACEMENT (UI REFRESH) ─────
+    /// Replaces the matching WorkOrder in the published cache (by documentID) on the main queue.
+    /// This triggers SwiftUI to re-render ActiveWorkOrdersView and its cards.
+    private func replaceInCache(_ updated: WorkOrder) {
+        DispatchQueue.main.async {
+            if let idx = self.workOrders.firstIndex(where: { $0.id == updated.id }) {
+                self.workOrders[idx] = updated
+            } else {
+                // If not found (e.g., newly added from a different code path), insert at the top
+                self.workOrders.insert(updated, at: 0)
+            }
+        }
+    }
+    // END local cache replacement
     // END
 
     // ───── SOFT DELETE WORK ORDER (role‑gated by caller) ─────

@@ -2,36 +2,40 @@
 //  WorkOrder.swift
 //  HydraulicsWorkOrderApp
 //
-//  Restored + backward-compatible model
+//  Core WorkOrder model – Firestore-first, with backward-compatible image fields.
+//  NOTE: Do not rename fields without updating Firestore + SQLite bindings.
 //
-
-// ─────────────────────────────────────────────────────────────
-// 📄 WorkOrder.swift
-// Core model for Work Orders in HydraulicsWorkOrderApp
-// ─────────────────────────────────────────────────────────────
 import SwiftUI
 import Foundation
 import FirebaseFirestore
 import FirebaseFirestoreSwift
 
-// MARK: - WorkOrder Model
-
+// ─────────────────────────────────────────────────────────────
+// 📄 WorkOrder.swift
+// Core model for Work Orders in HydraulicsWorkOrderApp
+// ─────────────────────────────────────────────────────────────
 struct WorkOrder: Identifiable, Codable, Equatable {
-    
+
     // ───── Firestore Document ID ─────
-    @DocumentID var id: String? // Auto-assigned by Firestore
+    @DocumentID var id: String? // Firestore doc id (string)
 
     // ───── Core Metadata ─────
     var createdBy: String                     // Logged-in user's name
-    
+
     // Customer snapshot (stored for fast display)
     var customerId: String                    // Firebase doc ID
     var customerName: String                  // Snapshot for display
     var customerPhone: String                 // Snapshot for display (legacy fallback from phoneNumber)
-    
+
     var WO_Type: String                       // Cylinder, Pump, etc.
-    var imageURL: String?                     // First image preview (legacy)
-    var imageURLs: [String] = []              // All full-size images (if present) – safe default for legacy docs
+
+    // New schema: single preview URL used by cards / lists
+    var imageURL: String?                     // e.g., first WO_Item thumb
+
+    // Legacy top-level array (older docs). New docs use `imageURL` (singular).
+    // Keep optional so decode doesn’t fail when the key is missing.
+    var imageURLs: [String]? = nil
+
     var timestamp: Date                       // Initial check-in time
     var status: String                        // Checked In, In Progress, etc.
     var WO_Number: String                     // Format: YYMMDD-001
@@ -58,6 +62,30 @@ struct WorkOrder: Identifiable, Codable, Equatable {
     var notes: [WO_Note]
     var items: [WO_Item]
 
+    // ───── Convenience: Derived Thumbnail (String) ─────
+    /// Resolves the best thumbnail URL string for card display.
+    /// Priority: WorkOrder.imageURL → legacy imageURLs[0] → first WO_Item.thumbUrls → first WO_Item.imageUrls.
+    var computedThumbnail: String? {
+        // 1) New schema: single preview on WorkOrder
+        if let s = imageURL, !s.isEmpty { return s }
+        // 2) Legacy schema: first in top-level array
+        if let s = imageURLs?.first, !s.isEmpty { return s }
+        // 3) Fallback to first WO_Item thumb, then full image
+        for item in items {
+            if let s = item.thumbUrls.first, !s.isEmpty { return s }
+            if let s = item.imageUrls.first, !s.isEmpty { return s }
+        }
+        return nil
+    }
+
+    // ───── Derived: Preview thumbnail URL (for cards) ─────
+    /// URL-typed convenience built on top of `computedThumbnail`.
+    var previewThumbURL: URL? {
+        guard let s = computedThumbnail else { return nil }
+        return URL(string: s)
+    }
+    // END Derived
+
     // ───── CodingKeys ─────
     enum CodingKeys: String, CodingKey {
         case createdBy
@@ -69,7 +97,7 @@ struct WorkOrder: Identifiable, Codable, Equatable {
 
         case WO_Type
         case imageURL
-        case imageURLs
+        case imageURLs            // legacy array (optional)
         case timestamp
         case status
         case WO_Number
@@ -109,36 +137,12 @@ struct WorkOrder: Identifiable, Codable, Equatable {
         }
 
         self.WO_Type    = try c.decodeIfPresent(String.self, forKey: .WO_Type) ?? ""
-        
-        // ───── Image URL(s) – Backward compatible ─────
-        // Accept: imageURLs (current), imageUrls (legacy-casing), or single imageURL
-        struct _DynKey: CodingKey {
-            var stringValue: String
-            var intValue: Int?
-            init?(stringValue: String) { self.stringValue = stringValue; self.intValue = nil }
-            init?(intValue: Int) { self.stringValue = "\(intValue)"; self.intValue = intValue }
-        }
-        
-        let raw = try decoder.container(keyedBy: _DynKey.self)
-        // 1) Current plural array
-        let urlsCurrent = try raw.decodeIfPresent([String].self, forKey: _DynKey(stringValue: "imageURLs")!)
-        // 2) Legacy plural array with different casing
-        let urlsLegacy  = try raw.decodeIfPresent([String].self, forKey: _DynKey(stringValue: "imageUrls")!)
-        // 3) Single preview image (legacy)
-        let singleURL   = try c.decodeIfPresent(String.self, forKey: .imageURL)
-        
-        self.imageURL = singleURL
-        if let arr = urlsCurrent, !arr.isEmpty {
-            self.imageURLs = arr
-        } else if let arr = urlsLegacy, !arr.isEmpty {
-            self.imageURLs = arr
-        } else if let one = singleURL {
-            self.imageURLs = [one]
-        } else {
-            self.imageURLs = []
-        }
-        // ───── END image URL(s) decode ─────
-        
+
+        // ───── Image URL – Backward compatible only ─────
+        self.imageURL  = try c.decodeIfPresent(String.self, forKey: .imageURL)
+        self.imageURLs = try c.decodeIfPresent([String].self, forKey: .imageURLs)
+        // ───── END image URL decode ─────
+
         self.timestamp  = try c.decodeIfPresent(Date.self,   forKey: .timestamp) ?? Date()
         self.status     = try c.decodeIfPresent(String.self, forKey: .status) ?? "Checked In"
         self.WO_Number  = try c.decodeIfPresent(String.self, forKey: .WO_Number) ?? ""
@@ -175,10 +179,8 @@ struct WorkOrder: Identifiable, Codable, Equatable {
         try c.encode(customerPhone, forKey: .customerPhone)
 
         try c.encode(WO_Type,   forKey: .WO_Type)
-        try c.encodeIfPresent(imageURL, forKey: .imageURL)
-        if !imageURLs.isEmpty {
-            try c.encode(imageURLs, forKey: .imageURLs)
-        }
+        try c.encodeIfPresent(imageURL,  forKey: .imageURL)
+        try c.encodeIfPresent(imageURLs, forKey: .imageURLs)
         try c.encode(timestamp, forKey: .timestamp)
         try c.encode(status,    forKey: .status)
         try c.encode(WO_Number, forKey: .WO_Number)
@@ -210,7 +212,7 @@ struct WorkOrder: Identifiable, Codable, Equatable {
         customerPhone: String,
         WO_Type: String,
         imageURL: String? = nil,
-        imageURLs: [String] = [],
+        imageURLs: [String]? = nil,
         timestamp: Date,
         status: String,
         WO_Number: String,
@@ -253,9 +255,9 @@ struct WorkOrder: Identifiable, Codable, Equatable {
     }
     // END manual Encodable + memberwise init
 }
+// END WorkOrder
 
 // MARK: - Sample Data for Previews
-
 extension WorkOrder {
     static let sample = WorkOrder(
         id: "preview-WO001",
@@ -265,7 +267,7 @@ extension WorkOrder {
         customerPhone: "555-1234",
         WO_Type: "Cylinder",
         imageURL: nil,
-        imageURLs: [],
+        imageURLs: nil,
         timestamp: Date(),
         status: "Checked In",
         WO_Number: "250820-001",
@@ -288,7 +290,6 @@ extension WorkOrder {
 }
 
 // ───── Preview Template ─────
-
 #Preview(traits: .sizeThatFitsLayout) {
     VStack(alignment: .leading) {
         Text("WorkOrder Preview")
