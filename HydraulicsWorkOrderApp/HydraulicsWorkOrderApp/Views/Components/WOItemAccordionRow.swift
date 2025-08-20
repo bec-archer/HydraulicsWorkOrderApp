@@ -24,53 +24,59 @@ struct WOItemAccordionRow: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            HStack {
-                Text(items[index].type)
-                    .font(.title3)
-                    .bold()
+        Group {
+            if index < items.count {
+                VStack(spacing: 0) {
+                    HStack {
+                        Text(items[index].type)
+                            .font(.title3)
+                            .bold()
 
-                Spacer()
+                        Spacer()
 
-                Button {
-                    withAnimation {
-                        expandedIndex = isExpanded ? nil : index
+                        Button {
+                            withAnimation {
+                                expandedIndex = isExpanded ? nil : index
+                            }
+                        } label: {
+                            Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                                .foregroundStyle(.gray)
+                        }
+
+                        // 🗑 Delete Button
+                        Button(role: .destructive) {
+                            onDelete(index)
+                        } label: {
+                            Image(systemName: "trash")
+                                .foregroundColor(.red)
+                        }
+                        .padding(.leading, 4)
                     }
-                } label: {
-                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                        .foregroundStyle(.gray)
+                    .contentShape(Rectangle())
+
+                    if isExpanded {
+                        Divider()
+
+                        AddWOItemFormView(item: $items[index], woId: woId)
+                            .padding(.top, 8)
+                    }
+                } // END VStack
+                .padding()
+                .background(Color(.systemGroupedBackground))
+                .cornerRadius(12)
+                .sheet(item: $selectedImage) { identifiable in
+                    FullScreenImageViewer(
+                        imageURL: identifiable.url,
+                        isPresented: Binding(
+                            get: { selectedImage != nil },
+                            set: { if !$0 { selectedImage = nil } }
+                        )
+                    )
                 }
-
-                // 🗑 Delete Button
-                Button(role: .destructive) {
-                    onDelete(index)
-                } label: {
-                    Image(systemName: "trash")
-                        .foregroundColor(.red)
-                }
-                .padding(.leading, 4)
+            } else {
+                // If the data source changed and this index is stale, render nothing for this row
+                EmptyView()
             }
-            .contentShape(Rectangle())
-
-            if isExpanded {
-                Divider()
-
-                AddWOItemFormView(item: $items[index], woId: woId)
-                    .padding(.top, 8)
-
-            }
-        } // END VStack
-        .padding()
-        .background(Color(.systemGroupedBackground))
-        .cornerRadius(12)
-        .sheet(item: $selectedImage) { identifiable in
-            FullScreenImageViewer(
-                imageURL: identifiable.url,
-                isPresented: Binding(
-                    get: { selectedImage != nil },
-                    set: { if !$0 { selectedImage = nil } }
-                )
-            )
         }
     } // END body
 } // END WOItemAccordionRow

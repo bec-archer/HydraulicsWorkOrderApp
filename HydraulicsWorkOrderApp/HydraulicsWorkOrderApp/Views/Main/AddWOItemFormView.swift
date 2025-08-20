@@ -1,48 +1,42 @@
-//  AddWOItemFormView.swift
-//  HydraulicsWorkOrderApp
-//
-//  Created by Bec Archer on 8/8/25.
+import SwiftUI
+import UIKit
 
 // ─────────────────────────────────────────────────────────────
 // 📄 AddWOItemFormView.swift
 // Reusable inline form for each WO_Item (no nested Form)
 // ─────────────────────────────────────────────────────────────
 
-import SwiftUI
-import UIKit
-import FirebaseStorage    // ⬅️ for debug listing
-
-// ───── AddWOItemFormView ─────
 struct AddWOItemFormView: View {
+    // Binding to the WO_Item we are editing/creating
     @Binding var item: WO_Item
+
+    // ───── Local UI State ─────
     @State private var customColor = Color.yellow
     @State private var reasonNotes = ""
+    @State private var reasonOptionsSnapshot: [DropdownOption] = []  // stable per-render snapshot
 
-    // Used for Firebase Storage pathing; parent can pass draftWOId/WO_Number
+    // Local selection buffer so Toggles don't mutate the bound array mid-diff
+    @State private var selectedReasons: Set<String> = []
+
+    // Used for Firebase Storage pathing; parent passes draft WO id / WO_Number
     var woId: String = "DRAFT"
 
+    // Managers / singletons
+    private let dropdowns = DropdownManager.shared
 
-    // ───── WorkOrder context (handled by `var woId` above) ─────
-    // (Removed duplicate `let woId`; we keep the single `var woId: String = "DRAFT"`)
-
-
-    // ───── Temporary sink for thumbnail URLs (Option 1: no schema change yet) ─────
-    @State private var trashThumbs: [String] = []
-
-    let dropdowns = DropdownManager.shared
-
+    // ───── BODY ─────
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            
+
             // ───── Photos (uploads full + thumbnail, updates URLs) ─────
             VStack(alignment: .leading, spacing: 8) {
                 Text("Photos")
                     .font(.headline)
 
-                // Uses the wrapper you added in PhotoCaptureView.swift
+                // Wrapper added in PhotoCaptureView.swift (expected to exist in project)
                 PhotoCaptureUploadView(
                     imageURLs: $item.imageUrls,    // full-size URLs
-                    thumbURLs: $item.thumbUrls,    // thumbnail URLs
+                    thumbURLs: $item.thumbUrls,    // thumbnail URLs (if your model does not have this, bind to a dummy @State)
                     woId: woId,
                     woItemId: item.id,
                     showQR: true,
@@ -51,28 +45,12 @@ struct AddWOItemFormView: View {
                         print("Scan QR Code tapped for item \(item.id)")
                     }
                 )
-
             }
             .padding(.bottom, 8)
             // END Photos
-#if DEBUG
-// ───── DEBUG: Show URLs captured on this WO_Item ─────
-Button {
-    debugPrintItemURLs()
-} label: {
-    Text("🔎 Debug: Print image URLs for This WO_Item")
-        .font(.subheadline)
-}
-.buttonStyle(.bordered)
-.padding(.bottom, 8)
-// END DEBUG
-#endif
-
-
 
             // ───── TYPE (Required) ─────
             DropdownField(
-
                 label: "Type *", // visually indicate required
                 options: dropdowns.options["type"] ?? [],
                 selectedValue: Binding(
@@ -150,7 +128,6 @@ Button {
             }
             // END DROPDOWNS GRID
 
-
             // ───── REASONS FOR SERVICE ─────
             Text("Reason(s) for Service")
                 .font(.headline)
@@ -158,18 +135,15 @@ Button {
 
             // Two-column grid of toggles
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], alignment: .leading, spacing: 8) {
-                ForEach(dropdowns.options["reasonsForService"] ?? []) { option in
+                // Use the per-view snapshot captured in state; do not declare local lets in a ViewBuilder
+                ForEach(reasonOptionsSnapshot, id: \.value) { option in
                     Toggle(option.label, isOn: Binding(
-                        get: { item.reasonsForService.contains(option.value) },
+                        get: { selectedReasons.contains(option.value) },
                         set: { isOn in
                             if isOn {
-                                if !item.reasonsForService.contains(option.value) {
-                                    item.reasonsForService.append(option.value)
-                                    DispatchQueue.main.async { item.lastModified = Date() }
-                                }
+                                selectedReasons.insert(option.value)
                             } else {
-                                item.reasonsForService.removeAll { $0 == option.value }
-                                DispatchQueue.main.async { item.lastModified = Date() }
+                                selectedReasons.remove(option.value)
                             }
                         }
                     ))
@@ -177,21 +151,21 @@ Button {
             }
             // END reasons grid
 
-
-            if item.reasonsForService.contains("Other (opens Service Notes)") || item.reasonsForService.contains("Other") {
+            // If "Other" reason selected, show required notes field
+            if selectedReasons.contains("Other (opens Service Notes)") || selectedReasons.contains("Other") {
                 TextField("Service Notes…", text: $reasonNotes)
                     .textFieldStyle(.roundedBorder)
                     .onChange(of: reasonNotes) {
                         item.reasonNotes = reasonNotes
                         DispatchQueue.main.async { item.lastModified = Date() }
                     }
-
                     .padding(.top, 2)
             }
+
         }
         // ───── Color Hex Persistence ─────
-        .onChange(of: item.dropdowns["color"] ?? "") {
-            let trimmed = (item.dropdowns["color"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        .onChange(of: item.dropdowns["color"]) { newValue in
+            let trimmed = (newValue ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
 
             if trimmed.isEmpty {
                 item.dropdowns["colorHex"] = ""
@@ -203,36 +177,37 @@ Button {
                 item.dropdowns["colorHex"] = ""
             }
         }
-        .onChange(of: customColor) {            let isOther = (item.dropdowns["color"] ?? "").caseInsensitiveCompare("Other") == .orderedSame
+        .onChange(of: customColor) { _ in
+            let isOther = (item.dropdowns["color"] ?? "").caseInsensitiveCompare("Other") == .orderedSame
             if isOther { updateColorHexFromCustomColor() }
         }
         .onAppear {
+            // initialize notes + color + reasons snapshot
             reasonNotes = item.reasonNotes ?? ""
             if let hexColor = item.dropdowns["colorHex"], !hexColor.isEmpty {
                 customColor = Color(hex: hexColor)
             }
+            reasonOptionsSnapshot = dropdowns.options["reasonsForService"] ?? []
+            // Seed local toggle buffer from persisted model to avoid mid-diff array mutations
+            selectedReasons = Set(item.reasonsForService)
         }
+        .onChange(of: dropdowns.options["reasonsForService"]?.count ?? 0) { _ in
+            // refresh on the next runloop to avoid mid-diff updates
+            DispatchQueue.main.async {
+                reasonOptionsSnapshot = dropdowns.options["reasonsForService"] ?? []
+            }
+        }
+        .onChange(of: selectedReasons) { newValue in
+            // Commit buffered selections to the bound model in a single write
+            item.reasonsForService = Array(newValue)
+            item.lastModified = Date()
+        }
+        .id(item.id) // stabilize identity across multiple AddWOItemFormView instances
         .padding(12)
     }
-    // ───── DEBUG Helper: list Storage paths for this WO_Item ─────
-    // ───── DEBUG Helper: print the URLs stored on this WO_Item ─────
-    private func debugPrintItemURLs() {
-        print("🔎 WO_Item \(item.id) in WO \(woId)")
-        if item.thumbUrls.isEmpty && item.imageUrls.isEmpty {
-            print("ℹ️ No URLs on item yet. Take/choose a photo and try again.")
-        } else {
-            item.thumbUrls.enumerated().forEach { idx, url in
-                print("🖼 thumb[\(idx)]: \(url)")
-            }
-            item.imageUrls.enumerated().forEach { idx, url in
-                print("🖼 image[\(idx)]: \(url)")
-            }
-        }
-    }
+    // END .body
 
-    // END DEBUG Helper
-
-    // Helper function to update color hex
+    // ───── Helpers ─────
     private func updateColorHexFromCustomColor() {
         if let comps = UIColor(customColor).cgColor.components, comps.count >= 3 {
             let r = Int(round(comps[0] * 255))
@@ -242,8 +217,10 @@ Button {
         }
     }
 }
+// END AddWOItemFormView
 
 // ───── Preview Template ─────
 #Preview {
+    // Provide a minimal sample WO_Item; if your project uses a different factory, adjust as needed
     AddWOItemFormView(item: .constant(WO_Item.sample), woId: "WO_PREVIEW")
 }

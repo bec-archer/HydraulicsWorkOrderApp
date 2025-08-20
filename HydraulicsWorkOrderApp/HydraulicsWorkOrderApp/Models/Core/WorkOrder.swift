@@ -2,13 +2,12 @@
 //  WorkOrder.swift
 //  HydraulicsWorkOrderApp
 //
-//  Created by Bec Archer on 8/8/25.
+//  Restored + backward-compatible model
 //
-
 
 // ─────────────────────────────────────────────────────────────
 // 📄 WorkOrder.swift
-// Core model for Work Orders in HydraulicsCheckInApp
+// Core model for Work Orders in HydraulicsWorkOrderApp
 // ─────────────────────────────────────────────────────────────
 import SwiftUI
 import Foundation
@@ -25,13 +24,14 @@ struct WorkOrder: Identifiable, Codable, Equatable {
     // ───── Core Metadata ─────
     var createdBy: String                     // Logged-in user's name
     
-    var customerId: String                     // Firebase doc ID
+    // Customer snapshot (stored for fast display)
+    var customerId: String                    // Firebase doc ID
     var customerName: String                  // Snapshot for display
-    var customerPhone: String                 // Snapshot for display
-                   // For lookup and display
+    var customerPhone: String                 // Snapshot for display (legacy fallback from phoneNumber)
+    
     var WO_Type: String                       // Cylinder, Pump, etc.
-    var imageURL: String?                     // First image preview
-    var imageURLs: [String] = []              // All full-size images (if present)
+    var imageURL: String?                     // First image preview (legacy)
+    var imageURLs: [String] = []              // All full-size images (if present) – safe default for legacy docs
     var timestamp: Date                       // Initial check-in time
     var status: String                        // Checked In, In Progress, etc.
     var WO_Number: String                     // Format: YYMMDD-001
@@ -44,7 +44,7 @@ struct WorkOrder: Identifiable, Codable, Equatable {
 
     // ───── Dropdown Snapshot ─────
     var dropdowns: [String: String]           // Frozen at creation
-    var dropdownSchemaVersion: Int           // For backward compatibility
+    var dropdownSchemaVersion: Int            // For backward compatibility
 
     // ───── Last Updated Info ─────
     var lastModified: Date
@@ -58,7 +58,7 @@ struct WorkOrder: Identifiable, Codable, Equatable {
     var notes: [WO_Note]
     var items: [WO_Item]
 
-    // ───── Legacy‑safe CodingKeys & Decoder ─────
+    // ───── CodingKeys ─────
     enum CodingKeys: String, CodingKey {
         case createdBy
 
@@ -92,7 +92,7 @@ struct WorkOrder: Identifiable, Codable, Equatable {
         case items
     }
 
-
+    // ───── Backward-Compatible Decoder ─────
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
 
@@ -109,8 +109,36 @@ struct WorkOrder: Identifiable, Codable, Equatable {
         }
 
         self.WO_Type    = try c.decodeIfPresent(String.self, forKey: .WO_Type) ?? ""
-        self.imageURL   = try c.decodeIfPresent(String.self, forKey: .imageURL)
-        self.imageURLs  = try c.decodeIfPresent([String].self, forKey: .imageURLs) ?? []
+        
+        // ───── Image URL(s) – Backward compatible ─────
+        // Accept: imageURLs (current), imageUrls (legacy-casing), or single imageURL
+        struct _DynKey: CodingKey {
+            var stringValue: String
+            var intValue: Int?
+            init?(stringValue: String) { self.stringValue = stringValue; self.intValue = nil }
+            init?(intValue: Int) { self.stringValue = "\(intValue)"; self.intValue = intValue }
+        }
+        
+        let raw = try decoder.container(keyedBy: _DynKey.self)
+        // 1) Current plural array
+        let urlsCurrent = try raw.decodeIfPresent([String].self, forKey: _DynKey(stringValue: "imageURLs")!)
+        // 2) Legacy plural array with different casing
+        let urlsLegacy  = try raw.decodeIfPresent([String].self, forKey: _DynKey(stringValue: "imageUrls")!)
+        // 3) Single preview image (legacy)
+        let singleURL   = try c.decodeIfPresent(String.self, forKey: .imageURL)
+        
+        self.imageURL = singleURL
+        if let arr = urlsCurrent, !arr.isEmpty {
+            self.imageURLs = arr
+        } else if let arr = urlsLegacy, !arr.isEmpty {
+            self.imageURLs = arr
+        } else if let one = singleURL {
+            self.imageURLs = [one]
+        } else {
+            self.imageURLs = []
+        }
+        // ───── END image URL(s) decode ─────
+        
         self.timestamp  = try c.decodeIfPresent(Date.self,   forKey: .timestamp) ?? Date()
         self.status     = try c.decodeIfPresent(String.self, forKey: .status) ?? "Checked In"
         self.WO_Number  = try c.decodeIfPresent(String.self, forKey: .WO_Number) ?? ""
@@ -134,6 +162,7 @@ struct WorkOrder: Identifiable, Codable, Equatable {
         self.items = try c.decodeIfPresent([WO_Item].self, forKey: .items) ?? []
     }
     // END
+
     // ───── Encodable (manual) ─────
     func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
@@ -147,6 +176,9 @@ struct WorkOrder: Identifiable, Codable, Equatable {
 
         try c.encode(WO_Type,   forKey: .WO_Type)
         try c.encodeIfPresent(imageURL, forKey: .imageURL)
+        if !imageURLs.isEmpty {
+            try c.encode(imageURLs, forKey: .imageURLs)
+        }
         try c.encode(timestamp, forKey: .timestamp)
         try c.encode(status,    forKey: .status)
         try c.encode(WO_Number, forKey: .WO_Number)
@@ -178,6 +210,7 @@ struct WorkOrder: Identifiable, Codable, Equatable {
         customerPhone: String,
         WO_Type: String,
         imageURL: String? = nil,
+        imageURLs: [String] = [],
         timestamp: Date,
         status: String,
         WO_Number: String,
@@ -201,6 +234,7 @@ struct WorkOrder: Identifiable, Codable, Equatable {
         self.customerPhone = customerPhone
         self.WO_Type = WO_Type
         self.imageURL = imageURL
+        self.imageURLs = imageURLs
         self.timestamp = timestamp
         self.status = status
         self.WO_Number = WO_Number
@@ -218,9 +252,7 @@ struct WorkOrder: Identifiable, Codable, Equatable {
         self.items = items
     }
     // END manual Encodable + memberwise init
-
 }
-
 
 // MARK: - Sample Data for Previews
 
@@ -233,9 +265,10 @@ extension WorkOrder {
         customerPhone: "555-1234",
         WO_Type: "Cylinder",
         imageURL: nil,
+        imageURLs: [],
         timestamp: Date(),
         status: "Checked In",
-        WO_Number: "080824-001",
+        WO_Number: "250820-001",
         flagged: true,
         tagId: "QR-ABC123",
         estimatedCost: "$200",

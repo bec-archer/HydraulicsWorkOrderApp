@@ -231,8 +231,10 @@ struct NewWorkOrderView: View {
     private func woItemsSection() -> some View {
         VStack(spacing: 12) {
 
-            // Using Array(...) makes the sequence concrete and faster to type-check
-            ForEach(Array(items.indices), id: \.self) { idx in
+            /// Using binding-based enumeration prevents crashes when `items` mutates (e.g., on Check In).
+            /// Each row is keyed by `item.id`, not by index.
+            // ⚠️ Use binding-based ForEach keyed by item.id to avoid index invalidation during saves
+            ForEach(Array($items.enumerated()), id: \.element.id) { idx, $woItem in
                 WOItemAccordionRow(
                     index: idx,
                     woId: draftWOId,               // ⬅️ pass parent WO id
@@ -242,6 +244,7 @@ struct NewWorkOrderView: View {
                         handleDeleteWOItem(indexToDelete)
                     }
                 )
+                .id($woItem.id) // stabilize identity per WO_Item
                 .padding(12)
                 .background(
                     RoundedRectangle(cornerRadius: 14)
@@ -400,7 +403,22 @@ struct NewWorkOrderView: View {
             return
         }
         // END: Required Field Validation
+        
+        // ───── DEBUG LOG ─────
+        print("📝 DEBUG Save Attempt")
+        print("Customer: \(customer.name) – \(customer.phone)")
+        print("WO_Items count: \(items.count)")
+        for (i, item) in items.enumerated() {
+            print("  Item[\(i)] id=\(item.id) type=\(item.type) " +
+                  "thumbs=\(item.thumbUrls.count) images=\(item.imageUrls.count)")
+        }
 
+        // ───── Snapshot items to avoid mutation during iteration ─────
+        let itemsSnapshot = items
+
+        // Example: build payload with map (no indexing)
+        let builtItems: [WO_Item] = itemsSnapshot.map { $0 }
+         
         // ───── Build WorkOrder (ALL required fields) ─────
         // NOTE: Placeholder values where we haven't wired managers yet.
         // - createdBy / lastModifiedBy will come from UserManager
@@ -427,7 +445,7 @@ struct NewWorkOrderView: View {
                 customerName: customer.name,
                 customerPhone: customer.phone,
                 WO_Type: "Intake",
-                imageURL: items.first?.thumbUrls.first ?? items.first?.imageUrls.first,
+                imageURL: builtItems.first?.thumbUrls.first ?? builtItems.first?.imageUrls.first,
                 timestamp: Date(),
                 status: "Checked In",
                 WO_Number: nextNumber,
@@ -442,7 +460,7 @@ struct NewWorkOrderView: View {
                 tagBypassReason: nil,
                 isDeleted: false,
                 notes: [],
-                items: items
+                items: builtItems
             )
             // ───── END Build WorkOrder ─────
 
@@ -461,13 +479,18 @@ struct NewWorkOrderView: View {
                     // Route back to Active immediately (caller sets AppState)
                     onSuccess?()
 
-                    // Reset local form state for the next intake
-                    selectedCustomer = nil
-                    customerSearch.resetSearch()
-                    flagged = false
-                    items = [WO_Item.blank()]
-                    expandedIndex = 0
-                    draftWOId = UUID().uuidString
+                    // Defer teardown one tick to let SwiftUI finish tearing down item subviews.
+                    DispatchQueue.main.async {
+                        withAnimation(.none) {
+                            // Reset local form state for the next intake
+                            selectedCustomer = nil
+                            customerSearch.resetSearch()
+                            flagged = false
+                            items = [WO_Item.blank()]
+                            expandedIndex = 0
+                            draftWOId = UUID().uuidString
+                        }
+                    }
                 }
 
 

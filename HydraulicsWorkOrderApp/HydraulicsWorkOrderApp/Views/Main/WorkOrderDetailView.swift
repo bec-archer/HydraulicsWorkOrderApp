@@ -20,14 +20,14 @@ struct WorkOrderDetailView: View {
     var onDelete: ((WorkOrder) -> Void)? = nil
     var onAddItemNote: ((WO_Item, WO_Note) -> Void)? = nil
     var onUpdateItemStatus: ((WO_Item, WO_Status, WO_Note) -> Void)? = nil
-
+    
     @StateObject private var woWrapper: WorkOrderWrapper
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var appState: AppState
     @State private var showDeleteConfirm = false
     @State private var showImageViewer = false
     @State private var selectedImageURL: URL? = nil
-
+    
     private var canDelete: Bool {
 #if DEBUG
         return true
@@ -35,7 +35,7 @@ struct WorkOrderDetailView: View {
         return appState.canDeleteWorkOrders()
 #endif
     }
-
+    
     init(
         workOrder: WorkOrder,
         onDelete: ((WorkOrder) -> Void)? = nil,
@@ -48,22 +48,19 @@ struct WorkOrderDetailView: View {
         self.onUpdateItemStatus = onUpdateItemStatus
         _woWrapper = StateObject(wrappedValue: WorkOrderWrapper(workOrder))
     }
-
+    
     // ───── MAIN BODY ─────
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-
+                
                 // ───── Header Section ─────
                 headerSection
-
+                
                 // ───── Work Order Items Section ─────
                 // NOTE: These are functions annotated with @ViewBuilder, so we must CALL them.
                 // Using the identifier without parentheses can lead to ambiguous type errors in ViewBuilder contexts.
                 itemsSection()
-
-                // ───── Global Notes Timeline View ─────
-                notesSection()
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 16)
@@ -115,7 +112,7 @@ struct WorkOrderDetailView: View {
         }
         
     } // END body
-
+    
     // ───── Header Section Extracted ─────
     @ViewBuilder
     private var headerSection: some View {
@@ -125,11 +122,11 @@ struct WorkOrderDetailView: View {
                     .font(.largeTitle.bold())
                 StatusBadge(status: woWrapper.wo.status.isEmpty ? "Checked In" : woWrapper.wo.status)
             }
-
+            
             Text(woWrapper.wo.timestamp.formatted(date: .abbreviated, time: .shortened))
                 .font(.footnote)
                 .foregroundStyle(.secondary)
-
+            
             HStack(spacing: 12) {
                 HStack(spacing: 6) {
                     Image(systemName: "phone.fill")
@@ -154,7 +151,7 @@ struct WorkOrderDetailView: View {
                     }
                 }
                 .accessibilityLabel("Call or text customer")
-
+                
                 if woWrapper.wo.flagged {
                     Label("Flagged", systemImage: "flag.fill")
                         .padding(.horizontal, 10)
@@ -173,14 +170,14 @@ struct WorkOrderDetailView: View {
                 .strokeBorder(Color.primary.opacity(0.06))
         )
     }
-
+    
     // ───── Work Order Items Section Extracted ─────
     @ViewBuilder
     private func itemsSection() -> some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("WO Items")
                 .font(.title3.weight(.semibold))
-
+            
             // ───── Per‑Item Cards ─────
             ForEach(woWrapper.wo.items) { item in
                 VStack(alignment: .leading, spacing: 10) {
@@ -205,7 +202,28 @@ struct WorkOrderDetailView: View {
                                 }
                             },
                             onAddNote: { item, note in
-                                /* unchanged */
+                                // Append to the correct WO_Item in-memory
+                                if let noteIdx = woWrapper.wo.items.firstIndex(where: { $0.id == item.id }) {
+                                    woWrapper.wo.items[noteIdx].notes.append(note)
+                                    woWrapper.wo.lastModified = Date()
+                                    woWrapper.wo.lastModifiedBy = note.user
+                                    
+                                    // Persist to your DB; assumes database layer accepts note.imageURLs
+                                    WorkOrdersDatabase.shared.addItemNote(
+                                        woId: woWrapper.wo.id ?? "",
+                                        itemId: item.id,
+                                        note: note
+                                    ) { result in
+                                        switch result {
+                                        case .success:
+                                            print("✅ Note saved for \(item.type) – images: \(note.imageURLs.count)")
+                                        case .failure(let err):
+                                            print("❌ Failed to save note: \(err.localizedDescription)")
+                                        }
+                                    }
+                                }
+                                // Bubble to any external listener if provided
+                                onAddItemNote?(item, note)
                             },
                             onChangeStatus: { item, newStatus in
                                 /* unchanged */
@@ -219,13 +237,9 @@ struct WorkOrderDetailView: View {
                             RoundedRectangle(cornerRadius: 16)
                                 .strokeBorder(Color.gray.opacity(0.1))
                         )
-
+                        
                         // ───── Per‑Item Notes & Status Timeline ─────
                         itemTimelineCard(for: item)
-                            .frame(maxWidth: .infinity)
-
-                        // ───── Per‑Item Images (thumbnails) ─────
-                        itemImagesCard(for: item)
                             .frame(maxWidth: .infinity)
                     }
                 }
@@ -235,8 +249,8 @@ struct WorkOrderDetailView: View {
             // ───── END Per‑Item Cards ─────
         }
     } // END itemsSection()
-
-
+    
+    
     // ───── Global Notes Timeline Section ─────
     @ViewBuilder
     private func notesSection() -> some View {
@@ -249,11 +263,11 @@ struct WorkOrderDetailView: View {
             text: "Checked In by \(checkInAuthor) at \(checkInTime.formatted(date: .abbreviated, time: .shortened))",
             timestamp: checkInTime
         )
-
+        
         // 2) Combine with all WO_Item notes (already per‑item)
         let itemNotes = woWrapper.wo.items.flatMap { $0.notes }
         let timeline  = [checkInNote] + itemNotes
-
+        
         NotesTimelineView(notes: timeline)
             .padding(.top, 12)
     }
@@ -263,7 +277,7 @@ struct WorkOrderDetailView: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Notes & Status")
                 .font(.headline)
-
+            
             // Status history entries
             if !item.statusHistory.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
@@ -273,7 +287,7 @@ struct WorkOrderDetailView: View {
                                 .font(.system(size: 8))
                                 .foregroundStyle(.secondary)
                                 .padding(.top, 6)
-
+                            
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(s.status)
                                     .font(.subheadline.weight(.semibold))
@@ -285,7 +299,7 @@ struct WorkOrderDetailView: View {
                     }
                 }
             }
-
+            
             // Text notes
             if !item.notes.isEmpty {
                 VStack(alignment: .leading, spacing: 10) {
@@ -295,13 +309,47 @@ struct WorkOrderDetailView: View {
                                 .font(.system(size: 12))
                                 .foregroundStyle(.secondary)
                                 .padding(.top, 3)
-
+                            
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(n.text)
                                     .font(.subheadline)
                                 Text("\(n.user) • \(n.timestamp.formatted(date: .abbreviated, time: .shortened))")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
+                                
+                                // ───── Note-attached images (from WO_Note.imageURLs) ─────
+                                if !n.imageURLs.isEmpty {
+                                    ScrollView(.horizontal, showsIndicators: false) {
+                                        HStack(spacing: 8) {
+                                            ForEach(Array(n.imageURLs.enumerated()), id: \.offset) { _, urlStr in
+                                                if let url = URL(string: urlStr) {
+                                                    Button {
+                                                        selectedImageURL = url
+                                                        DispatchQueue.main.async { showImageViewer = true }
+                                                    } label: {
+                                                        AsyncImage(url: url) { phase in
+                                                            switch phase {
+                                                            case .empty:
+                                                                ProgressView().frame(width: 72, height: 72)
+                                                            case .success(let img):
+                                                                img.resizable().scaledToFill()
+                                                                    .frame(width: 72, height: 72)
+                                                                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                                                            case .failure:
+                                                                Color.gray.frame(width: 72, height: 72)
+                                                                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                                                            @unknown default:
+                                                                EmptyView()
+                                                            }
+                                                        }
+                                                    }
+                                                    .buttonStyle(.plain)
+                                                }
+                                            }
+                                        }
+                                        .padding(.top, 4)
+                                    }
+                                }
                             }
                         }
                     }
@@ -318,7 +366,7 @@ struct WorkOrderDetailView: View {
         )
         .padding(.top, 8)
     }
-
+    
     // ───── Per‑Item Images Card (Thumbnails) ─────
     @ViewBuilder
     private func itemImagesCard(for item: WO_Item) -> some View {
@@ -326,7 +374,7 @@ struct WorkOrderDetailView: View {
             VStack(alignment: .leading, spacing: 12) {
                 Text("Images")
                     .font(.headline)
-
+                
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 10) {
                         ForEach(Array(item.thumbUrls.enumerated()), id: \.offset) { idx, thumb in
@@ -377,43 +425,43 @@ struct WorkOrderDetailView: View {
             )
         }
     }
-
-
+    
+    
     // ───── Preview Template ─────
     
+    
+    // ───── Preview Template ─────
+    #Preview {
+        WorkOrderDetailView(
+            workOrder: WorkOrder(
+                id: UUID().uuidString,
+                createdBy: "Preview User",
+                customerId: "preview-customer-id",
+                customerName: "Maria Hydraulic",
+                customerPhone: "555-1212",
+                WO_Type: "Pump",
+                imageURL: nil,
+                timestamp: Date(),
+                status: "Checked In",
+                WO_Number: "250818-001",
+                flagged: true,
+                tagId: nil,
+                estimatedCost: nil,
+                finalCost: nil,
+                dropdowns: [:],
+                dropdownSchemaVersion: 1,
+                lastModified: Date(),
+                lastModifiedBy: "Preview User",
+                tagBypassReason: nil,
+                isDeleted: false,
+                notes: [],
+                items: []
+            ),
+            onDelete: nil,
+            onAddItemNote: nil,
+            onUpdateItemStatus: nil
+        )
+        .environmentObject(AppState.shared)
+    }
+    // END
 }
-
-// ───── Preview Template ─────
-#Preview {
-    WorkOrderDetailView(
-        workOrder: WorkOrder(
-            id: UUID().uuidString,
-            createdBy: "Preview User",
-            customerId: "preview-customer-id",
-            customerName: "Maria Hydraulic",
-            customerPhone: "555-1212",
-            WO_Type: "Pump",
-            imageURL: nil,
-            timestamp: Date(),
-            status: "Checked In",
-            WO_Number: "250818-001",
-            flagged: true,
-            tagId: nil,
-            estimatedCost: nil,
-            finalCost: nil,
-            dropdowns: [:],
-            dropdownSchemaVersion: 1,
-            lastModified: Date(),
-            lastModifiedBy: "Preview User",
-            tagBypassReason: nil,
-            isDeleted: false,
-            notes: [],
-            items: []
-        ),
-        onDelete: nil,
-        onAddItemNote: nil,
-        onUpdateItemStatus: nil
-    )
-    .environmentObject(AppState.shared)
-}
-// END

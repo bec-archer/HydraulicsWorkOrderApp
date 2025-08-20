@@ -1,60 +1,45 @@
-//  Utilities/Helpers/WorkOrderNumberGenerator.swift
-//  HydraulicsWorkOrderApp
-//
-// ───── WORK ORDER NUMBER GENERATOR ─────
-// Formats WO_Number as YYmmdd-### and helps compute the daily prefix.
-// Uses UTC for consistency across devices.
-// ───────────────────────────────────────
-
 import Foundation
 
+// ─────────────────────────────────────────────────────────────
+// 📄 WorkOrderNumberGenerator.swift
+// Pure generator for creation-time WO numbers. Side-effect free.
+// ─────────────────────────────────────────────────────────────
+
+/// WorkOrder numbers are frozen at creation and NEVER recomputed later.
+/// Format: "YYMMDD-###" e.g., "250820-001"
 struct WorkOrderNumberGenerator {
 
-    // ───── Daily Prefix (UTC) ─────
-    static func dailyPrefix(for date: Date = Date()) -> String {
-        var utc = Calendar(identifier: .gregorian)
-        utc.timeZone = TimeZone(secondsFromGMT: 0)!  // UTC
+    // ───── Public API (Creation-time only) ─────
 
-        let fmt = DateFormatter()
-        fmt.calendar = utc
-        fmt.timeZone = utc.timeZone
-        fmt.locale = Locale(identifier: "en_US_POSIX")
-        fmt.dateFormat = "yyMMdd"                    // YYmmdd
-        return fmt.string(from: date)
-    }
-    // END
-
-    // ───── Final Number Builder ─────
-    static func build(prefix: String, sequence: Int) -> String {
-        let clamped = max(sequence, 1)
-        let seq = String(format: "%03d", clamped)
+    /// Formats a work order number using a specific date and a 1-based sequence.
+    /// - Parameters:
+    ///   - date: The creation date to freeze into the WO number.
+    ///   - sequence: 1-based sequence for that date (e.g., 1 -> "001").
+    /// - Returns: e.g. "250820-001"
+    static func make(date: Date, sequence: Int) -> String {
+        let prefix = Self.prefix(from: date)
+        let seq = String(format: "%03d", max(1, sequence))
         return "\(prefix)-\(seq)"
     }
-    // END
 
-    // ───── Convenience ─────
-    static func make(for date: Date = Date(), sequence: Int) -> String {
-        let prefix = dailyPrefix(for: date)
-        return build(prefix: prefix, sequence: sequence)
+    /// Convenience used by existing call sites that already computed the sequence but
+    /// want "today" as the date. Safe for *creation-time fallback only*.
+    /// - Parameter sequence: 1-based sequence.
+    static func make(sequence: Int) -> String {
+        return make(date: Date(), sequence: sequence)
     }
-    // END
-}
 
-// ───── PREVIEW TEMPLATE (UI-less) ─────
-#if DEBUG
-import SwiftUI
+    // ───── Internals ─────
 
-struct WorkOrderNumberGenerator_Preview: PreviewProvider {
-    static var previews: some View {
-        let prefix = WorkOrderNumberGenerator.dailyPrefix()
-        let sample = WorkOrderNumberGenerator.build(prefix: prefix, sequence: 1)
-        return VStack(alignment: .leading, spacing: 8) {
-            Text("Prefix (UTC today): \(prefix)")
-            Text("Example WO_Number: \(sample)")
-        }
-        .padding()
-        .previewDisplayName("WO Number Generator")
+    /// Builds the "YYMMDD" prefix for a given date in UTC to keep numbers stable across devices.
+    private static func prefix(from date: Date) -> String {
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(secondsFromGMT: 0) ?? .gmt
+        let comps = cal.dateComponents([.year, .month, .day], from: date)
+        let yy = (comps.year ?? 2000) % 100
+        let mm = comps.month ?? 1
+        let dd = comps.day ?? 1
+        return String(format: "%02d%02d%02d", yy, mm, dd)
     }
 }
-#endif
 // END

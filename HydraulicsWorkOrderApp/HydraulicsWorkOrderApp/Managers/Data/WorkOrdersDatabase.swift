@@ -26,6 +26,18 @@ final class WorkOrdersDatabase: ObservableObject {
     @Published var workOrders: [WorkOrder] = []
 
     private init() {}
+    // ───── WO Number Prefix Helper (UTC) ─────
+    /// Builds the "YYMMDD" prefix in UTC to match WorkOrderNumberGenerator.
+    private static func utcPrefix(from date: Date) -> String {
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(secondsFromGMT: 0) ?? .gmt
+        let comps = cal.dateComponents([.year, .month, .day], from: date)
+        let yy = (comps.year ?? 2000) % 100
+        let mm = comps.month ?? 1
+        let dd = comps.day ?? 1
+        return String(format: "%02d%02d%02d", yy, mm, dd)
+    }
+    // END helper
     // ───── Generate Next WO Number (YYmmdd-###) ─────
     /// Looks up all WorkOrders whose WO_Number starts with today's prefix (UTC),
     /// finds the highest sequence used, and returns the next one in format YYmmdd-###.
@@ -36,7 +48,8 @@ final class WorkOrdersDatabase: ObservableObject {
     /// - If you want to ignore deleted WOs, add: .whereField("isDeleted", isEqualTo: false)
     // ───── Generate Next WO Number (YYmmdd-###) ─────
     func generateNextWONumber(completion: @escaping (Result<String, Error>) -> Void) {
-        let prefix = WorkOrderNumberGenerator.dailyPrefix() // e.g., "250814"
+        let creationDate = Date()
+        let prefix = WorkOrdersDatabase.utcPrefix(from: creationDate) // e.g., "250814"
 
         // Range on WO_Number for today's docs, then order by WO_Number desc and take 1
         let lower = prefix
@@ -64,7 +77,7 @@ final class WorkOrdersDatabase: ObservableObject {
                     return n + 1
                 }()
 
-                let number = WorkOrderNumberGenerator.build(prefix: prefix, sequence: nextSeq)
+                let number = WorkOrderNumberGenerator.make(date: creationDate, sequence: nextSeq)
                 completion(.success(number))
             }
     }
@@ -76,6 +89,23 @@ final class WorkOrdersDatabase: ObservableObject {
         do {
             // Ensure there's at least one creation note like: "Checked In" by <user> at <timestamp>
             var woForWrite = workOrder
+            // ───── Ensure each WO_Item has baseline "Checked In" status ─────
+            let authorForBaseline = (woForWrite.lastModifiedBy.isEmpty ? woForWrite.createdBy : woForWrite.lastModifiedBy)
+            let baselineTimestamp = woForWrite.timestamp
+            let itemsSnapshot = woForWrite.items
+            woForWrite.items = itemsSnapshot.map { item in
+                var copy = item
+                if copy.statusHistory.isEmpty {
+                    copy.statusHistory.append(
+                        WO_Status(status: "Checked In",
+                                  user: authorForBaseline.isEmpty ? "Tech" : authorForBaseline,
+                                  timestamp: baselineTimestamp,
+                                  notes: nil)
+                    )
+                }
+                return copy
+            }
+            // ───── END baseline status injection ─────
             if woForWrite.notes.isEmpty {
                 let creationNote = WO_Note(
                     user: woForWrite.createdBy,

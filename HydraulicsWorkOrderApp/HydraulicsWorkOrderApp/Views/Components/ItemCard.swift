@@ -1,7 +1,8 @@
 //  ItemCard.swift
 //  HydraulicsWorkOrderApp
-
 import SwiftUI
+import PhotosUI
+import UIKit
 
 // ───── Image URL Resolver (thumb → full) ─────
 // Returns a valid URL for the tapped index, preferring full-size imageUrls,
@@ -49,6 +50,8 @@ struct ItemCard: View {
     @State private var selectedStatus: String = ""
     @State private var stagedImages: [UIImage] = []
     @State private var isSavingNote = false
+    @State private var photoItems: [PhotosPickerItem] = []
+    @State private var showCamera = false
 
 
     let statusOptions: [String] = [
@@ -64,21 +67,22 @@ struct ItemCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
 
-            // ───── Tappable Thumbnail Images ─────
-            ForEach(Array(item.thumbUrls.enumerated()), id: \.offset) { idx, thumbStr in
-                if let thumbURL = URL(string: thumbStr) {
-                    Button(action: {
-                        if let url = resolvedURL(for: item, at: idx) {
+            // ───── Hero Image + Status Capsule Row ─────
+            HStack(alignment: .center, spacing: 12) {
+
+                // Hero image (first intake image)
+                if let thumbStr = item.thumbUrls.first, let thumbURL = URL(string: thumbStr) {
+                    Button {
+                        if let url = resolvedURL(for: item, at: 0) {
                             onImageTap?(url)
                         } else {
-                            print("❌ No resolvable URL for item \(item.id) at index \(idx)")
+                            print("❌ No resolvable URL for item \(item.id) at index 0")
                         }
-                    }) {
+                    } label: {
                         AsyncImage(url: thumbURL) { phase in
                             switch phase {
                             case .empty:
-                                ProgressView()
-                                    .frame(width: 200, height: 200)
+                                ProgressView().frame(width: 200, height: 200)
                             case .success(let image):
                                 image
                                     .resizable()
@@ -97,6 +101,18 @@ struct ItemCard: View {
                     }
                     .buttonStyle(.plain)
                 }
+
+                Spacer(minLength: 8)
+
+                // Color-coded capsule showing current status
+                let currentStatus = item.statusHistory.last?.status ?? "Checked In"
+                Text(currentStatus)
+                    .font(.subheadline.weight(.semibold))
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(statusColor(for: currentStatus).opacity(0.15))
+                    .foregroundColor(statusColor(for: currentStatus))
+                    .clipShape(Capsule())
             }
             // END Thumbnails
 
@@ -111,14 +127,25 @@ struct ItemCard: View {
 
             // ───── Status Change Picker ─────
             if let onChangeStatus = onChangeStatus {
+                // Keep selection valid and in sync with history
+                let current = item.statusHistory.last?.status ?? "Checked In"
+
                 Picker("Update Status", selection: $selectedStatus) {
                     ForEach(statusOptions, id: \.self) { status in
                         Text(status).tag(status)
                     }
                 }
                 .pickerStyle(.menu)
-                .onChange(of: selectedStatus) { newStatus in
-                    guard !newStatus.isEmpty else { return }
+                .onAppear {
+                    // Initialize selection so the menu has a valid tag
+                    if selectedStatus.isEmpty { selectedStatus = current }
+                }
+                .onChange(of: item.statusHistory.last?.status) { _, latest in
+                    // Refresh selection when history changes (e.g., after save)
+                    selectedStatus = latest ?? "Checked In"
+                }
+                .onChange(of: selectedStatus) { newStatus, _ in
+                    guard !newStatus.isEmpty, newStatus != current else { return }
                     onChangeStatus(item, newStatus)
                 }
             }
@@ -147,8 +174,75 @@ struct ItemCard: View {
                                         .stroke(Color.secondary.opacity(0.3))
                                 )
 
-                            // Inline image capture (staged locally; upload happens on Save)
-                            PhotoCaptureView(images: $stagedImages)
+                            // Inline image picker (staged locally; upload happens on Save)
+                            PhotosPicker(
+                                selection: $photoItems,
+                                maxSelectionCount: 8,
+                                matching: .images
+                            ) {
+                                HStack(spacing: 8) {
+                                    Image(systemName: "photo.on.rectangle")
+                                    Text("Add Photos")
+                                }
+                                .padding(.horizontal, 14).padding(.vertical, 10)
+                                .background(Color(hex: "#FFF8DC"))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .stroke(Color(hex: "#E0E0E0"))
+                                )
+                                .foregroundColor(.black)
+                                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                                .accessibilityLabel("Add Photos to Note")
+                            }
+                            .onChange(of: photoItems) { _, newItems in
+                                guard !newItems.isEmpty else { return }
+                                Task {
+                                    for item in newItems {
+                                        if let data = try? await item.loadTransferable(type: Data.self),
+                                           let ui = UIImage(data: data) {
+                                            stagedImages.append(ui)
+                                        }
+                                    }
+                                    // Clear the picker items so subsequent selections trigger again
+                                    photoItems.removeAll()
+                                }
+                            }
+                            
+                            // Preview staged images (kept local until Save)
+                            if !stagedImages.isEmpty {
+                                ScrollView(.horizontal, showsIndicators: false) {
+                                    HStack(spacing: 8) {
+                                        ForEach(Array(stagedImages.enumerated()), id: \.offset) { _, img in
+                                            Image(uiImage: img)
+                                                .resizable()
+                                                .scaledToFill()
+                                                .frame(width: 72, height: 72)
+                                                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                                                .overlay(
+                                                    RoundedRectangle(cornerRadius: 10)
+                                                        .stroke(Color.gray.opacity(0.2))
+                                                )
+                                        }
+                                    }
+                                    .padding(.top, 4)
+                                }
+                            }
+
+                            // Inline camera capture (staged locally; upload happens on Save)
+                            Button {
+                                showCamera = true
+                            } label: {
+                                HStack(spacing: 8) {
+                                    Image(systemName: "camera.fill")
+                                    Text("Take Photo")
+                                }
+                                .padding(.horizontal, 14).padding(.vertical, 10)
+                                .background(Color(hex: "#FFC500"))
+                                .foregroundColor(.black)
+                                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                                .accessibilityLabel("Take Photo for Note")
+                            }
+                            .buttonStyle(.plain)
 
                             Spacer()
 
@@ -201,10 +295,24 @@ struct ItemCard: View {
 
                         }
                         .padding()
-                        .toolbar {
-                            ToolbarItem(placement: .cancellationAction) {
-                                Button("Cancel") { showingAddNote = false }
+                    }
+                    .fullScreenCover(isPresented: $showCamera) {
+                        NoteCameraCaptureView { captured in
+                            if let captured {
+                                stagedImages.append(captured)
                             }
+                            showCamera = false
+                        }
+                        .ignoresSafeArea()
+                    }
+                    .interactiveDismissDisabled(
+                        isSavingNote ||
+                        !noteText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+                        !stagedImages.isEmpty
+                    )
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("Cancel") { showingAddNote = false }
                         }
                     }
                 }
@@ -218,6 +326,20 @@ struct ItemCard: View {
         .cornerRadius(12)
     } // END body
 } // END ItemCard
+
+// ───── Status Color Helper ─────
+private func statusColor(for status: String) -> Color {
+    switch status.lowercased() {
+    case "checked in":       return Color.blue
+    case "in progress":      return Color.orange
+    case "done":             return Color.green
+    case "tested: pass":     return Color.green
+    case "tested: fail":     return Color.red
+    case "completed":        return Color.gray
+    case "closed":           return Color.gray
+    default:                 return Color.secondary
+    }
+}
 // ───── Local helper used only in note save ─────
 private func compressForFirebase(_ image: UIImage) -> UIImage {
     let maxEdge: CGFloat = 2000
@@ -230,6 +352,43 @@ private func compressForFirebase(_ image: UIImage) -> UIImage {
     return UIImage(data: data) ?? down
 }
 
+// ───── Camera bridge for note modal (no nested sheets) ─────
+private struct NoteCameraCaptureView: UIViewControllerRepresentable {
+    typealias UIViewControllerType = UIImagePickerController
+
+    var onCapture: (UIImage?) -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(onCapture: onCapture)
+    }
+
+    func makeUIViewController(context: Context) -> UIImagePickerController {
+        let picker = UIImagePickerController()
+        picker.sourceType = UIImagePickerController.isSourceTypeAvailable(.camera) ? .camera : .photoLibrary
+        picker.allowsEditing = false
+        picker.delegate = context.coordinator
+        return picker
+    }
+
+    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
+
+    final class Coordinator: NSObject, UINavigationControllerDelegate, UIImagePickerControllerDelegate {
+        let onCapture: (UIImage?) -> Void
+        init(onCapture: @escaping (UIImage?) -> Void) { self.onCapture = onCapture }
+
+        func imagePickerController(_ picker: UIImagePickerController,
+                                   didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey : Any]) {
+            let img = info[.originalImage] as? UIImage
+            onCapture(img)
+            picker.dismiss(animated: true)
+        }
+
+        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
+            onCapture(nil)
+            picker.dismiss(animated: true)
+        }
+    }
+}
 
 // ───── PREVIEW TEMPLATE ─────
 #Preview {
