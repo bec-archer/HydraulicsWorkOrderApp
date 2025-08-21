@@ -15,12 +15,36 @@ struct WOItemAccordionRow: View {
     let woId: String
     @Binding var items: [WO_Item]
     @Binding var expandedIndex: Int?
+    @Binding var showValidationNudge: Bool
     let onDelete: (Int) -> Void
 
     @State private var selectedImage: IdentifiableURL? = nil
 
+    private var isPartial: Bool {
+        let item = items[index]
+        let hasType = !item.type.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let hasPhoto = !item.imageUrls.isEmpty || !item.thumbUrls.isEmpty
+        return (hasType && !hasPhoto) || (!hasType && hasPhoto)
+    }
+
     var isExpanded: Bool {
         expandedIndex == index
+    }
+    
+    init(
+        index: Int,
+        woId: String,
+        items: Binding<[WO_Item]>,
+        expandedIndex: Binding<Int?>,
+        showValidationNudge: Binding<Bool> = .constant(false),
+        onDelete: @escaping (Int) -> Void
+    ) {
+        self.index = index
+        self.woId = woId
+        self._items = items
+        self._expandedIndex = expandedIndex
+        self._showValidationNudge = showValidationNudge
+        self.onDelete = onDelete
     }
 
     var body: some View {
@@ -57,13 +81,21 @@ struct WOItemAccordionRow: View {
                     if isExpanded {
                         Divider()
 
-                        AddWOItemFormView(item: $items[index], woId: woId)
+                        AddWOItemFormView(
+                            item: $items[index],
+                            showValidationNudge: $showValidationNudge,
+                            woId: woId
+                        )
                             .padding(.top, 8)
                     }
                 } // END VStack
                 .padding()
                 .background(Color(.systemGroupedBackground))
                 .cornerRadius(12)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(Color.yellow, lineWidth: isPartial ? 3 : 0)
+                )
                 .sheet(item: $selectedImage) { identifiable in
                     FullScreenImageViewer(
                         imageURL: identifiable.url,
@@ -108,6 +140,7 @@ struct WOItemAccordionRow: View {
             )
         ]
         @State private var expandedIndex: Int? = 0
+        @State private var showValidationNudge: Bool = false
 
         var body: some View {
             WOItemAccordionRow(
@@ -115,6 +148,7 @@ struct WOItemAccordionRow: View {
                 woId: "PREVIEW-WO-ID",
                 items: $items,
                 expandedIndex: $expandedIndex,
+                showValidationNudge: $showValidationNudge,
                 onDelete: { _ in }
             )
             .padding()

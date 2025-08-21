@@ -1,4 +1,3 @@
-
 //
 //  DropdownField.swift
 //  HydraulicsWorkOrderApp
@@ -24,14 +23,33 @@ struct DropdownField: View {
     var showColorPickerIfOther: Bool = false
     @Binding var customColor: Color
 
+    // New (backwards-compatible)
+    var placeholder: String? = nil          // shown when no selection; defaults to "Select…"
+    var showLabel: Bool = false              // whether to render external label text above the control
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Picker(label, selection: $selectedValue) {
-                // ───── Placeholder so nil has a matching tag ─────
-                Text("Select…").tag(nil as String?)
+        VStack(alignment: .leading, spacing: showLabel ? 8 : 0) {
+            // Optional external label above the control
+            if showLabel {
+                Text(label)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+
+            // Build a friendly display label for the menu button
+            let currentLabel: String = {
+                if let sel = selectedValue, let match = options.first(where: { $0.value == sel }) {
+                    return match.label
+                } else {
+                    return placeholder ?? "Select…"
+                }
+            }()
+
+            Picker(selection: $selectedValue) {
+                // Placeholder row so nil has a tag
+                Text(placeholder ?? "Select…").tag(nil as String?)
 
                 ForEach(options) { option in
-
                     HStack {
                         if let hex = option.colorHex, let uiColor = UIColor(hex: hex) {
                             Circle()
@@ -39,13 +57,26 @@ struct DropdownField: View {
                                 .frame(width: 12, height: 12)
                         }
                         Text(option.label)
-                        }
-                        .tag(option.value as String?)   // match Binding<String?>
-
+                    }
+                    .tag(option.value as String?)
+                }
+            } label: {
+                HStack(spacing: 8) {
+                    // If current selection has a color, show the dot in the button, too
+                    if let sel = selectedValue,
+                       let match = options.first(where: { $0.value == sel }),
+                       let hex = match.colorHex,
+                       let uiColor = UIColor(hex: hex) {
+                        Circle()
+                            .fill(Color(uiColor))
+                            .frame(width: 12, height: 12)
+                    }
+                    Text(currentLabel)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
-            .pickerStyle(MenuPickerStyle())
-            .id("picker_\(label)")     // ← keeps each field from hijacking another
+            .pickerStyle(.menu)
+            .id("picker_\(label)") // keep pickers independent
 
             if showColorPickerIfOther && (selectedValue ?? "") == "Other" {
                 ColorPicker("Pick a color", selection: $customColor)
@@ -78,7 +109,7 @@ extension UIColor {
     @Previewable @State var selected: String? = "Yellow"   // ← make optional
     @Previewable @State var customColor = Color.yellow
 
-    DropdownField(                                       // ← no 'return' in ViewBuilder
+    DropdownField(
         label: "Color",
         options: [
             DropdownOption(label: "Black", value: "Black", colorHex: "#000000"),
@@ -87,6 +118,8 @@ extension UIColor {
         ],
         selectedValue: $selected,
         showColorPickerIfOther: true,
-        customColor: $customColor
+        customColor: $customColor,
+        placeholder: "Color",       // inline placeholder when nil selection
+        showLabel: false            // hide external label; mimic inline style
     )
 }

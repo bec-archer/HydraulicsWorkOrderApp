@@ -166,13 +166,46 @@ final class WorkOrdersDatabase: ObservableObject {
                         if wo.id == nil { wo.id = doc.documentID } // backfill if custom decoder didn’t set it
                         decoded.append(wo)
                     } catch let DecodingError.keyNotFound(key, context) {
-                        let msg = "Missing key '\(key.stringValue)' in \(doc.documentID) – \(context.debugDescription)"
-                        print("⚠️ WorkOrder decode skipped:", msg)
-                        failures.append((doc.documentID, msg))
+                        // ───── Legacy compat: tolerate missing imageURLs by injecting an empty array and retrying ─────
+                        if key.stringValue == "imageURLs" {
+                            var raw = doc.data()
+                            if raw["imageURLs"] == nil { raw["imageURLs"] = [] }
+                            do {
+                                let wo = try Firestore.Decoder().decode(WorkOrder.self, from: raw)
+                                var patched = wo
+                                if patched.id == nil { patched.id = doc.documentID }
+                                decoded.append(patched)
+                                #if DEBUG
+                                print("ℹ️ Patched missing imageURLs for \(doc.documentID)")
+                                #endif
+                                continue
+                            } catch {
+                                let msg = "Retry with injected imageURLs failed in \(doc.documentID): \(error.localizedDescription)"
+                                print("⚠️ WorkOrder decode skipped:", msg)
+                                failures.append((doc.documentID, msg))
+                            }
+                        } else {
+                            let msg = "Missing key '\(key.stringValue)' in \(doc.documentID) – \(context.debugDescription)"
+                            print("⚠️ WorkOrder decode skipped:", msg)
+                            failures.append((doc.documentID, msg))
+                        }
                     } catch let DecodingError.valueNotFound(type, context) {
-                        let msg = "Value of type \(type) not found in \(doc.documentID) – \(context.debugDescription)"
-                        print("⚠️ WorkOrder decode skipped:", msg)
-                        failures.append((doc.documentID, msg))
+                        // Some encoders treat a missing array as 'value not found'; apply same legacy patch
+                        var raw = doc.data()
+                        if raw["imageURLs"] == nil { raw["imageURLs"] = [] }
+                        do {
+                            let wo = try Firestore.Decoder().decode(WorkOrder.self, from: raw)
+                            var patched = wo
+                            if patched.id == nil { patched.id = doc.documentID }
+                            decoded.append(patched)
+                            #if DEBUG
+                            print("ℹ️ Patched valueNotFound(imageURLs) for \(doc.documentID)")
+                            #endif
+                        } catch {
+                            let msg = "Value of type \(type) not found in \(doc.documentID) – \(context.debugDescription)"
+                            print("⚠️ WorkOrder decode skipped:", msg)
+                            failures.append((doc.documentID, msg))
+                        }
                     } catch {
                         let msg = "Unknown decode error in \(doc.documentID): \(error.localizedDescription)"
                         print("⚠️ WorkOrder decode skipped:", msg)

@@ -24,33 +24,6 @@ struct WorkOrderCardView: View {
     @State private var resolvedImageURL: URL? = nil
     @State private var isPressed: Bool = false
 
-    // ───── Resolve preview (local coalesce: legacy-aware) ─────
-    private func resolveImageURL() {
-        let top = workOrder.imageURL?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let legacy = workOrder.imageURLs?.first?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let itemThumb = workOrder.items.first?.thumbUrls.first?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let itemFull  = workOrder.items.first?.imageUrls.first?.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        let chosen = [legacy, itemThumb, itemFull, top]
-            .compactMap { $0 }
-            .first { !$0.isEmpty }
-
-        guard let s = chosen else {
-            print("🛑 No preview candidates for WO \(workOrder.WO_Number) id=\(workOrder.id ?? "nil")")
-            resolvedImageURL = nil
-            return
-        }
-
-        if s.lowercased().hasPrefix("http") {
-            print("🧩 Resolving full URL: \(s)")
-            resolvedImageURL = URL(string: s)
-        } else {
-            StorageImageResolver.resolve(s) { url in
-                self.resolvedImageURL = url
-            }
-        }
-    }
-
     // ───── Helpers ─────
     private func digitsOnly(_ s: String) -> String { s.filter(\.isNumber) }
 
@@ -62,6 +35,33 @@ struct WorkOrderCardView: View {
                     .font(.largeTitle)
                     .foregroundColor(.gray)
             )
+    }
+
+    // Keep track of the last candidate to avoid redundant resolves/log spam
+    @State private var lastResolvedCandidate: String? = nil
+
+    // ───── Resolve preview (local coalesce: legacy-aware) ─────
+    private func resolveImageURL() {
+        guard let candidate = WorkOrderPreviewResolver.bestCandidate(from: workOrder) else {
+            print("🛑 No preview candidates for WO \(workOrder.WO_Number) id=\(workOrder.id ?? "nil")")
+            resolvedImageURL = nil
+            lastResolvedCandidate = nil
+            return
+        }
+
+        // Skip if we've already resolved this exact candidate
+        if candidate == lastResolvedCandidate { return }
+        lastResolvedCandidate = candidate
+
+        if candidate.lowercased().hasPrefix("http") {
+            print("🧩 Resolving full URL: \(candidate)")
+            resolvedImageURL = URL(string: candidate)
+        } else {
+            // Allow resolver to map storage path → signed URL (async)
+            StorageImageResolver.resolve(candidate) { url in
+                self.resolvedImageURL = url
+            }
+        }
     }
 
     // ───── BODY ─────

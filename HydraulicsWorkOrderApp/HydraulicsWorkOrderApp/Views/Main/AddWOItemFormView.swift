@@ -1,167 +1,39 @@
 import SwiftUI
-import UIKit
 
 // ─────────────────────────────────────────────────────────────
 // 📄 AddWOItemFormView.swift
 // Reusable inline form for each WO_Item (no nested Form)
 // ─────────────────────────────────────────────────────────────
-
 struct AddWOItemFormView: View {
-    // Binding to the WO_Item we are editing/creating
+    // ───── Bound Model ─────
     @Binding var item: WO_Item
+    // Parent-controlled nudge trigger (set when user attempts to add/save)
+    @Binding var showValidationNudge: Bool
 
     // ───── Local UI State ─────
     @State private var customColor = Color.yellow
     @State private var reasonNotes = ""
-    @State private var reasonOptionsSnapshot: [DropdownOption] = []  // stable per-render snapshot
-
-    // Local selection buffer so Toggles don't mutate the bound array mid-diff
-    @State private var selectedReasons: Set<String> = []
+    @State private var reasonOptionsSnapshot: [DropdownOption] = []    // stable per-render snapshot
+    @State private var selectedReasons: Set<String> = []               // local buffer for toggles
 
     // Used for Firebase Storage pathing; parent passes draft WO id / WO_Number
     var woId: String = "DRAFT"
 
+    // Tracks interaction with required fields to decide when to show validation nudges
+    @State private var hasTouchedRequired = false
+
     // Managers / singletons
     private let dropdowns = DropdownManager.shared
-
+    
     // ───── BODY ─────
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-
-            // ───── Photos (uploads full + thumbnail, updates URLs) ─────
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Photos")
-                    .font(.headline)
-
-                // Wrapper added in PhotoCaptureView.swift (expected to exist in project)
-                PhotoCaptureUploadView(
-                    imageURLs: $item.imageUrls,    // full-size URLs
-                    thumbURLs: $item.thumbUrls,    // thumbnail URLs (if your model does not have this, bind to a dummy @State)
-                    woId: woId,
-                    woItemId: item.id,
-                    showQR: true,
-                    onScanQR: {
-                        // TODO: Implement QR code scanner logic
-                        print("Scan QR Code tapped for item \(item.id)")
-                    }
-                )
-            }
-            .padding(.bottom, 8)
-            // END Photos
-
-            // ───── TYPE (Required) ─────
-            DropdownField(
-                label: "Type *", // visually indicate required
-                options: dropdowns.options["type"] ?? [],
-                selectedValue: Binding(
-                    get: { item.type.isEmpty ? nil : item.type },
-                    set: { item.type = $0 ?? ""; DispatchQueue.main.async { item.lastModified = Date() } }
-                ),
-                showColorPickerIfOther: false,
-                customColor: $customColor
-            )
-
-            // ───── DROPDOWNS GRID (iPad: 2 columns, iPhone: stacks naturally) ─────
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], alignment: .leading, spacing: 12) {
-
-                // SIZE (Only if Type == "Cylinder")
-                if item.type.caseInsensitiveCompare("Cylinder") == .orderedSame {
-                    DropdownField(
-                        label: "Size",
-                        options: dropdowns.options["size"] ?? [],
-                        selectedValue: Binding(
-                            get: { let v = item.dropdowns["size"]; return v?.isEmpty == true ? nil : v },
-                            set: { item.dropdowns["size"] = $0 ?? ""; DispatchQueue.main.async { item.lastModified = Date() } }
-                        ),
-                        showColorPickerIfOther: false,
-                        customColor: $customColor
-                    )
-                }
-
-                // COLOR
-                DropdownField(
-                    label: "Color",
-                    options: dropdowns.options["color"] ?? [],
-                    selectedValue: Binding(
-                        get: { let v = item.dropdowns["color"]; return v?.isEmpty == true ? nil : v },
-                        set: { item.dropdowns["color"] = $0 ?? ""; DispatchQueue.main.async { item.lastModified = Date() } }
-                    ),
-                    showColorPickerIfOther: true,
-                    customColor: $customColor
-                )
-
-                // MACHINE TYPE
-                DropdownField(
-                    label: "Machine Type",
-                    options: dropdowns.options["machineType"] ?? [],
-                    selectedValue: Binding(
-                        get: { let v = item.dropdowns["machineType"]; return v?.isEmpty == true ? nil : v },
-                        set: { item.dropdowns["machineType"] = $0 ?? ""; DispatchQueue.main.async { item.lastModified = Date() } }
-                    ),
-                    showColorPickerIfOther: false,
-                    customColor: $customColor
-                )
-
-                // MACHINE BRAND
-                DropdownField(
-                    label: "Machine Brand",
-                    options: dropdowns.options["machineBrand"] ?? [],
-                    selectedValue: Binding(
-                        get: { let v = item.dropdowns["machineBrand"]; return v?.isEmpty == true ? nil : v },
-                        set: { item.dropdowns["machineBrand"] = $0 ?? ""; DispatchQueue.main.async { item.lastModified = Date() } }
-                    ),
-                    showColorPickerIfOther: false,
-                    customColor: $customColor
-                )
-
-                // WAIT TIME
-                DropdownField(
-                    label: "Estimated Wait Time",
-                    options: dropdowns.options["waitTime"] ?? [],
-                    selectedValue: Binding(
-                        get: { let v = item.dropdowns["waitTime"]; return v?.isEmpty == true ? nil : v },
-                        set: { item.dropdowns["waitTime"] = $0 ?? ""; DispatchQueue.main.async { item.lastModified = Date() } }
-                    ),
-                    showColorPickerIfOther: false,
-                    customColor: $customColor
-                )
-            }
-            // END DROPDOWNS GRID
-
-            // ───── REASONS FOR SERVICE ─────
-            Text("Reason(s) for Service")
-                .font(.headline)
-                .padding(.top, 6)
-
-            // Two-column grid of toggles
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], alignment: .leading, spacing: 8) {
-                // Use the per-view snapshot captured in state; do not declare local lets in a ViewBuilder
-                ForEach(reasonOptionsSnapshot, id: \.value) { option in
-                    Toggle(option.label, isOn: Binding(
-                        get: { selectedReasons.contains(option.value) },
-                        set: { isOn in
-                            if isOn {
-                                selectedReasons.insert(option.value)
-                            } else {
-                                selectedReasons.remove(option.value)
-                            }
-                        }
-                    ))
-                }
-            }
-            // END reasons grid
-
-            // If "Other" reason selected, show required notes field
-            if selectedReasons.contains("Other (opens Service Notes)") || selectedReasons.contains("Other") {
-                TextField("Service Notes…", text: $reasonNotes)
-                    .textFieldStyle(.roundedBorder)
-                    .onChange(of: reasonNotes) {
-                        item.reasonNotes = reasonNotes
-                        DispatchQueue.main.async { item.lastModified = Date() }
-                    }
-                    .padding(.top, 2)
-            }
-
+            photosSection
+            typeField
+            requiredNudge
+            dropdownsGrid
+            reasonsSection
+            otherReasonNotes
         }
         // ───── Color Hex Persistence ─────
         .onChange(of: item.dropdowns["color"]) { newValue in
@@ -190,6 +62,14 @@ struct AddWOItemFormView: View {
             reasonOptionsSnapshot = dropdowns.options["reasonsForService"] ?? []
             // Seed local toggle buffer from persisted model to avoid mid-diff array mutations
             selectedReasons = Set(item.reasonsForService)
+
+            // If the item already has any data, allow the nudge to render immediately
+            hasTouchedRequired = !isBlankItem
+
+            // ⬅️ Default Type to Cylinder if empty
+            if item.type.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                item.type = "Cylinder"
+            }
         }
         .onChange(of: dropdowns.options["reasonsForService"]?.count ?? 0) { _ in
             // refresh on the next runloop to avoid mid-diff updates
@@ -202,10 +82,249 @@ struct AddWOItemFormView: View {
             item.reasonsForService = Array(newValue)
             item.lastModified = Date()
         }
+        // Show validation nudge once they interact with required inputs
+        .onChange(of: item.type) { _ in
+            hasTouchedRequired = true
+        }
+        .onChange(of: item.imageUrls.count) { _ in
+            hasTouchedRequired = true
+        }
+        .onChange(of: item.thumbUrls.count) { _ in
+            hasTouchedRequired = true
+        }
         .id(item.id) // stabilize identity across multiple AddWOItemFormView instances
         .padding(12)
     }
     // END .body
+
+    // ───── Subviews (split to reduce type-check complexity) ─────
+    @ViewBuilder private var photosSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Photos")
+                .font(.headline)
+            PhotoCaptureUploadView(
+                imageURLs: $item.imageUrls,
+                thumbURLs: $item.thumbUrls,
+                woId: woId,
+                woItemId: item.id,
+                showQR: true,
+                onScanQR: {
+                    // ───── QR Scan Tap (stub) ─────
+                    print("Scan QR Code tapped for item \(item.id)")
+                }
+            )
+        }
+        .padding(.bottom, 8)
+    }
+
+    @ViewBuilder private var typeField: some View {
+        DropdownField(
+            label: "Type *",
+            options: dropdowns.options["type"] ?? [],
+            selectedValue: typeBinding,
+            showColorPickerIfOther: false,
+            customColor: $customColor,
+            placeholder: "Type *",
+            showLabel: false
+        )
+    }
+
+    @ViewBuilder private var requiredNudge: some View {
+        if showValidationNudge && isPartiallyFilled {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .imageScale(.large)
+                    .padding(.top, 2)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Finish Required Fields")
+                        .font(.headline)
+                    Text("Each WO_Item needs a **Type** and at least **one Photo** before check-in. Add the missing field to continue.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding(12)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Color.yellow.opacity(0.15))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(Color.yellow.opacity(0.6), lineWidth: 1)
+            )
+            .accessibilityLabel("Finish Required Fields: Type and at least one Photo are required.")
+        }
+    }
+
+    @ViewBuilder private var dropdownsGrid: some View {
+        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], alignment: .leading, spacing: 12) {
+            // SIZE (Only if Type == "Cylinder")
+            if item.type.caseInsensitiveCompare("Cylinder") == .orderedSame {
+                DropdownField(
+                    label: "Size",
+                    options: dropdowns.options["size"] ?? [],
+                    selectedValue: sizeBinding,
+                    showColorPickerIfOther: false,
+                    customColor: $customColor,
+                    placeholder: "Size",
+                    showLabel: false
+                )
+            }
+
+            // COLOR
+            DropdownField(
+                label: "Color",
+                options: dropdowns.options["color"] ?? [],
+                selectedValue: colorBinding,
+                showColorPickerIfOther: true,
+                customColor: $customColor,
+                placeholder: "Color",
+                showLabel: false
+            )
+
+            // MACHINE TYPE
+            DropdownField(
+                label: "Machine Type",
+                options: dropdowns.options["machineType"] ?? [],
+                selectedValue: machineTypeBinding,
+                showColorPickerIfOther: false,
+                customColor: $customColor,
+                placeholder: "Machine Type",
+                showLabel: false
+            )
+
+            // MACHINE BRAND
+            DropdownField(
+                label: "Machine Brand",
+                options: dropdowns.options["machineBrand"] ?? [],
+                selectedValue: machineBrandBinding,
+                showColorPickerIfOther: false,
+                customColor: $customColor,
+                placeholder: "Machine Brand",
+                showLabel: false
+            )
+
+            // WAIT TIME
+            DropdownField(
+                label: "Estimated Wait Time",
+                options: dropdowns.options["waitTime"] ?? [],
+                selectedValue: waitTimeBinding,
+                showColorPickerIfOther: false,
+                customColor: $customColor,
+                placeholder: "Wait Time",
+                showLabel: false
+            )
+        }
+    }
+
+    @ViewBuilder private var reasonsSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Reason(s) for Service")
+                .font(.headline)
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], alignment: .leading, spacing: 8) {
+                ForEach(reasonOptionsSnapshot, id: \.value) { option in
+                    Toggle(option.label, isOn: reasonBinding(for: option.value))
+                }
+            }
+        }
+    }
+
+    @ViewBuilder private var otherReasonNotes: some View {
+        if selectedReasons.contains("Other (opens Service Notes)") || selectedReasons.contains("Other") {
+            TextField("Service Notes…", text: $reasonNotes)
+                .textFieldStyle(.roundedBorder)
+                .onChange(of: reasonNotes) {
+                    item.reasonNotes = reasonNotes
+                    DispatchQueue.main.async { item.lastModified = Date() }
+                }
+                .padding(.top, 2)
+        }
+    }
+    // END Subviews
+
+    // ───── Local Bindings (computed) ─────
+    private var typeBinding: Binding<String?> {
+        Binding<String?>(
+            get: { item.type.isEmpty ? nil : item.type },
+            set: { item.type = $0 ?? ""; DispatchQueue.main.async { item.lastModified = Date() } }
+        )
+    }
+    private var sizeBinding: Binding<String?> {
+        Binding<String?>(
+            get: {
+                let v = item.dropdowns["size"]
+                return (v?.isEmpty == true) ? nil : v
+            },
+            set: { item.dropdowns["size"] = $0 ?? ""; DispatchQueue.main.async { item.lastModified = Date() } }
+        )
+    }
+    private var colorBinding: Binding<String?> {
+        Binding<String?>(
+            get: {
+                let v = item.dropdowns["color"]
+                return (v?.isEmpty == true) ? nil : v
+            },
+            set: { item.dropdowns["color"] = $0 ?? ""; DispatchQueue.main.async { item.lastModified = Date() } }
+        )
+    }
+    private var machineTypeBinding: Binding<String?> {
+        Binding<String?>(
+            get: {
+                let v = item.dropdowns["machineType"]
+                return (v?.isEmpty == true) ? nil : v
+            },
+            set: { item.dropdowns["machineType"] = $0 ?? ""; DispatchQueue.main.async { item.lastModified = Date() } }
+        )
+    }
+    private var machineBrandBinding: Binding<String?> {
+        Binding<String?>(
+            get: {
+                let v = item.dropdowns["machineBrand"]
+                return (v?.isEmpty == true) ? nil : v
+            },
+            set: { item.dropdowns["machineBrand"] = $0 ?? ""; DispatchQueue.main.async { item.lastModified = Date() } }
+        )
+    }
+    private var waitTimeBinding: Binding<String?> {
+        Binding<String?>(
+            get: {
+                let v = item.dropdowns["waitTime"]
+                return (v?.isEmpty == true) ? nil : v
+            },
+            set: { item.dropdowns["waitTime"] = $0 ?? ""; DispatchQueue.main.async { item.lastModified = Date() } }
+        )
+    }
+    // END Local Bindings (computed)
+
+    // ───── Required Field Logic (local to view) ─────
+    private var hasAtLeastOnePhoto: Bool {
+        // Accept either full-size or thumbnail URLs as evidence of a captured photo
+        return !item.imageUrls.isEmpty || !item.thumbUrls.isEmpty
+    }
+    private var isTypeSelected: Bool {
+        return !item.type.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+    /// A "blank" item has neither type nor any photo
+    private var isBlankItem: Bool {
+        return !hasAtLeastOnePhoto && !isTypeSelected
+    }
+    /// A "partially filled" item has either type or photo, but not both
+    private var isPartiallyFilled: Bool {
+        return (hasAtLeastOnePhoto && !isTypeSelected) || (!hasAtLeastOnePhoto && isTypeSelected)
+    }
+    // END Required Field Logic
+
+    // ───── Reason Toggle Binding Helper ─────
+    private func reasonBinding(for value: String) -> Binding<Bool> {
+        Binding<Bool>(
+            get: { selectedReasons.contains(value) },
+            set: { isOn in
+                if isOn { selectedReasons.insert(value) }
+                else { selectedReasons.remove(value) }
+            }
+        )
+    }
+    // END Reason Toggle Binding Helper
 
     // ───── Helpers ─────
     private func updateColorHexFromCustomColor() {
@@ -221,6 +340,8 @@ struct AddWOItemFormView: View {
 
 // ───── Preview Template ─────
 #Preview {
-    // Provide a minimal sample WO_Item; if your project uses a different factory, adjust as needed
-    AddWOItemFormView(item: .constant(WO_Item.sample), woId: "WO_PREVIEW")
+    // Provide a minimal sample WO_Item; adjust to your factory if needed
+    AddWOItemFormView(item: .constant(WO_Item.sample),
+                      showValidationNudge: .constant(false),
+                      woId: "WO_PREVIEW")
 }

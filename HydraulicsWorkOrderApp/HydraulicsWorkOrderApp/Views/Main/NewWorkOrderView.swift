@@ -15,22 +15,24 @@ import FirebaseFirestoreSwift
 
 struct NewWorkOrderView: View {
     // ───── STATE ─────
-    @State private var selectedCustomer: Customer?
-    @State private var flagged: Bool = false
-    @State private var items: [WO_Item] = [WO_Item.blank()]
-    @State private var showAlert: Bool = false
-    @State private var alertMessage: String = ""
-    @State private var expandedIndex: Int? = nil
+    @State private var selectedCustomer: Customer? // nil = no selection
+    @State private var flagged: Bool = false // WO-level flag
+    @State private var items: [WO_Item] = [WO_Item.blank()] // start with one blank item
+    @State private var showAlert: Bool = false // for validation errors
+    @State private var alertMessage: String = "" // alert content
+    @State private var expandedIndex: Int? = nil    // which WO_Item is expanded (nil = all collapsed)
     @State private var showingNewCustomerModal: Bool = false   // ✅ fixed: had no Bool type
-    @State private var searchDebounce: DispatchWorkItem?
-    @State private var showSaveBanner: Bool = false
-    @State private var savedWONumber: String = ""
+    @State private var searchDebounce: DispatchWorkItem?  // for debounced search
+    @State private var showSaveBanner: Bool = false // show "Saved" banner briefly
+    @State private var savedWONumber: String = "" // for "WO-1234 Saved!" banner
     
-    @State private var draftWOId: String = UUID().uuidString
+    @State private var showValidationNudge: Bool = false   // ⬅️ NEW: to trigger validation highlight
+    
+    @State private var draftWOId: String = UUID().uuidString // unique ID for photo storage namespace
 
     
     // 🔍 Search logic is now isolated
-    @StateObject private var customerSearch = CustomerSearchViewModel()
+    @StateObject private var customerSearch = CustomerSearchViewModel() // manages search state
 
     
     // ───── Prefill Helpers (derive from customerSearch.searchText) ─────
@@ -56,18 +58,33 @@ struct NewWorkOrderView: View {
         return !t.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
-    private var hasSelectedType: Bool {
-        items.contains { itemHasType($0) }
+    // Also accept thumbs as evidence of a captured photo
+    private func itemHasPhoto(_ item: WO_Item) -> Bool {
+        return !item.thumbUrls.isEmpty || !item.imageUrls.isEmpty
     }
 
-    // Only count uploaded photos (thumbs or full URLs), not local images
-    private var hasAnyUploadedPhoto: Bool {
-        items.contains { !$0.thumbUrls.isEmpty || !$0.imageUrls.isEmpty }
+    // Completion/blank/partial logic (mirrors AddWOItemFormView)
+    private func isCompleteItem(_ item: WO_Item) -> Bool {
+        return itemHasType(item) && itemHasPhoto(item)
+    }
+    private func isBlankItem(_ item: WO_Item) -> Bool {
+        return !itemHasType(item) && !itemHasPhoto(item)
+    }
+    private func isPartiallyFilledItem(_ item: WO_Item) -> Bool {
+        let hasType = itemHasType(item)
+        let hasPhoto = itemHasPhoto(item)
+        return (hasType && !hasPhoto) || (!hasType && hasPhoto)
     }
 
+    private var hasAtLeastOneCompleteItem: Bool {
+        items.contains { isCompleteItem($0) }
+    }
+    private var hasAnyPartialItem: Bool {
+        items.contains { isPartiallyFilledItem($0) }
+    }
     private var canShowCheckInButtons: Bool {
-        // ✅ Require: Customer + a Type + at least one **uploaded** photo (any item)
-        (selectedCustomer != nil) && hasSelectedType && hasAnyUploadedPhoto
+        // ✅ Require: Customer + at least one fully complete item; block if any partial exists
+        (selectedCustomer != nil) && hasAtLeastOneCompleteItem && !hasAnyPartialItem
     }
 
     // END Readiness Helpers
@@ -237,9 +254,10 @@ struct NewWorkOrderView: View {
             ForEach(Array($items.enumerated()), id: \.element.id) { idx, $woItem in
                 WOItemAccordionRow(
                     index: idx,
-                    woId: draftWOId,               // ⬅️ pass parent WO id
+                    woId: draftWOId,
                     items: $items,
                     expandedIndex: $expandedIndex,
+                    showValidationNudge: $showValidationNudge,   // ⬅️ NEW Binding
                     onDelete: { indexToDelete in
                         handleDeleteWOItem(indexToDelete)
                     }
@@ -249,20 +267,32 @@ struct NewWorkOrderView: View {
                 .background(
                     RoundedRectangle(cornerRadius: 14)
                         .fill(Color(.systemBackground))
-                        .shadow(color: .black.opacity(0.06), radius: 4, x: 0, y: 2)
+                        .shadow(color: Color.black.opacity(0.06), radius: 4, x: 0, y: 2)
                 )
             }
 
             // ➕ Add Item button
             Button {
+                // Block adding a new item if any existing item is partially filled
+                let hasPartial = items.contains { isPartiallyFilledItem($0) }
+                if hasPartial {
+                    showValidationNudge = false
+                    if let firstPartialIdx = items.firstIndex(where: { isPartiallyFilledItem($0) }) {
+                        expandedIndex = firstPartialIdx   // focus the problem item
+                    }
+                    return
+                }
+
+                // Otherwise safe to add a new, blank WO_Item
+                showValidationNudge = false
                 withAnimation {
                     items.append(WO_Item.blank())
                     expandedIndex = items.indices.last
                 }
             } label: {
                 Label("Add Item", systemImage: "plus.circle.fill")
-                    .modifier(UIConstants.Buttons.yellowButtonStyle())
-                    .frame(maxWidth: .infinity)
+                    .font(.headline)
+                    .padding(.vertical, 8)
             }
             .buttonStyle(.plain)
             .padding(.top, 4)
@@ -284,6 +314,8 @@ struct NewWorkOrderView: View {
             ToolbarItem(placement: .confirmationAction) {
                 Button {
                     saveWorkOrder {
+                        // Route back to Active Work Orders even when saving via toolbar button
+                        dismiss()
                         appState.currentView = .activeWorkOrders
                     }
                 } label: {
@@ -403,7 +435,28 @@ struct NewWorkOrderView: View {
             return
         }
         // END: Required Field Validation
-        
+
+        // ───── Discard Blank Items; Block on Partials ─────
+        // 1) Drop items with neither type nor photo (true blanks)
+        let nonBlankItems = items.filter { !isBlankItem($0) }
+
+        // 2) If any partially filled item remains, bump user to finish it
+        // 2) If any partially filled item remains, bump user to finish it
+        if let firstPartialIdx = nonBlankItems.firstIndex(where: { isPartiallyFilledItem($0) }) {
+            showValidationNudge = true                 // ⬅️ NEW
+            expandedIndex = firstPartialIdx
+            alertMessage = "Please finish the highlighted WO_Item. Each item needs a Type and at least one Photo."
+            showAlert = true
+            return
+        }
+
+        // 3) Must have at least one complete item to proceed
+        guard !nonBlankItems.isEmpty, nonBlankItems.contains(where: { isCompleteItem($0) }) else {
+            alertMessage = "Add at least one WO_Item with a Type and Photo before checking in."
+            showAlert = true
+            return
+        }
+
         // ───── DEBUG LOG ─────
         print("📝 DEBUG Save Attempt")
         print("Customer: \(customer.name) – \(customer.phone)")
@@ -414,7 +467,7 @@ struct NewWorkOrderView: View {
         }
 
         // ───── Snapshot items to avoid mutation during iteration ─────
-        let itemsSnapshot = items
+        let itemsSnapshot = nonBlankItems
 
         // Example: build payload with map (no indexing)
         let builtItems: [WO_Item] = itemsSnapshot.map { $0 }
@@ -437,7 +490,6 @@ struct NewWorkOrderView: View {
 
             }
 
-            // Build WorkOrder with resolved number
             // Build WorkOrder with resolved number
             let wo = WorkOrder(
                 id: nil,                                   // @DocumentID → Firestore assigns; don’t seed this
