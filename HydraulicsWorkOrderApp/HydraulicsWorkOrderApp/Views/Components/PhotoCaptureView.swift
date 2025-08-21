@@ -443,8 +443,12 @@ struct PhotoCaptureUploadView: View {
                                 print("❌ applyItemImageURLs failed: \(err)")
                                 // If we don't yet have a Firestore doc, show the image immediately and retry shortly.
                                 if err.domain == "WorkOrdersDatabase", err.code == 404 {
+                                    // ───── Local-only refresh fallback (Disabled; relies on old shim APIs) ─────
+                                    #if false
                                     WorkOrdersDatabase.shared.applyItemImageURLsLocalOnly(itemId: woItemId, fullURL: fullURL, thumbURL: thumbURL)
                                     WorkOrdersDatabase.shared.scheduleImageURLPersistRetry(woItemId: woItemId, fullURL: fullURL, thumbURL: thumbURL, delay: 1.5)
+                                    #endif
+                                    // ───── END Local-only refresh fallback (Disabled) ─────
                                 }
                             }
                         }
@@ -536,6 +540,10 @@ private struct KeyboardToolbarHidden: ViewModifier {
 
 
 
+// ───── Compatibility Shims for WorkOrdersDatabase (DISABLED) ─────
+// These temporary helpers are now superseded by real WorkOrdersDatabase APIs.
+// We keep them wrapped (not deleted) for easy diff/recovery if needed.
+#if false
 #warning("Compatibility shims for WorkOrdersDatabase: remove if you implement these methods elsewhere")
 // ───── Compatibility shims for WorkOrdersDatabase (UI-refresh fallbacks) ─────
 @MainActor
@@ -654,6 +662,48 @@ extension WorkOrdersDatabase {
         }
     }
 }
+
+#endif
+// ───── END Compatibility Shims (Disabled) ─────
+
+// ───── WorkOrdersDatabase Preview Helpers (Active, Non‑Shim) ─────
+// These lightweight helpers are compiled (unlike the disabled shim block above).
+// They only update the in‑memory cache so the UI can show a preview thumbnail ASAP.
+// Persisting to Firestore should be handled by your primary DB methods elsewhere.
+@MainActor
+extension WorkOrdersDatabase {
+    /// If the parent WorkOrder (resolved via item containment) has an empty preview,
+    /// set it to the given URL and bump `lastModified`. No remote writes here.
+    func setWorkOrderPreviewIfEmpty(containingItem itemId: UUID, previewURL: String) {
+        guard let woIndex = workOrders.firstIndex(where: { wo in
+            wo.items.contains(where: { $0.id == itemId })
+        }) else {
+            #if DEBUG
+            print("ℹ️ setWorkOrderPreviewIfEmpty(containingItem:): parent WO not found for item \(itemId)")
+            #endif
+            return
+        }
+        let current = workOrders[woIndex].imageURL?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard current.isEmpty else { return }
+        workOrders[woIndex].imageURL = previewURL
+        workOrders[woIndex].lastModified = Date()
+        // Nudge @Published by reassigning the element
+        let updated = workOrders[woIndex]
+        workOrders[woIndex] = updated
+        #if DEBUG
+        print("✅ Preview set (via item) for WO \(workOrders[woIndex].WO_Number): \(previewURL)")
+        #endif
+    }
+
+    /// Retry helper that resolves the parent WorkOrder by item containment and tries again later.
+    func scheduleWOPreviewPersistRetry(containingItem itemId: UUID, url: String, delay: TimeInterval) {
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            self.setWorkOrderPreviewIfEmpty(containingItem: itemId, previewURL: url)
+        }
+    }
+}
+// END Preview Helpers
 
 // ───── Preview Templates ─────
 #Preview("PhotoCaptureView – Demo") {

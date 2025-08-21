@@ -7,40 +7,93 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		892AA0AE2E4BDCDD00FE7BAA /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = 892AA0AD2E4BDCDD00FE7BAA /* FirebaseAuth */; };
-		8996D2DA2E4636F3005DE3D4 /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = 8996D2D92E4636F3005DE3D4 /* FirebaseFirestore */; };
-		8996D2DC2E4636F3005DE3D4 /* FirebaseFirestoreSwift in Frameworks */ = {isa = PBXBuildFile; productRef = 8996D2DB2E4636F3005DE3D4 /* FirebaseFirestoreSwift */; };
-		8996D2DE2E4636F3005DE3D4 /* FirebaseStorage in Frameworks */ = {isa = PBXBuildFile; productRef = 8996D2DD2E4636F3005DE3D4 /* FirebaseStorage */; };
-		8996D34D2E46D185005DE3D4 /* FirestoreTestView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8996D33F2E46D185005DE3D4 /* FirestoreTestView.swift */; };
+		8905EEA02E57AD96006AC3D3 /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = 8905EE9F2E57AD96006AC3D3 /* FirebaseAuth */; };
+		8905EEA22E57AD96006AC3D3 /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = 8905EEA12E57AD96006AC3D3 /* FirebaseFirestore */; };
+		8905EEA42E57AD96006AC3D3 /* FirebaseFirestoreSwift in Frameworks */ = {isa = PBXBuildFile; productRef = 8905EEA32E57AD96006AC3D3 /* FirebaseFirestoreSwift */; };
+		8905EEA62E57AD96006AC3D3 /* FirebaseStorage in Frameworks */ = {isa = PBXBuildFile; productRef = 8905EEA52E57AD96006AC3D3 /* FirebaseStorage */; };
+		8905EEA72E57B19D006AC3D3 /* FirestoreTestView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8996D33F2E46D185005DE3D4 /* FirestoreTestView.swift */; };
 /* End PBXBuildFile section */
 
-/* Begin PBXContainerItemProxy section */
-		8996D2B92E46348C005DE3D4 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = 8996D2A32E46348B005DE3D4 /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = 8996D2AA2E46348B005DE3D4;
-			remoteInfo = HydraulicsWorkOrderApp;
-		};
-		8996D2C32E46348C005DE3D4 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = 8996D2A32E46348B005DE3D4 /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = 8996D2AA2E46348B005DE3D4;
-			remoteInfo = HydraulicsWorkOrderApp;
-		};
-/* End PBXContainerItemProxy section */
-
 /* Begin PBXFileReference section */
-		8996D2AB2E46348B005DE3D4 /* HydraulicsWorkOrderApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = HydraulicsWorkOrderApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		8905ED992E5795AE006AC3D3 /* HydraulicsWorkOrderApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = HydraulicsWorkOrderApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		8996D2B82E46348C005DE3D4 /* HydraulicsWorkOrderAppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HydraulicsWorkOrderAppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		8996D2C22E46348C005DE3D4 /* HydraulicsWorkOrderAppUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HydraulicsWorkOrderAppUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		8996D33F2E46D185005DE3D4 /* FirestoreTestView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirestoreTestView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		8905EE292E5796A7006AC3D3 /* Exceptions for "HydraulicsWorkOrderApp" folder in "HydraulicsWorkOrderApp" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				App/AppDelegate.swift,
+				App/AppState.swift,
+				Assets.xcassets,
+				ContentView.swift,
+				HydraulicsWorkOrderAppApp.swift,
+				Managers/Configuration/DevSettingsManager.swift,
+				Managers/Configuration/DropdownManager.swift,
+				Managers/Configuration/SampleDataLoader.swift,
+				Managers/Data/CustomerDatabase.swift,
+				Managers/Data/StorageManager.swift,
+				Managers/Data/WorkOrdersDatabase.swift,
+				Models/Core/Customer.swift,
+				Models/Core/TagReplacement.swift,
+				Models/Core/WO_Item.swift,
+				Models/Core/WO_Note.swift,
+				Models/Core/WO_Status.swift,
+				Models/Core/WorkOrder.swift,
+				Models/Enums/UserRole.swift,
+				Models/OfflineDataModel.swift,
+				Resources/AppleNotesYellow.json,
+				"Resources/GoogleService-Info.plist",
+				UI/Modifiers/OfflineStatusModifier.swift,
+				Utilities/Authentication/LoginView.swift,
+				Utilities/Components/SidebarToggleButton.swift,
+				Utilities/Constants/DropdownSchema.swift,
+				Utilities/Constants/Notifications.swift,
+				Utilities/Constants/UIConstants.swift,
+				"Utilities/Extensions/Toolbar+SidebarToggle.swift",
+				"Utilities/Extensions/View+Extensions.swift",
+				"Utilities/Extensions/View+If.swift",
+				Utilities/Helpers/CompressedImage.swift,
+				Utilities/Helpers/StorageImageResolver.swift,
+				Utilities/Helpers/WOItemUpdater.swift,
+				Utilities/Helpers/WorkOrderNumberGenerator.swift,
+				Utilities/Helpers/WorkOrderPreviewResolver.swift,
+				Utilities/Helpers/YellowAccentButtonStyle.swift,
+				Utilities/NetworkMonitor.swift,
+				Utilities/OfflineManager.swift,
+				Views/Admin/SettingsView.swift,
+				Views/Components/DropdownField.swift,
+				Views/Components/FullScreenImageViewer.swift,
+				Views/Components/ItemCard.swift,
+				Views/Components/NotesTimelineView.swift,
+				Views/Components/PhotoCaptureView.swift,
+				Views/Components/StatusBadge.swift,
+				Views/Components/WOItemAccordionRow.swift,
+				Views/Components/WorkOrderCardView.swift,
+				Views/Main/ActiveWorkOrdersView.swift,
+				Views/Main/AddWOItemFormView.swift,
+				Views/Main/AddWOItemView.swift,
+				Views/Main/NewCustomerModalView.swift,
+				Views/Main/NewWorkOrderView.swift,
+				Views/Main/RouterView.swift,
+				Views/Main/WorkOrderDetailView.swift,
+				Views/Sidebar/SidebarMenuContent.swift,
+				Views/Sidebar/SidebarMenuSheet.swift,
+				Views/Sidebar/SidebarMenuView.swift,
+				Views/ViewModels/CustomerSearchViewModel.swift,
+			);
+			target = 8905ED982E5795AE006AC3D3 /* HydraulicsWorkOrderApp */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		8996D2AD2E46348B005DE3D4 /* HydraulicsWorkOrderApp */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				8905EE292E5796A7006AC3D3 /* Exceptions for "HydraulicsWorkOrderApp" folder in "HydraulicsWorkOrderApp" target */,
+			);
 			path = HydraulicsWorkOrderApp;
 			sourceTree = "<group>";
 		};
@@ -57,14 +110,14 @@
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
-		8996D2A82E46348B005DE3D4 /* Frameworks */ = {
+		8905ED962E5795AE006AC3D3 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				8996D2DA2E4636F3005DE3D4 /* FirebaseFirestore in Frameworks */,
-				8996D2DC2E4636F3005DE3D4 /* FirebaseFirestoreSwift in Frameworks */,
-				8996D2DE2E4636F3005DE3D4 /* FirebaseStorage in Frameworks */,
-				892AA0AE2E4BDCDD00FE7BAA /* FirebaseAuth in Frameworks */,
+				8905EEA02E57AD96006AC3D3 /* FirebaseAuth in Frameworks */,
+				8905EEA62E57AD96006AC3D3 /* FirebaseStorage in Frameworks */,
+				8905EEA22E57AD96006AC3D3 /* FirebaseFirestore in Frameworks */,
+				8905EEA42E57AD96006AC3D3 /* FirebaseFirestoreSwift in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -99,9 +152,9 @@
 		8996D2AC2E46348B005DE3D4 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				8996D2AB2E46348B005DE3D4 /* HydraulicsWorkOrderApp.app */,
 				8996D2B82E46348C005DE3D4 /* HydraulicsWorkOrderAppTests.xctest */,
 				8996D2C22E46348C005DE3D4 /* HydraulicsWorkOrderAppUITests.xctest */,
+				8905ED992E5795AE006AC3D3 /* HydraulicsWorkOrderApp.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -109,30 +162,27 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		8996D2AA2E46348B005DE3D4 /* HydraulicsWorkOrderApp */ = {
+		8905ED982E5795AE006AC3D3 /* HydraulicsWorkOrderApp */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 8996D2CC2E46348C005DE3D4 /* Build configuration list for PBXNativeTarget "HydraulicsWorkOrderApp" */;
+			buildConfigurationList = 8905EDA12E5795AF006AC3D3 /* Build configuration list for PBXNativeTarget "HydraulicsWorkOrderApp" */;
 			buildPhases = (
-				8996D2A72E46348B005DE3D4 /* Sources */,
-				8996D2A82E46348B005DE3D4 /* Frameworks */,
-				8996D2A92E46348B005DE3D4 /* Resources */,
+				8905ED952E5795AE006AC3D3 /* Sources */,
+				8905ED962E5795AE006AC3D3 /* Frameworks */,
+				8905ED972E5795AE006AC3D3 /* Resources */,
 			);
 			buildRules = (
 			);
 			dependencies = (
 			);
-			fileSystemSynchronizedGroups = (
-				8996D2AD2E46348B005DE3D4 /* HydraulicsWorkOrderApp */,
-			);
 			name = HydraulicsWorkOrderApp;
 			packageProductDependencies = (
-				8996D2D92E4636F3005DE3D4 /* FirebaseFirestore */,
-				8996D2DB2E4636F3005DE3D4 /* FirebaseFirestoreSwift */,
-				8996D2DD2E4636F3005DE3D4 /* FirebaseStorage */,
-				892AA0AD2E4BDCDD00FE7BAA /* FirebaseAuth */,
+				8905EE9F2E57AD96006AC3D3 /* FirebaseAuth */,
+				8905EEA12E57AD96006AC3D3 /* FirebaseFirestore */,
+				8905EEA32E57AD96006AC3D3 /* FirebaseFirestoreSwift */,
+				8905EEA52E57AD96006AC3D3 /* FirebaseStorage */,
 			);
 			productName = HydraulicsWorkOrderApp;
-			productReference = 8996D2AB2E46348B005DE3D4 /* HydraulicsWorkOrderApp.app */;
+			productReference = 8905ED992E5795AE006AC3D3 /* HydraulicsWorkOrderApp.app */;
 			productType = "com.apple.product-type.application";
 		};
 		8996D2B72E46348C005DE3D4 /* HydraulicsWorkOrderAppTests */ = {
@@ -146,7 +196,6 @@
 			buildRules = (
 			);
 			dependencies = (
-				8996D2BA2E46348C005DE3D4 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				8996D2BB2E46348C005DE3D4 /* HydraulicsWorkOrderAppTests */,
@@ -169,7 +218,6 @@
 			buildRules = (
 			);
 			dependencies = (
-				8996D2C42E46348C005DE3D4 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				8996D2C52E46348C005DE3D4 /* HydraulicsWorkOrderAppUITests */,
@@ -191,7 +239,7 @@
 				LastSwiftUpdateCheck = 1640;
 				LastUpgradeCheck = 1640;
 				TargetAttributes = {
-					8996D2AA2E46348B005DE3D4 = {
+					8905ED982E5795AE006AC3D3 = {
 						CreatedOnToolsVersion = 16.4;
 					};
 					8996D2B72E46348C005DE3D4 = {
@@ -214,22 +262,22 @@
 			mainGroup = 8996D2A22E46348B005DE3D4;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				8996D2D82E4636F3005DE3D4 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
+				8905EE9E2E57AD96006AC3D3 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 8996D2AC2E46348B005DE3D4 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				8996D2AA2E46348B005DE3D4 /* HydraulicsWorkOrderApp */,
 				8996D2B72E46348C005DE3D4 /* HydraulicsWorkOrderAppTests */,
 				8996D2C12E46348C005DE3D4 /* HydraulicsWorkOrderAppUITests */,
+				8905ED982E5795AE006AC3D3 /* HydraulicsWorkOrderApp */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
-		8996D2A92E46348B005DE3D4 /* Resources */ = {
+		8905ED972E5795AE006AC3D3 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -253,11 +301,11 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
-		8996D2A72E46348B005DE3D4 /* Sources */ = {
+		8905ED952E5795AE006AC3D3 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				8996D34D2E46D185005DE3D4 /* FirestoreTestView.swift in Sources */,
+				8905EEA72E57B19D006AC3D3 /* FirestoreTestView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -277,20 +325,63 @@
 		};
 /* End PBXSourcesBuildPhase section */
 
-/* Begin PBXTargetDependency section */
-		8996D2BA2E46348C005DE3D4 /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = 8996D2AA2E46348B005DE3D4 /* HydraulicsWorkOrderApp */;
-			targetProxy = 8996D2B92E46348C005DE3D4 /* PBXContainerItemProxy */;
-		};
-		8996D2C42E46348C005DE3D4 /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = 8996D2AA2E46348B005DE3D4 /* HydraulicsWorkOrderApp */;
-			targetProxy = 8996D2C32E46348C005DE3D4 /* PBXContainerItemProxy */;
-		};
-/* End PBXTargetDependency section */
-
 /* Begin XCBuildConfiguration section */
+		8905EDA22E5795AF006AC3D3 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = Z62PN4AU9K;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = HydraulicsWorkOrderApp;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		8905EDA32E5795AF006AC3D3 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = Z62PN4AU9K;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = HydraulicsWorkOrderApp;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 		8996D2CA2E46348C005DE3D4 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -412,62 +503,6 @@
 			};
 			name = Release;
 		};
-		8996D2CD2E46348C005DE3D4 /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = Z62PN4AU9K;
-				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
-				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-				);
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = HydraulicsWorkOrderApp;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
-			};
-			name = Debug;
-		};
-		8996D2CE2E46348C005DE3D4 /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = Z62PN4AU9K;
-				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
-				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-				);
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = HydraulicsWorkOrderApp;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
-			};
-			name = Release;
-		};
 		8996D2D02E46348C005DE3D4 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -478,7 +513,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.5;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = Personal.HydraulicsWorkOrderAppTests;
+				PRODUCT_BUNDLE_IDENTIFIER = HydraulicsWorkOrderApp;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 5.0;
@@ -497,7 +532,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.5;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = Personal.HydraulicsWorkOrderAppTests;
+				PRODUCT_BUNDLE_IDENTIFIER = HydraulicsWorkOrderApp;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 5.0;
@@ -543,20 +578,20 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		8905EDA12E5795AF006AC3D3 /* Build configuration list for PBXNativeTarget "HydraulicsWorkOrderApp" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				8905EDA22E5795AF006AC3D3 /* Debug */,
+				8905EDA32E5795AF006AC3D3 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		8996D2A62E46348B005DE3D4 /* Build configuration list for PBXProject "HydraulicsWorkOrderApp" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				8996D2CA2E46348C005DE3D4 /* Debug */,
 				8996D2CB2E46348C005DE3D4 /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
-		8996D2CC2E46348C005DE3D4 /* Build configuration list for PBXNativeTarget "HydraulicsWorkOrderApp" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				8996D2CD2E46348C005DE3D4 /* Debug */,
-				8996D2CE2E46348C005DE3D4 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
@@ -582,35 +617,35 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
-		8996D2D82E4636F3005DE3D4 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */ = {
+		8905EE9E2E57AD96006AC3D3 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/firebase/firebase-ios-sdk";
 			requirement = {
 				kind = upToNextMajorVersion;
-				minimumVersion = 10.18.0;
+				minimumVersion = 10.0.0;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		892AA0AD2E4BDCDD00FE7BAA /* FirebaseAuth */ = {
+		8905EE9F2E57AD96006AC3D3 /* FirebaseAuth */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 8996D2D82E4636F3005DE3D4 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			package = 8905EE9E2E57AD96006AC3D3 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
 			productName = FirebaseAuth;
 		};
-		8996D2D92E4636F3005DE3D4 /* FirebaseFirestore */ = {
+		8905EEA12E57AD96006AC3D3 /* FirebaseFirestore */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 8996D2D82E4636F3005DE3D4 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			package = 8905EE9E2E57AD96006AC3D3 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
 			productName = FirebaseFirestore;
 		};
-		8996D2DB2E4636F3005DE3D4 /* FirebaseFirestoreSwift */ = {
+		8905EEA32E57AD96006AC3D3 /* FirebaseFirestoreSwift */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 8996D2D82E4636F3005DE3D4 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			package = 8905EE9E2E57AD96006AC3D3 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
 			productName = FirebaseFirestoreSwift;
 		};
-		8996D2DD2E4636F3005DE3D4 /* FirebaseStorage */ = {
+		8905EEA52E57AD96006AC3D3 /* FirebaseStorage */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 8996D2D82E4636F3005DE3D4 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			package = 8905EE9E2E57AD96006AC3D3 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
 			productName = FirebaseStorage;
 		};
 /* End XCSwiftPackageProductDependency section */

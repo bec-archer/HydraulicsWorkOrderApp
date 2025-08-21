@@ -78,6 +78,12 @@ final class DevSettingsManager: ObservableObject {
         self.skipLogin        = defaults.bool(forKey: Keys.bypassLogin)
         self.skipTagScan      = defaults.bool(forKey: Keys.enforceTagScan)
         self.enableSampleData = defaults.bool(forKey: Keys.sampleData)
+
+        // ───── Debug Override: always bypass login in DEBUG builds ─────
+        #if DEBUG
+        self.skipLogin = true   // will persist via didSet
+        #endif
+        // END Debug Override
     }
 }
 // END
