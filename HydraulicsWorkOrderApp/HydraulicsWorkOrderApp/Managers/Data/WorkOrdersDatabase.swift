@@ -166,6 +166,15 @@ final class WorkOrdersDatabase: ObservableObject {
                         if wo.id == nil { wo.id = doc.documentID } // backfill if custom decoder didn’t set it
                         decoded.append(wo)
                     } catch let DecodingError.keyNotFound(key, context) {
+                        // ───── Lossy fallback for legacy docs (try once) ─────
+                        if let safe = try? self.decodeLossyWorkOrder(from: doc) {
+                            decoded.append(safe)
+                            #if DEBUG
+                            print("ℹ️ Lossy‑decoded legacy WorkOrder \(doc.documentID)")
+                            #endif
+                            continue
+                        }
+                        // END lossy fallback
                         // ───── Legacy compat: tolerate missing imageURLs by injecting an empty array and retrying ─────
                         if key.stringValue == "imageURLs" {
                             var raw = doc.data()
@@ -190,6 +199,15 @@ final class WorkOrdersDatabase: ObservableObject {
                             failures.append((doc.documentID, msg))
                         }
                     } catch let DecodingError.valueNotFound(type, context) {
+                        // ───── Lossy fallback for valueNotFound (try once) ─────
+                        if let safe = try? self.decodeLossyWorkOrder(from: doc) {
+                            decoded.append(safe)
+                            #if DEBUG
+                            print("ℹ️ Lossy‑decoded (valueNotFound) WorkOrder \(doc.documentID)")
+                            #endif
+                            continue
+                        }
+                        // END lossy fallback
                         // Some encoders treat a missing array as 'value not found'; apply same legacy patch
                         var raw = doc.data()
                         if raw["imageURLs"] == nil { raw["imageURLs"] = [] }
@@ -229,82 +247,232 @@ final class WorkOrdersDatabase: ObservableObject {
                 }
             }
     }
-    // ───── IMAGE URL MERGE + LOCAL PUBLISH ─────
+    // ───── IMAGE URL MERGE + LOCAL PUBLISH (Robust) ─────
     /// Writes new image URLs for a specific WO_Item and ensures the Active list updates immediately.
-    /// - Parameters:
-    ///   - woId: Firestore documentID of the WorkOrder
-    ///   - itemId: UUID of the WO_Item receiving the image
-    ///   - fullURL: Public URL to the full-resolution image
-    ///   - thumbURL: Public URL to the generated thumbnail
-    /// - Behavior:
-    ///   - Inserts (deduped) into `items[idx].imageUrls` and (if available) `items[idx].thumbUrls`
-    ///   - Sets `workOrder.imageURL` if it is currently nil (so the card has something to show)
-    ///   - Persists to Firestore and then REPLACES the WorkOrder in the published cache on the main queue
+    /// Now resilient to cache warm‑up and mismatched woId by resolving the parent via itemId and one short retry.
     func applyItemImageURLs(woId: String,
                             itemId: UUID,
                             fullURL: String,
                             thumbURL: String,
                             uploadedBy user: String = "system",
                             completion: @escaping (Result<Void, Error>) -> Void) {
-        let docRef = db.collection(collectionName).document(woId)
 
-        docRef.getDocument { [weak self] snap, err in
-            guard let self else { return }
-            if let err = err { completion(.failure(err)); return }
-            guard let snap, snap.exists else {
-                return completion(.failure(NSError(domain: "WorkOrdersDatabase",
-                                                   code: 404,
-                                                   userInfo: [NSLocalizedDescriptionKey: "WorkOrder \(woId) not found"])))
+        // Prefer a parent WO that contains this item from the local cache; fall back to the passed woId.
+        let effectiveWoId: String = {
+            if let local = self.workOrders.first(where: { $0.items.contains(where: { $0.id == itemId }) })?.id, !local.isEmpty {
+                return local
             }
+            return woId
+        }()
 
-            do {
-                var wo = try snap.data(as: WorkOrder.self)
-                if wo.id == nil { wo.id = woId } // backfill the @DocumentID if needed
+        func attempt(_ remainingRetries: Int) {
+            let docRef = db.collection(collectionName).document(effectiveWoId)
 
-                guard let idx = wo.items.firstIndex(where: { $0.id == itemId }) else {
+            docRef.getDocument { [weak self] snap, err in
+                guard let self else { return }
+                if let err = err { completion(.failure(err)); return }
+                guard let snap, snap.exists else {
                     return completion(.failure(NSError(domain: "WorkOrdersDatabase",
                                                        code: 404,
-                                                       userInfo: [NSLocalizedDescriptionKey: "WO_Item \(itemId) not found in WorkOrder \(woId)"])))
+                                                       userInfo: [NSLocalizedDescriptionKey: "WorkOrder \(effectiveWoId) not found"])))
                 }
 
-                // ───── Insert URLs with de-dupe ─────
-                // Ensure full-size list exists and prepend newest
-                if wo.items[idx].imageUrls.first != fullURL {
-                    if !wo.items[idx].imageUrls.contains(fullURL) {
+                do {
+                    var wo = try snap.data(as: WorkOrder.self)
+                    if wo.id == nil { wo.id = effectiveWoId }
+
+                    guard let idx = wo.items.firstIndex(where: { $0.id == itemId }) else {
+                        if remainingRetries > 0 {
+                            // The parent snapshot doesn't include the item yet — brief retry with a slightly longer backoff to avoid transient 404s.
+                            Task { @MainActor in
+                                try? await Task.sleep(nanoseconds: 500_000_000) // 0.5s
+                                attempt(remainingRetries - 1)
+                            }
+                            return
+                        }
+                        return completion(.failure(NSError(domain: "WorkOrdersDatabase",
+                                                           code: 404,
+                                                           userInfo: [NSLocalizedDescriptionKey: "WO_Item \(itemId) not found in WorkOrder \(effectiveWoId)"])))
+                    }
+
+                    // ───── Insert URLs with de‑dupe ─────
+                    if wo.items[idx].imageUrls.first != fullURL && !wo.items[idx].imageUrls.contains(fullURL) {
                         wo.items[idx].imageUrls.insert(fullURL, at: 0)
                     }
-                }
 
-                // Some builds include `thumbUrls` on WO_Item. If present, prepend newest thumbnail.
-                // We gate this with optional chaining to avoid compile errors if the property doesn't exist in your model.
-                if var thumbs = (wo.items[idx] as AnyObject).value(forKey: "thumbUrls") as? [String] {
-                    if thumbs.first != thumbURL && !thumbs.contains(thumbURL) {
-                        thumbs.insert(thumbURL, at: 0)
-                        (wo.items[idx] as AnyObject).setValue(thumbs, forKey: "thumbUrls")
+                    // Optional thumbs array support (if present in the model at runtime)
+                    if var thumbs = (wo.items[idx] as AnyObject).value(forKey: "thumbUrls") as? [String] {
+                        if thumbs.first != thumbURL && !thumbs.contains(thumbURL) {
+                            thumbs.insert(thumbURL, at: 0)
+                            (wo.items[idx] as AnyObject).setValue(thumbs, forKey: "thumbUrls")
+                        }
                     }
+
+                    if (wo.imageURL == nil) || (wo.imageURL?.isEmpty == true) {
+                        wo.imageURL = thumbURL.isEmpty ? fullURL : thumbURL
+                    }
+
+                    wo.lastModified = Date()
+                    wo.lastModifiedBy = user
+
+                    try docRef.setData(from: wo, merge: false) { err in
+                        if let err = err { completion(.failure(err)); return }
+                        self.replaceInCache(wo) // publish for UI refresh
+                        completion(.success(()))
+                    }
+                } catch {
+                    completion(.failure(error))
                 }
-
-                // If the card-level imageURL is still empty, set it to the fresh thumbnail
-                if (wo.imageURL == nil) || (wo.imageURL?.isEmpty == true) {
-                    wo.imageURL = thumbURL
-                }
-
-                wo.lastModified = Date()
-                wo.lastModifiedBy = user
-
-                try docRef.setData(from: wo, merge: false) { err in
-                    if let err = err { completion(.failure(err)); return }
-
-                    // ───── Publish replacement so SwiftUI re-renders immediately ─────
-                    self.replaceInCache(wo)
-                    completion(.success(()))
-                }
-            } catch {
-                completion(.failure(error))
             }
         }
+
+        // Kick off with three retries available to smooth over race conditions
+        attempt(3)
     }
-    // END image URL merge
+    // END image URL merge (robust)
+
+    // ───── Lossy decode shim for legacy docs ─────
+    /// Attempts to decode a WorkOrder while tolerating missing optional fields like imageUrls.
+    private func decodeLossyWorkOrder(from doc: DocumentSnapshot) throws -> WorkOrder {
+        struct WO_LOSSY: Decodable {
+            let id: String?
+            let createdBy: String?
+            let phoneNumber: String?
+            // Customer fields (may be absent on legacy docs)
+            let customerId: String?
+            let customerName: String?
+            let customerPhone: String?
+            let WO_Type: String?
+            let imageURL: String?
+            let imageURLs: [String]?   // 🆕 tolerate top-level imageURLs if present
+            let timestamp: Timestamp?
+            let status: String?
+            let WO_Number: String?
+            let flagged: Bool?
+            let dropdowns: [String:String]?
+            let dropdownSchemaVersion: Int?
+            let lastModified: Timestamp?
+            let lastModifiedBy: String?
+            let notes: [WO_Note]?
+            let items: [ITEM_LOSSY]?
+            let tagBypassReason: String?
+            let isDeleted: Bool?
+
+            struct ITEM_LOSSY: Decodable {
+                let id: UUID?
+                let tagId: String?
+                let imageUrls: [String]?
+                let type: String?
+                let dropdowns: [String:String]?
+                let dropdownSchemaVersion: Int?
+                let reasonsForService: [String]?
+                let reasonNotes: String?
+                let statusHistory: [WO_Status]?
+                let testResult: String?
+                let partsUsed: String?
+                let hoursWorked: String?
+                let cost: String?
+                let assignedTo: String?
+                let isFlagged: Bool?
+                let tagReplacementHistory: [TagReplacement]?
+            }
+        }
+
+        let lossy = try doc.data(as: WO_LOSSY.self)
+
+        var itemsAccum: [WO_Item] = []
+        for it in (lossy.items ?? []) {
+            // Break up the large initializer into simple locals to help the type checker
+            let safeItemId             = it.id ?? UUID()
+            let safeTagId              = it.tagId
+            let safeImageUrls          = it.imageUrls ?? []
+            let safeType               = it.type ?? "Unknown"
+            let safeDropdowns          = it.dropdowns ?? [:]
+            let safeDropdownSchemaVer  = it.dropdownSchemaVersion ?? 1
+            let safeReasons            = it.reasonsForService ?? []
+            let safeReasonNotes        = it.reasonNotes
+            let safeStatusHistory      = it.statusHistory ?? []
+            let safeTestResult         = it.testResult
+            let safePartsUsed          = it.partsUsed
+            let safeHoursWorked        = it.hoursWorked
+            let safeCost               = it.cost
+            let safeAssignedTo         = it.assignedTo ?? ""
+            let safeIsFlagged          = it.isFlagged ?? false
+            let safeTagReplacementHist = it.tagReplacementHistory
+
+            let item = WO_Item(
+                id: safeItemId,
+                tagId: safeTagId,
+                type: safeType,
+                dropdowns: safeDropdowns,
+                reasonsForService: safeReasons, reasonNotes: safeReasonNotes, imageUrls: safeImageUrls, dropdownSchemaVersion: safeDropdownSchemaVer,
+                statusHistory: safeStatusHistory,
+                testResult: safeTestResult,
+                partsUsed: safePartsUsed,
+                hoursWorked: safeHoursWorked,
+                cost: safeCost,
+                assignedTo: safeAssignedTo,
+                isFlagged: safeIsFlagged,
+                tagReplacementHistory: safeTagReplacementHist
+            )
+            itemsAccum.append(item)
+        }
+        let safeItems: [WO_Item] = itemsAccum
+
+        // Break up the large initializer to help the type checker
+        let safeId               = lossy.id ?? doc.documentID
+        let safeCreatedBy        = lossy.createdBy ?? ""
+        let safePhone            = lossy.phoneNumber ?? ""
+        let safeCustomerId        = lossy.customerId ?? ""
+        let safeCustomerName      = lossy.customerName ?? ""
+        let safeCustomerPhone     = lossy.customerPhone ?? ""
+        // Prefer explicit customerPhone; fall back to legacy phoneNumber if present
+        let finalCustomerPhone = safeCustomerPhone.isEmpty ? safePhone : safeCustomerPhone
+        let safeType             = lossy.WO_Type ?? ""
+        let safeImageURL         = lossy.imageURL
+        let safeImageURLs        = lossy.imageURLs ?? []  // 🆕 ensure initializer label match
+        let safeTimestamp        = (lossy.timestamp?.dateValue()) ?? Date()
+        let safeStatus           = lossy.status ?? "Checked In"
+        let safeNumber           = lossy.WO_Number ?? ""
+        let safeFlagged          = lossy.flagged ?? false
+        let safeDropdowns        = lossy.dropdowns ?? [:]
+        let safeSchemaVersion    = lossy.dropdownSchemaVersion ?? 1
+        let safeLastModified     = (lossy.lastModified?.dateValue()) ?? Date()
+        let safeLastModifiedBy   = lossy.lastModifiedBy ?? ""
+        let safeNotes            = lossy.notes ?? []
+        let safeTagBypassReason  = lossy.tagBypassReason
+        let safeIsDeleted        = lossy.isDeleted ?? false
+        
+        // Build in two steps to help the type checker
+        // Build in two steps to help the type checker
+        let builtWO = WorkOrder(
+            id: safeId,
+            createdBy: safeCreatedBy,
+            customerId: safeCustomerId,
+            customerName: safeCustomerName,
+            customerPhone: finalCustomerPhone,
+            WO_Type: safeType,
+            imageURL: safeImageURL,
+            imageURLs: safeImageURLs, // 🆕 match WorkOrder signature
+            timestamp: safeTimestamp,
+            status: safeStatus,
+            WO_Number: safeNumber,
+            flagged: safeFlagged,
+            tagId: nil,
+            estimatedCost: nil,
+            finalCost: nil,
+            dropdowns: safeDropdowns,
+            dropdownSchemaVersion: safeSchemaVersion,
+            lastModified: safeLastModified,
+            lastModifiedBy: safeLastModifiedBy,
+            tagBypassReason: safeTagBypassReason, // 🧭 place before isDeleted per signature
+            isDeleted: safeIsDeleted,
+            notes: safeNotes,
+            items: safeItems
+        )
+        return builtWO
+    }
+    // END lossy decode shim
 
     // ───── LOCAL CACHE REPLACEMENT (UI REFRESH) ─────
     /// Replaces the matching WorkOrder in the published cache (by documentID) on the main queue.
