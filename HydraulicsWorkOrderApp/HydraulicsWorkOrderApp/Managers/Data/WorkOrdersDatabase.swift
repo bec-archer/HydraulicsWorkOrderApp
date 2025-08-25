@@ -85,7 +85,7 @@ final class WorkOrdersDatabase: ObservableObject {
 
 
     // ───── ADD NEW WORK ORDER TO FIRESTORE ─────
-    func addWorkOrder(_ workOrder: WorkOrder, completion: @escaping (Result<Void, Error>) -> Void) {
+    func addWorkOrder(_ workOrder: WorkOrder, completion: @escaping (Result<String, Error>) -> Void) {
         do {
             // Ensure there's at least one creation note like: "Checked In" by <user> at <timestamp>
             var woForWrite = workOrder
@@ -127,11 +127,21 @@ final class WorkOrdersDatabase: ObservableObject {
 
                 // Success: update local cache with the Firestore documentID
                 DispatchQueue.main.async {
-                    var woWithId = woForWrite
-                    woWithId.id = docRef?.documentID            // @DocumentID var id: String?
-                    self.workOrders.append(woWithId)
+                    // Update the work order with the actual Firestore document ID for local cache
+                    var updatedWO = woForWrite
+                    updatedWO.id = docRef?.documentID
+                    self.workOrders.append(updatedWO)
+                    
+                    #if DEBUG
+                    print("✅ WorkOrder created successfully: \(updatedWO.WO_Number) with ID: \(updatedWO.id ?? "nil")")
+                    print("📊 Total work orders in cache: \(self.workOrders.count)")
+                    print("📋 All work orders in cache:")
+                    for wo in self.workOrders {
+                        print("  - \(wo.WO_Number) (ID: \(wo.id ?? "nil"), Status: \(wo.status), Deleted: \(wo.isDeleted))")
+                    }
+                    #endif
                 }
-                completion(.success(()))
+                completion(.success(docRef?.documentID ?? ""))
             }
 
             _ = docRef // keep reference alive until closure runs
@@ -143,11 +153,24 @@ final class WorkOrdersDatabase: ObservableObject {
 
     // ───── FETCH ALL WORK ORDERS FROM FIRESTORE (lenient decode) ─────
     func fetchAllWorkOrders(completion: @escaping (Result<[WorkOrder], Error>) -> Void) {
+        // If offline, return cached work orders
+        if !NetworkMonitor.shared.isConnected {
+            #if DEBUG
+            print("📱 Offline mode: Returning cached work orders (\(self.workOrders.count) items)")
+            #endif
+            completion(.success(self.workOrders))
+            return
+        }
+        
         db.collection(collectionName)
             .order(by: "timestamp", descending: true)
             .getDocuments { snapshot, error in
                 if let error = error {
-                    completion(.failure(error))
+                    // If Firestore fails, fall back to cached data
+                    #if DEBUG
+                    print("⚠️ Firestore fetch failed, using cached data: \(error.localizedDescription)")
+                    #endif
+                    completion(.success(self.workOrders))
                     return
                 }
 
@@ -162,8 +185,9 @@ final class WorkOrdersDatabase: ObservableObject {
 
                 for doc in docs {
                     do {
-                        var wo = try doc.data(as: WorkOrder.self)
-                        if wo.id == nil { wo.id = doc.documentID } // backfill if custom decoder didn’t set it
+                        let wo = try doc.data(as: WorkOrder.self)
+                        // Don't manually set @DocumentID - let Firestore handle it
+                        // if wo.id == nil { wo.id = doc.documentID } // backfill if custom decoder didn't set it
                         decoded.append(wo)
                     } catch let DecodingError.keyNotFound(key, context) {
                         // ───── Lossy fallback for legacy docs (try once) ─────
@@ -181,9 +205,9 @@ final class WorkOrdersDatabase: ObservableObject {
                             if raw["imageURLs"] == nil { raw["imageURLs"] = [] }
                             do {
                                 let wo = try Firestore.Decoder().decode(WorkOrder.self, from: raw)
-                                var patched = wo
-                                if patched.id == nil { patched.id = doc.documentID }
-                                decoded.append(patched)
+                                // Don't manually set @DocumentID - let Firestore handle it
+                                // if patched.id == nil { patched.id = doc.documentID }
+                                decoded.append(wo)
                                 #if DEBUG
                                 print("ℹ️ Patched missing imageURLs for \(doc.documentID)")
                                 #endif
@@ -213,9 +237,9 @@ final class WorkOrdersDatabase: ObservableObject {
                         if raw["imageURLs"] == nil { raw["imageURLs"] = [] }
                         do {
                             let wo = try Firestore.Decoder().decode(WorkOrder.self, from: raw)
-                            var patched = wo
-                            if patched.id == nil { patched.id = doc.documentID }
-                            decoded.append(patched)
+                            // Don't manually set @DocumentID - let Firestore handle it
+                            // if patched.id == nil { patched.id = doc.documentID }
+                            decoded.append(wo)
                             #if DEBUG
                             print("ℹ️ Patched valueNotFound(imageURLs) for \(doc.documentID)")
                             #endif
@@ -225,13 +249,66 @@ final class WorkOrdersDatabase: ObservableObject {
                             failures.append((doc.documentID, msg))
                         }
                     } catch {
-                        let msg = "Unknown decode error in \(doc.documentID): \(error.localizedDescription)"
-                        print("⚠️ WorkOrder decode skipped:", msg)
-                        failures.append((doc.documentID, msg))
+                        let raw = doc.data()
+                        if let built = self.buildWorkOrderFromRaw(raw, id: doc.documentID) {
+                            decoded.append(built)
+                            #if DEBUG
+                            print("ℹ️ Lossy‑built WorkOrder \(doc.documentID) from raw after decode error: \(error.localizedDescription)")
+                            #endif
+                        } else {
+                            let msg = "Unknown decode error in \(doc.documentID): \(error.localizedDescription)"
+                            print("⚠️ WorkOrder decode skipped:", msg)
+                            failures.append((doc.documentID, msg))
+                        }
                     }
                 }
 
-                DispatchQueue.main.async { self.workOrders = decoded }
+                // ───── Normalize & Dedupe before publishing ─────
+                // Key by Firestore documentID if present; else WO_Number; else a synthesized local key.
+                let keyed: [(String, WorkOrder)] = decoded.map { wo in
+                    let key = (wo.id?.isEmpty == false ? wo.id! : (!wo.WO_Number.isEmpty ? "num-\(wo.WO_Number)" : "local-\(UUID().uuidString)"))
+                    return (key, wo)
+                }
+                // Reduce to best candidate per key: prefer the one that has a non‑empty imageURL.
+                var bestByKey: [String: WorkOrder] = [:]
+                for (k, var wo) in keyed {
+                    // Opportunistic preview fill: fall back to first item's thumbnail if top‑level is missing
+                    if (wo.imageURL == nil) || (wo.imageURL?.isEmpty == true) {
+                        if let first = wo.items.first?.thumbUrls.first {
+                            wo.imageURL = first
+                        } else if let first = wo.items.first?.imageUrls.first {
+                            wo.imageURL = first
+                        }
+                    }
+                    if let existing = bestByKey[k] {
+                        let existingHasPreview = !(existing.imageURL ?? "").isEmpty
+                        let candidateHasPreview = !(wo.imageURL ?? "").isEmpty
+                        bestByKey[k] = (existingHasPreview ? existing : (candidateHasPreview ? wo : existing))
+                    } else {
+                        bestByKey[k] = wo
+                    }
+                }
+                // Preserve your original ordering by timestamp desc.
+                let deduped = bestByKey.values.sorted(by: { $0.timestamp > $1.timestamp })
+                
+                // Preserve local deletions when updating cache
+                DispatchQueue.main.async {
+                    // Create a map of existing work orders by WO_Number for quick lookup
+                    let existingByNumber = Dictionary(uniqueKeysWithValues: self.workOrders.map { ($0.WO_Number, $0) })
+                    
+                    // Merge Firestore data with local deletions
+                    let merged = deduped.map { firestoreWO in
+                        // If this work order exists in local cache and is marked as deleted, preserve the deletion
+                        if let existing = existingByNumber[firestoreWO.WO_Number], existing.isDeleted {
+                            var updated = firestoreWO
+                            updated.isDeleted = true
+                            return updated
+                        }
+                        return firestoreWO
+                    }
+                    
+                    self.workOrders = merged
+                }
 
                 // If at least one decoded, treat as success and show what we have.
                 if !decoded.isEmpty {
@@ -265,6 +342,40 @@ final class WorkOrdersDatabase: ObservableObject {
             return woId
         }()
 
+        // ───── Lightweight exponential backoff (UI-neutral) ─────
+        func retryOrFail(_ remaining: Int, for effectiveWoId: String) {
+            guard remaining > 0 else {
+                // If we still can't find the work order after retries, try to find it by item ID
+                if let foundWO = self.workOrders.first(where: { wo in
+                    wo.items.contains(where: { $0.id == itemId })
+                }), let woId = foundWO.id, !woId.isEmpty {
+                    // Found it by item ID, try again with the correct work order ID
+                    attempt(1) // Give it one more try with the correct ID
+                    return
+                }
+                // If still not found, try to find by WO_Number (for newly created work orders)
+                if let foundWO = self.workOrders.first(where: { wo in
+                    wo.WO_Number == effectiveWoId
+                }), let woId = foundWO.id, !woId.isEmpty {
+                    // Found it by WO_Number, try again with the correct work order ID
+                    attempt(1) // Give it one more try with the correct ID
+                    return
+                }
+                completion(.failure(NSError(
+                    domain: "WorkOrdersDatabase",
+                    code: 404,
+                    userInfo: [NSLocalizedDescriptionKey: "WorkOrder \(effectiveWoId) not found"]
+                )))
+                return
+            }
+            let attemptIndex = 4 - remaining // 1,2,3
+            let delaySeconds = 0.4 * pow(2.0, Double(attemptIndex - 1)) // 0.4, 0.8, 1.6
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: UInt64(delaySeconds * 1_000_000_000))
+                attempt(remaining - 1)
+            }
+        }
+
         func attempt(_ remainingRetries: Int) {
             let docRef = db.collection(collectionName).document(effectiveWoId)
 
@@ -272,9 +383,9 @@ final class WorkOrdersDatabase: ObservableObject {
                 guard let self else { return }
                 if let err = err { completion(.failure(err)); return }
                 guard let snap, snap.exists else {
-                    return completion(.failure(NSError(domain: "WorkOrdersDatabase",
-                                                       code: 404,
-                                                       userInfo: [NSLocalizedDescriptionKey: "WorkOrder \(effectiveWoId) not found"])))
+                    // Parent WO may not be visible yet; retry calmly.
+                    retryOrFail(remainingRetries, for: effectiveWoId)
+                    return
                 }
 
                 do {
@@ -282,17 +393,9 @@ final class WorkOrdersDatabase: ObservableObject {
                     if wo.id == nil { wo.id = effectiveWoId }
 
                     guard let idx = wo.items.firstIndex(where: { $0.id == itemId }) else {
-                        if remainingRetries > 0 {
-                            // The parent snapshot doesn't include the item yet — brief retry with a slightly longer backoff to avoid transient 404s.
-                            Task { @MainActor in
-                                try? await Task.sleep(nanoseconds: 500_000_000) // 0.5s
-                                attempt(remainingRetries - 1)
-                            }
-                            return
-                        }
-                        return completion(.failure(NSError(domain: "WorkOrdersDatabase",
-                                                           code: 404,
-                                                           userInfo: [NSLocalizedDescriptionKey: "WO_Item \(itemId) not found in WorkOrder \(effectiveWoId)"])))
+                        // Item not visible in snapshot yet; retry with backoff.
+                        retryOrFail(remainingRetries, for: effectiveWoId)
+                        return
                     }
 
                     // ───── Insert URLs with de‑dupe ─────
@@ -300,12 +403,20 @@ final class WorkOrdersDatabase: ObservableObject {
                         wo.items[idx].imageUrls.insert(fullURL, at: 0)
                     }
 
-                    // Optional thumbs array support (if present in the model at runtime)
-                    if var thumbs = (wo.items[idx] as AnyObject).value(forKey: "thumbUrls") as? [String] {
-                        if thumbs.first != thumbURL && !thumbs.contains(thumbURL) {
+                    // Optional thumbs array support (NO schema change):
+                    // If Firestore already has an `items[idx].thumbUrls` array, update it after the main write.
+                    let snapData = snap.data()
+                    var updatedThumbs: [String]? = nil
+                    if
+                        let itemsArr = snapData?["items"] as? [[String: Any]],
+                        itemsArr.indices.contains(idx),
+                        let existingThumbs = itemsArr[idx]["thumbUrls"] as? [String]
+                    {
+                        var thumbs = existingThumbs
+                        if !thumbURL.isEmpty, thumbs.first != thumbURL, !thumbs.contains(thumbURL) {
                             thumbs.insert(thumbURL, at: 0)
-                            (wo.items[idx] as AnyObject).setValue(thumbs, forKey: "thumbUrls")
                         }
+                        updatedThumbs = thumbs
                     }
 
                     if (wo.imageURL == nil) || (wo.imageURL?.isEmpty == true) {
@@ -314,9 +425,22 @@ final class WorkOrdersDatabase: ObservableObject {
 
                     wo.lastModified = Date()
                     wo.lastModifiedBy = user
+                    // Publish to local cache immediately so the card can render its thumbnail
+                    // even if the Firestore write is delayed or retried.
+                    self.replaceInCache(wo)
 
                     try docRef.setData(from: wo, merge: false) { err in
-                        if let err = err { completion(.failure(err)); return }
+                        if let err = err {
+                            // Even if the write errored, keep the UI responsive with the resolved preview.
+                            self.replaceInCache(wo)
+                            completion(.failure(err))
+                            return
+                        }
+                        // If a thumbs array existed in Firestore, write the updated value back non‑fatally.
+                        if let thumbs = updatedThumbs {
+                            let path = "items.\(idx).thumbUrls"
+                            docRef.updateData([path: thumbs]) { _ in /* ignore errors to keep UX unchanged */ }
+                        }
                         self.replaceInCache(wo) // publish for UI refresh
                         completion(.success(()))
                     }
@@ -420,7 +544,8 @@ final class WorkOrdersDatabase: ObservableObject {
         let safeItems: [WO_Item] = itemsAccum
 
         // Break up the large initializer to help the type checker
-        let safeId               = lossy.id ?? doc.documentID
+        // Don't manually set @DocumentID - let Firestore handle it
+        let safeId: String?      = nil
         let safeCreatedBy        = lossy.createdBy ?? ""
         let safePhone            = lossy.phoneNumber ?? ""
         let safeCustomerId        = lossy.customerId ?? ""
@@ -444,8 +569,7 @@ final class WorkOrdersDatabase: ObservableObject {
         let safeIsDeleted        = lossy.isDeleted ?? false
         
         // Build in two steps to help the type checker
-        // Build in two steps to help the type checker
-        let builtWO = WorkOrder(
+        var builtWO = WorkOrder(
             id: safeId,
             createdBy: safeCreatedBy,
             customerId: safeCustomerId,
@@ -470,21 +594,144 @@ final class WorkOrdersDatabase: ObservableObject {
             notes: safeNotes,
             items: safeItems
         )
+        // If the top‑level preview is missing, try the first item's image as a fallback.
+        if (builtWO.imageURL == nil) || (builtWO.imageURL?.isEmpty == true) {
+            builtWO.imageURL = safeItems.first?.imageUrls.first
+        }
         return builtWO
     }
     // END lossy decode shim
+
+    // ───── Minimal lossy builder (raw dictionary → WorkOrder) ─────
+    /// Used when Firebase decoding fails with "data isn’t in the correct format".
+    /// Maps whatever fields we can and defaults the rest so the card still renders.
+    private func buildWorkOrderFromRaw(_ raw: [String: Any], id: String) -> WorkOrder? {
+        let s = { (k: String) -> String? in raw[k] as? String }
+        let b = { (k: String) -> Bool? in raw[k] as? Bool }
+        let i = { (k: String) -> Int? in raw[k] as? Int }
+        let ts = { (k: String) -> Date? in
+            if let t = raw[k] as? Timestamp { return t.dateValue() }
+            if let d = raw[k] as? Date { return d }
+            return nil
+        }
+
+        let createdBy  = s("createdBy") ?? ""
+        let phone      = s("customerPhone") ?? s("phoneNumber") ?? ""
+        let woType     = s("WO_Type") ?? ""
+        let imageURL   = s("imageURL")
+        let timestamp  = ts("timestamp") ?? Date()
+        let status     = s("status") ?? "Checked In"
+        let number     = s("WO_Number") ?? ""
+        let flagged    = b("flagged") ?? false
+        let lastMod    = ts("lastModified") ?? timestamp
+        let lastBy     = s("lastModifiedBy") ?? createdBy
+        let custId     = s("customerId") ?? ""
+        let custName   = s("customerName") ?? ""
+        let bypass     = s("tagBypassReason")
+        let isDeleted  = b("isDeleted") ?? false
+        let dropdowns  = raw["dropdowns"] as? [String: String] ?? [:]
+        let schemaVer  = i("dropdownSchemaVersion") ?? 1
+
+        var items: [WO_Item] = []
+        if let arr = raw["items"] as? [[String: Any]] {
+            for anyItem in arr {
+                let itemId = (anyItem["id"] as? String).flatMap(UUID.init(uuidString:)) ?? UUID()
+                let tagId  = anyItem["tagId"] as? String
+                let urls   = anyItem["imageUrls"] as? [String]
+                             ?? anyItem["imageURLs"] as? [String]
+                             ?? []
+                let type   = anyItem["type"] as? String ?? "Unknown"
+                let dd     = anyItem["dropdowns"] as? [String: String] ?? [:]
+                let ddv    = anyItem["dropdownSchemaVersion"] as? Int ?? schemaVer
+                let reasons = anyItem["reasonsForService"] as? [String] ?? []
+                let reasonNotes = anyItem["reasonNotes"] as? String
+                let assigned = anyItem["assignedTo"] as? String ?? ""
+                let isFlagged = anyItem["isFlagged"] as? Bool ?? false
+
+                let item = WO_Item(
+                    id: itemId,
+                    tagId: tagId,
+                    type: type,
+                    dropdowns: dd,
+                    reasonsForService: reasons, reasonNotes: reasonNotes, imageUrls: urls, dropdownSchemaVersion: ddv,
+                    statusHistory: [], testResult: nil, partsUsed: nil, hoursWorked: nil, cost: nil,
+                    assignedTo: assigned, isFlagged: isFlagged, tagReplacementHistory: nil
+                )
+                items.append(item)
+            }
+        }
+
+        let wo = WorkOrder(
+            id: nil, // Don't manually set @DocumentID - let Firestore handle it
+            createdBy: createdBy,
+            customerId: custId,
+            customerName: custName,
+            customerPhone: phone,
+            WO_Type: woType,
+            imageURL: (imageURL ?? {
+                if let arr = raw["items"] as? [[String: Any]] {
+                    if let thumbs = arr.first?["thumbUrls"] as? [String], let first = thumbs.first { return first }
+                    if let images = arr.first?["imageUrls"] as? [String], let first = images.first { return first }
+                    if let images2 = arr.first?["imageURLs"] as? [String], let first = images2.first { return first }
+                }
+                return nil
+            }()),
+            imageURLs: [],
+            timestamp: timestamp,
+            status: status,
+            WO_Number: number,
+            flagged: flagged,
+            tagId: nil,
+            estimatedCost: nil,
+            finalCost: nil,
+            dropdowns: dropdowns,
+            dropdownSchemaVersion: schemaVer,
+            lastModified: lastMod,
+            lastModifiedBy: lastBy,
+            tagBypassReason: bypass,
+            isDeleted: isDeleted,
+            notes: [],
+            items: items
+        )
+        return wo
+    }
+    // END minimal lossy builder
 
     // ───── LOCAL CACHE REPLACEMENT (UI REFRESH) ─────
     /// Replaces the matching WorkOrder in the published cache (by documentID) on the main queue.
     /// This triggers SwiftUI to re-render ActiveWorkOrdersView and its cards.
     private func replaceInCache(_ updated: WorkOrder) {
         DispatchQueue.main.async {
-            if let idx = self.workOrders.firstIndex(where: { $0.id == updated.id }) {
-                self.workOrders[idx] = updated
-            } else {
-                // If not found (e.g., newly added from a different code path), insert at the top
-                self.workOrders.insert(updated, at: 0)
+            var wo = updated
+
+            // ───── Ensure we always have a stable identifier for SwiftUI lists ─────
+            // Don't manually set @DocumentID - let Firestore handle it
+            // We'll use WO_Number for local identification instead
+
+            // ───── Opportunistic preview fill to avoid spinner ─────
+            if (wo.imageURL == nil) || (wo.imageURL?.isEmpty == true) {
+                // Prefer thumbnail URL for better performance
+                if let candidate = wo.items.first?.thumbUrls.first {
+                    wo.imageURL = candidate
+                } else if let candidate = wo.items.first?.imageUrls.first {
+                    wo.imageURL = candidate
+                }
             }
+
+            // Try to replace by Firestore id first
+            if let idxById = self.workOrders.firstIndex(where: { $0.id == wo.id }) {
+                self.workOrders[idxById] = wo
+                return
+            }
+
+            // If id didn’t match (legacy/local), try to match by WO_Number to prevent duplicates
+            if !wo.WO_Number.isEmpty, let idxByNumber = self.workOrders.firstIndex(where: { $0.WO_Number == wo.WO_Number }) {
+                self.workOrders[idxByNumber] = wo
+                return
+            }
+
+            // Otherwise insert at the top
+            self.workOrders.insert(wo, at: 0)
         }
     }
     // END local cache replacement
@@ -555,6 +802,47 @@ final class WorkOrdersDatabase: ObservableObject {
     }
     // END soft delete
 
+    // ───── DELETE LEGACY WORK ORDER (by WO_Number) ─────
+    /// Finds and soft deletes a legacy work order by its WO_Number when document ID is not available.
+    /// This is used for work orders created before proper ID management was implemented.
+    func deleteLegacyWorkOrder(woNumber: String, completion: @escaping (Result<Void, Error>) -> Void) {
+        // Query Firestore to find the work order by WO_Number
+        db.collection(collectionName)
+            .whereField("WO_Number", isEqualTo: woNumber)
+            .getDocuments { snapshot, error in
+                if let error = error {
+                    completion(.failure(error))
+                    return
+                }
+                
+                guard let docs = snapshot?.documents, !docs.isEmpty else {
+                    completion(.failure(NSError(domain: "WorkOrdersDatabase",
+                                                code: 404,
+                                                userInfo: [NSLocalizedDescriptionKey: "WorkOrder with WO_Number \(woNumber) not found in Firestore"])))
+                    return
+                }
+                
+                // Use the first document found (should be unique by WO_Number)
+                let docRef = docs[0].reference
+                
+                // Apply soft delete
+                let updates: [String: Any] = [
+                    "isDeleted": true,
+                    "lastModified": Date(),
+                    "lastModifiedBy": "system"
+                ]
+                
+                docRef.updateData(updates) { error in
+                    if let error = error {
+                        completion(.failure(error))
+                    } else {
+                        completion(.success(()))
+                    }
+                }
+            }
+    }
+    // END delete legacy work order
+
     // ───── ADD PER-ITEM NOTE ─────
     /// Append a WO_Note to a specific WO_Item inside a WorkOrder document.
     /// - Parameters:
@@ -575,7 +863,7 @@ final class WorkOrdersDatabase: ObservableObject {
 
             do {
                 var wo = try snap.data(as: WorkOrder.self)
-                if wo.id == nil { wo.id = woId } // backfill
+                // Don't manually set @DocumentID - let Firestore handle it
                 // Find the WO_Item
                 guard let idx = wo.items.firstIndex(where: { $0.id == itemId }) else {
                     return completion(.failure(NSError(domain: "WorkOrdersDatabase",
@@ -626,7 +914,7 @@ final class WorkOrdersDatabase: ObservableObject {
 
             do {
                 var wo = try snap.data(as: WorkOrder.self)
-                if wo.id == nil { wo.id = woId } // backfill
+                // Don't manually set @DocumentID - let Firestore handle it
 
                 guard let idx = wo.items.firstIndex(where: { $0.id == itemId }) else {
                     return completion(.failure(NSError(domain: "WorkOrdersDatabase",

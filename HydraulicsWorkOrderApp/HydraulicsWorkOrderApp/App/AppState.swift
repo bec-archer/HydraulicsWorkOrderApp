@@ -24,7 +24,7 @@ enum AppScreen {
 class AppState: ObservableObject {
     static let shared = AppState() // Singleton for global access
     
-    @Published var currentView: AppScreen = .newWorkOrder
+    @Published var currentView: AppScreen = .activeWorkOrders
 
     // ───── Current Logged-in User Info ─────
     @Published var currentUserName: String = ""

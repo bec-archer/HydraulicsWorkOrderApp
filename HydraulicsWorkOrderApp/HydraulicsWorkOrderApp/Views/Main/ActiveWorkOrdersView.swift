@@ -12,6 +12,7 @@
 // ─────────────────────────────────────────────────────────────
 
 import SwiftUI
+import Foundation
 
 struct ActiveWorkOrdersView: View {
     @ObservedObject var db = WorkOrdersDatabase.shared
@@ -19,40 +20,47 @@ struct ActiveWorkOrdersView: View {
     @State private var isLoading = true
     @State private var showError = false
     @State private var errorMessage = ""
+    @State private var navigationPath = NavigationPath()
 
     // Use adaptive columns so layout flows between 1–N columns depending on width (iPad portrait/landscape, iPhone)
     // Minimum keeps card content readable; spacing aligns with Apple Notes–style gutters
     let columns = [
         GridItem(.adaptive(minimum: 340), spacing: 32, alignment: .top)
     ]
+    
+    // Computed property for active work orders
+    private var activeWorkOrders: [WorkOrder] {
+        let active = db.workOrders
+            .filter { !$0.isDeleted && $0.status != "Closed" }
+            .sorted {
+                if $0.flagged != $1.flagged { return $0.flagged && !$1.flagged }
+                return $0.timestamp < $1.timestamp
+            }
+        
+        #if DEBUG
+        print("📋 ActiveWorkOrdersView: Found \(active.count) active work orders out of \(db.workOrders.count) total")
+        #endif
+        
+        return active
+    }
 
-    var body: some View {
-        NavigationSplitView(columnVisibility: $appState.splitVisibility) {
-            // ───── Sidebar Content ─────
-            SidebarMenuView() // Persistent sidebar
-        } detail: {
-            NavigationStack {
-                
-                ScrollView {
-                    // ───── Loading / Empty States ─────
-                    if isLoading {
-                        VStack(spacing: 12) {
-                            ProgressView()
-                            Text("Loading Active WorkOrders…")
-                                .foregroundStyle(.secondary)
-                        }
-                        .frame(maxWidth: .infinity, minHeight: 240)
-                        .padding(.top, 32)
+        var body: some View {
+        ScrollView {
+            VStack(spacing: 20) {
+                // ───── Loading State ─────
+                if isLoading {
+                    VStack(spacing: 12) {
+                        ProgressView()
+                        Text("Loading Active WorkOrders…")
+                            .foregroundStyle(.secondary)
                     }
-                    
-                    let active = db.workOrders
-                        .filter { !$0.isDeleted && $0.status != "Closed" }
-                        .sorted {
-                            if $0.flagged != $1.flagged { return $0.flagged && !$1.flagged }
-                            return $0.timestamp < $1.timestamp
-                        }
-                    
-                    if !isLoading && active.isEmpty {
+                    .frame(maxWidth: .infinity, minHeight: 240)
+                    .padding(.top, 32)
+                }
+                
+                if !isLoading {
+                    // ───── Empty State ─────
+                    if activeWorkOrders.isEmpty {
                         VStack(spacing: 8) {
                             Image(systemName: "tray")
                                 .font(.largeTitle)
@@ -65,133 +73,131 @@ struct ActiveWorkOrdersView: View {
                         }
                         .frame(maxWidth: .infinity, minHeight: 240)
                         .padding(.top, 32)
-                    }
-                    // ───── END Loading / Empty States ─────
-                    
-                    LazyVGrid(columns: columns, alignment: .center, spacing: 32) {
-                        // ───── Data Source: Active only, sorted (flagged first, then oldest → newest) ─────
-                        ForEach(active, id: \.id) { wo in
-                            NavigationLink {
-
-                                // ───── Detail with Delete wiring ─────
-                                WorkOrderDetailView(workOrder: wo) { target in
-                                    WorkOrdersDatabase.shared.softDelete(target, by: appState.currentUserName) { result in
-                                        switch result {
-                                        case .success:
-                                            break // The detail view will dismiss itself after calling this
-                                        case .failure(let err):
-                                            errorMessage = err.localizedDescription
-                                            showError = true
+                    } else {
+                        // ───── Work Order Grid ─────
+                        LazyVGrid(columns: columns, spacing: 32) {
+                            ForEach(activeWorkOrders, id: \.WO_Number) { workOrder in
+                                NavigationLink(destination: WorkOrderDetailView(
+                                    workOrder: workOrder,
+                                    onDelete: { deletedWorkOrder in
+                                        // Only try to delete from Firestore if we have a document ID
+                                        if let documentId = deletedWorkOrder.id, !documentId.isEmpty {
+                                            // Delete from Firestore first
+                                            WorkOrdersDatabase.shared.softDelete(deletedWorkOrder) { result in
+                                                DispatchQueue.main.async {
+                                                    switch result {
+                                                    case .success:
+                                                        print("✅ WorkOrder deleted successfully: \(deletedWorkOrder.WO_Number)")
+                                                        // Remove from local cache after successful Firestore delete
+                                                        if let index = db.workOrders.firstIndex(where: { $0.WO_Number == deletedWorkOrder.WO_Number }) {
+                                                            db.workOrders.remove(at: index)
+                                                        }
+                                                    case .failure(let error):
+                                                        print("❌ Failed to delete WorkOrder: \(error.localizedDescription)")
+                                                        // Optionally show error to user
+                                                    }
+                                                }
+                                            }
+                                        } else {
+                                            print("⚠️ WorkOrder \(deletedWorkOrder.WO_Number) has no document ID - attempting to find and delete from Firestore")
+                                            // For legacy work orders without document IDs, try to find them in Firestore by WO_Number
+                                            WorkOrdersDatabase.shared.deleteLegacyWorkOrder(woNumber: deletedWorkOrder.WO_Number) { result in
+                                                DispatchQueue.main.async {
+                                                    switch result {
+                                                    case .success:
+                                                        print("✅ Legacy WorkOrder \(deletedWorkOrder.WO_Number) deleted from Firestore")
+                                                        // Remove from local cache after successful Firestore delete
+                                                        if let index = db.workOrders.firstIndex(where: { $0.WO_Number == deletedWorkOrder.WO_Number }) {
+                                                            db.workOrders.remove(at: index)
+                                                        }
+                                                    case .failure(let error):
+                                                        print("❌ Failed to delete legacy WorkOrder from Firestore: \(error.localizedDescription)")
+                                                        // Fall back to local cache marking
+                                                        if let index = db.workOrders.firstIndex(where: { $0.WO_Number == deletedWorkOrder.WO_Number }) {
+                                                            var updatedWorkOrder = db.workOrders[index]
+                                                            updatedWorkOrder.isDeleted = true
+                                                            db.workOrders[index] = updatedWorkOrder
+                                                        }
+                                                    }
+                                                }
+                                            }
                                         }
                                     }
+                                )) {
+                                    WorkOrderCardView(workOrder: workOrder)
                                 }
-                                // END delete wiring
-                            } label: {
-                                WorkOrderCardView(workOrder: wo)
+                                .buttonStyle(PlainButtonStyle())
                             }
                         }
-                        // END data source
+                        .padding(.horizontal, 32)
+                        .padding(.vertical, 20)
                     }
-                    .padding(.horizontal, 32)
-                    .padding(.vertical, 20)
                 }
-                .navigationTitle("Active Work Orders")
-
-                // ───── Toolbar (local, iOS‑17‑safe) ─────
-                .modifier(ActiveWO_ToolbarModifier())
-                // ───── END toolbar ─────
-
-
-
-                // ───── Initial load / refresh / alerts ─────
-                .task { await loadWorkOrders() }
-                .refreshable { await loadWorkOrders() }
-                .alert("Delete Failed", isPresented: $showError) {
-                    Button("OK", role: .cancel) {}
-                } message: {
-                    Text(errorMessage)
-                }
-                // ───── END misc modifiers ─────
             }
         }
-        
+        .refreshable {
+            loadWorkOrders()
+        }
+        .onAppear {
+            // Only load from Firestore if local cache is empty
+            if db.workOrders.isEmpty {
+                loadWorkOrders()
+            } else {
+                isLoading = false
+            }
+        }
+        .onChange(of: appState.currentView) { newView in
+            // Reset navigation path when app state changes (sidebar navigation)
+            if newView != .activeWorkOrders {
+                navigationPath = NavigationPath()
+            }
+            print("🔄 ActiveWorkOrdersView: appState.currentView changed to \(newView)")
+        }
+        .alert("Error", isPresented: $showError) {
+            Button("OK") { }
+        } message: {
+            Text(errorMessage)
+        }
+        .withOfflineStatus()
+        .navigationTitle("Active Work Orders")
+        .navigationBarTitleDisplayMode(.large)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button {
+                    appState.currentView = .newWorkOrder
+                } label: {
+                    Image(systemName: "plus")
+                        .font(.title2)
+                }
+                .accessibilityLabel("Add Work Order")
+            }
+        }
     }
-    // END NavigationSplitView
-    // END body
 
-// END body
-
-    // ───── Load WorkOrders from Firestore ─────
-    func loadWorkOrders() async {
+    // ───── Load Work Orders ─────
+    private func loadWorkOrders() {
         isLoading = true
-        await withCheckedContinuation { cont in
-            db.fetchAllWorkOrders { result in
+        
+        WorkOrdersDatabase.shared.fetchAllWorkOrders { result in
+            DispatchQueue.main.async {
+                isLoading = false
+                
                 switch result {
-                case .success(_): // ignore the array payload; we already update via db.workOrders
-                    isLoading = false
+                case .success(_):
+                    // Data is already loaded into the @ObservedObject db
+                    break
                 case .failure(let error):
                     errorMessage = error.localizedDescription
                     showError = true
-                    isLoading = false
-                }
-                cont.resume()
-            }
-
-        }
-    }
-    // END
-
-}
-// ───── Local Toolbar Modifier (keeps compiler happy, hides system toggle on iOS 17+) ─────
-private struct ActiveWO_ToolbarModifier: ViewModifier {
-    func body(content: Content) -> some View {
-        content
-            .toolbar {
-   
-
-                // Right: + New Work Order (LEAVE THIS THE FUCK ALONE)
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    NavigationLink {
-                        NewWorkOrderView()
-                    } label: {
-                        Text("+ New Work Order")
-                            .modifier(UIConstants.Buttons.yellowButtonStyle())
-                    }
-                    .buttonStyle(.plain)
                 }
             }
-            .applySidebarRemovalIfAvailable()
-    }
-}
-
-// Availability-safe removal of the auto-injected blue system toggle
-private extension View {
-    @ViewBuilder
-    func applySidebarRemovalIfAvailable() -> some View {
-        if #available(iOS 17.0, *) {
-            self.toolbar(removing: .sidebarToggle)
-        } else {
-            self
         }
     }
 }
-
-// Extension for NavigationSplitView specifically
-private extension View {
-    @ViewBuilder
-    func applySidebarRemovalIfAvailableOnSplit() -> some View {
-        if #available(iOS 17.0, *) {
-            self.toolbar(removing: .sidebarToggle)
-        } else {
-            self
-        }
-    }
-}
-// ───── END Local Toolbar Helpers ─────
 
 // ───── Preview Template ─────
-#Preview(traits: .sizeThatFitsLayout) {
+#Preview {
     ActiveWorkOrdersView()
-        .environmentObject(AppState.shared)   // required for @EnvironmentObject AppState
+        .environmentObject(AppState.shared)
 }
-
+// END PREVIEW

@@ -15,7 +15,7 @@
             buildForAnalyzing = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "8996D2AA2E46348B005DE3D4"
+               BlueprintIdentifier = "8905ED982E5795AE006AC3D3"
                BuildableName = "HydraulicsWorkOrderApp.app"
                BlueprintName = "HydraulicsWorkOrderApp"
                ReferencedContainer = "container:HydraulicsWorkOrderApp.xcodeproj">
@@ -68,7 +68,7 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "8996D2AA2E46348B005DE3D4"
+            BlueprintIdentifier = "8905ED982E5795AE006AC3D3"
             BuildableName = "HydraulicsWorkOrderApp.app"
             BlueprintName = "HydraulicsWorkOrderApp"
             ReferencedContainer = "container:HydraulicsWorkOrderApp.xcodeproj">
@@ -85,21 +85,12 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "8996D2AA2E46348B005DE3D4"
+            BlueprintIdentifier = "8905ED982E5795AE006AC3D3"
             BuildableName = "HydraulicsWorkOrderApp.app"
             BlueprintName = "HydraulicsWorkOrderApp"
             ReferencedContainer = "container:HydraulicsWorkOrderApp.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
-      <MacroExpansion>
-         <BuildableReference
-            BuildableIdentifier = "primary"
-            BlueprintIdentifier = "8996D2AA2E46348B005DE3D4"
-            BuildableName = "HydraulicsWorkOrderApp.app"
-            BlueprintName = "HydraulicsWorkOrderApp"
-            ReferencedContainer = "container:HydraulicsWorkOrderApp.xcodeproj">
-         </BuildableReference>
-      </MacroExpansion>
    </ProfileAction>
    <AnalyzeAction
       buildConfiguration = "Debug">

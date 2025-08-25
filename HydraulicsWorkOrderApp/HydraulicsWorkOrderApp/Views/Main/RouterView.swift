@@ -22,7 +22,7 @@ struct RouterView: View {
         NavigationSplitView(columnVisibility: $appState.splitVisibility) {
 
             // ───── Sidebar: Routes aligned to AppState ─────
-            List(selection: .constant(UUID())) {
+            List {
 
                 // MAIN
                 Section("Main") {
@@ -56,43 +56,33 @@ struct RouterView: View {
                         .foregroundStyle(.secondary)
                 }
             }
-            .navigationTitle("Sidebar")
             // END Sidebar
 
         } detail: {
-
-            // ───── Detail: your existing switch stays intact ─────
-            Group {
-                switch appState.currentView {
-                case .login:
-                    LoginView()
-
-                case .activeWorkOrders:
-                    ActiveWorkOrdersView()
-
-                case .newWorkOrder:
-                    NewWorkOrderView()
-
-                case .settings:
-                    SettingsView()
-
-                @unknown default:
-                    Text("⚠️ Unknown AppScreen state")
-                }
-            }
-            // END Detail
-            // Global toolbar: real sidebar toggle (iPad)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button {
-                        appState.toggleSidebar()
-                    } label: {
-                        Image(systemName: "sidebar.leading")
+            // ───── Detail: Navigation handled by sidebar ─────
+            NavigationStack {
+                Group {
+                    switch appState.currentView {
+                    case .login:
+                        LoginView()
+                    case .activeWorkOrders:
+                        ActiveWorkOrdersView()
+                    case .newWorkOrder:
+                        NewWorkOrderView()
+                    case .settings:
+                        SettingsView()
+                    @unknown default:
+                        Text("⚠️ Unknown AppScreen state")
                     }
-                    .accessibilityLabel("Toggle Sidebar")
                 }
             }
-
+            .id(appState.currentView) // Force recreation when app state changes
+            .onAppear {
+                print("🔍 RouterView detail area showing: \(appState.currentView)")
+            }
+            .onChange(of: appState.currentView) { newView in
+                print("🔄 RouterView detail area switching to: \(newView)")
+            }
         }
         // ───── END Split View Shell ─────
     }

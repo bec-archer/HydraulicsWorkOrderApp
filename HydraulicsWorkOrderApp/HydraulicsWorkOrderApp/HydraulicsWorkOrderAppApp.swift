@@ -27,10 +27,9 @@ struct HydraulicsWorkOrderAppApp: App {
         WindowGroup {
             // ───── Dev Login Toggle Logic ─────
             if DevSettingsManager.shared.skipLogin {
-                ActiveWorkOrdersView()
+                RouterView()
                     .environmentObject(AppState.shared) // 👈 inject AppState
-                    .environment(\.defaultMinListRowHeight, 6) // tighter rows everywhere
-                // or SettingsView() if testing admin tools
+                    .environment(\.defaultMinListRowHeight, CGFloat(6)) // tighter rows everywhere
             } else {
                 LoginView()
                     .environmentObject(AppState.shared) // also inject here for consistency

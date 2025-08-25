@@ -106,20 +106,26 @@ extension UIColor {
 
 // ───── Preview ─────
 #Preview(traits: .sizeThatFitsLayout) {
-    @Previewable @State var selected: String? = "Yellow"   // ← make optional
-    @Previewable @State var customColor = Color.yellow
+    DropdownFieldPreview()
+}
 
-    DropdownField(
-        label: "Color",
-        options: [
-            DropdownOption(label: "Black", value: "Black", colorHex: "#000000"),
-            DropdownOption(label: "Yellow", value: "Yellow", colorHex: "#FFC500"),
-            DropdownOption(label: "Other", value: "Other")
-        ],
-        selectedValue: $selected,
-        showColorPickerIfOther: true,
-        customColor: $customColor,
-        placeholder: "Color",       // inline placeholder when nil selection
-        showLabel: false            // hide external label; mimic inline style
-    )
+struct DropdownFieldPreview: View {
+    @State var selected: String? = "Yellow"
+    @State var customColor = Color.yellow
+    
+    var body: some View {
+        DropdownField(
+            label: "Color",
+            options: [
+                DropdownOption(label: "Black", value: "Black", colorHex: "#000000"),
+                DropdownOption(label: "Yellow", value: "Yellow", colorHex: "#FFC500"),
+                DropdownOption(label: "Other", value: "Other")
+            ],
+            selectedValue: $selected,
+            showColorPickerIfOther: true,
+            customColor: $customColor,
+            placeholder: "Color",       // inline placeholder when nil selection
+            showLabel: false            // hide external label; mimic inline style
+        )
+    }
 }

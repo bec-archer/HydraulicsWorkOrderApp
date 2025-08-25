@@ -427,9 +427,25 @@ struct PhotoCaptureUploadView: View {
                         pendingThumbs.append(thumbURL)
 
                         // ───── Resolve Firestore docID from cache (fallback to passed woId) ─────
-                        let resolvedDocId: String = WorkOrdersDatabase.shared.workOrders.first(where: { wo in
-                            wo.items.contains(where: { $0.id == woItemId })
-                        })?.id ?? woId
+                        let resolvedDocId: String = {
+                            // First try to find by item ID in any work order
+                            if let foundWO = WorkOrdersDatabase.shared.workOrders.first(where: { wo in
+                                wo.items.contains(where: { $0.id == woItemId })
+                            }), let woId = foundWO.id, !woId.isEmpty {
+                                return woId
+                            }
+                            // If not found by item, try to find by WO_Number (for newly created work orders)
+                            // The woId parameter might be the WO_Number for newly created work orders
+                            if let foundWO = WorkOrdersDatabase.shared.workOrders.first(where: { wo in
+                                wo.WO_Number == woId
+                            }), let woId = foundWO.id, !woId.isEmpty {
+                                return woId
+                            }
+                            // If still not found, the work order might not be in the cache yet
+                            // This can happen when images are uploaded before the work order is fully saved
+                            // In this case, we'll let the retry mechanism handle it
+                            return woId
+                        }()
 
                         // ───── Also persist + publish to WorkOrdersDatabase so Active cards refresh now ─────
                         WorkOrdersDatabase.shared.applyItemImageURLs(
@@ -441,14 +457,20 @@ struct PhotoCaptureUploadView: View {
                         ) { result in
                             if case let .failure(err as NSError) = result {
                                 print("❌ applyItemImageURLs failed: \(err)")
-                                // If we don't yet have a Firestore doc, show the image immediately and retry shortly.
+                                // If we don't yet have a Firestore doc, the work order might not be saved yet
+                                // The images are already uploaded to Firebase Storage, so they'll be available
+                                // when the work order is saved. We'll retry the update later.
                                 if err.domain == "WorkOrdersDatabase", err.code == 404 {
-                                    // ───── Local-only refresh fallback (Disabled; relies on old shim APIs) ─────
-                                    #if false
-                                    WorkOrdersDatabase.shared.applyItemImageURLsLocalOnly(itemId: woItemId, fullURL: fullURL, thumbURL: thumbURL)
-                                    WorkOrdersDatabase.shared.scheduleImageURLPersistRetry(woItemId: woItemId, fullURL: fullURL, thumbURL: thumbURL, delay: 1.5)
-                                    #endif
-                                    // ───── END Local-only refresh fallback (Disabled) ─────
+                                    // Schedule a retry for when the work order becomes available
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                                        WorkOrdersDatabase.shared.applyItemImageURLs(
+                                            woId: resolvedDocId,
+                                            itemId: woItemId,
+                                            fullURL: fullURL,
+                                            thumbURL: thumbURL,
+                                            uploadedBy: "uploader"
+                                        ) { _ in }
+                                    }
                                 }
                             }
                         }

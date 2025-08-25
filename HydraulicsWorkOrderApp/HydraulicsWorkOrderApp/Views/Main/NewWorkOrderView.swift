@@ -239,7 +239,7 @@ struct NewWorkOrderView: View {
             }
             // END sheet
         } // END NavigationStack
-
+        .withOfflineStatus() // Add offline status indicator
     }
     // END .body
     
@@ -498,7 +498,8 @@ struct NewWorkOrderView: View {
                 customerName: customer.name,
                 customerPhone: customer.phone,
                 WO_Type: "Intake",
-                imageURL: builtItems.first?.thumbUrls.first ?? builtItems.first?.imageUrls.first,
+                imageURL: nil,                             // Will be set when images are uploaded
+                imageURLs: [],                             // Initialize as empty array instead of nil
                 timestamp: Date(),
                 status: "Checked In",
                 WO_Number: nextNumber,
@@ -518,38 +519,87 @@ struct NewWorkOrderView: View {
             // ───── END Build WorkOrder ─────
 
             // ───── Persist via WorkOrdersDatabase (auto-ID; prevents overwrite) ─────
-            WorkOrdersDatabase.shared.addWorkOrder(wo) { result in
-                switch result {
-                case .success(_): // ignore returned docId if any
-                    DispatchQueue.main.async {
-                        savedWONumber = wo.WO_Number
-                        showSaveBanner = true
-
-                        // 🚩 Make a fresh storage namespace immediately for the NEXT WorkOrder
-                        draftWOId = UUID().uuidString
-
-                        // Route back to Active immediately (caller sets AppState)
-                        onSuccess?()
-
-                        // Defer form reset one tick to avoid tearing down subviews mid-update
+            #if DEBUG
+            print("🚀 Attempting to save WorkOrder: \(wo.WO_Number)")
+            #endif
+            
+            // Check network connectivity first
+            if NetworkMonitor.shared.isConnected {
+                // Online: Save to Firestore
+                WorkOrdersDatabase.shared.addWorkOrder(wo) { result in
+                    switch result {
+                    case .success(let docId): // Get the actual Firestore document ID
                         DispatchQueue.main.async {
-                            withAnimation(.none) {
-                                selectedCustomer = nil
-                                customerSearch.resetSearch()
-                                flagged = false
-                                items = [WO_Item.blank()]
-                                expandedIndex = 0
+                            #if DEBUG
+                            print("✅ WorkOrder saved successfully: \(wo.WO_Number) with Firestore ID: \(docId)")
+                            #endif
+                            savedWONumber = wo.WO_Number
+                            showSaveBanner = true
+
+                            // 🚩 Make a fresh storage namespace immediately for the NEXT WorkOrder
+                            draftWOId = UUID().uuidString
+
+                            // Route back to Active immediately (caller sets AppState)
+                            onSuccess?()
+
+                            // Defer form reset one tick to avoid tearing down subviews mid-update
+                            DispatchQueue.main.async {
+                                withAnimation(.none) {
+                                    selectedCustomer = nil
+                                    customerSearch.resetSearch()
+                                    flagged = false
+                                    items = [WO_Item.blank()]
+                                    expandedIndex = 0
+                                }
                             }
                         }
+                    case .failure(let error):
+                        DispatchQueue.main.async {
+                            alertMessage = "❌ Failed to save WorkOrder: \(error.localizedDescription)"
+                            showAlert = true
+                        }
                     }
-                case .failure(let error):
+                }
+            } else {
+                // Offline: Save to local cache and queue for sync
+                #if DEBUG
+                print("📱 Offline mode: Saving work order to local cache")
+                #endif
+                
+                // Add to local cache immediately for UI visibility
+                var offlineWO = wo
+                offlineWO.id = UUID().uuidString // Generate temporary local ID
+                WorkOrdersDatabase.shared.workOrders.append(offlineWO)
+                
+                // Queue for sync when network is restored
+                for item in wo.items {
+                    OfflineManager.shared.createWorkOrderOffline(item)
+                }
+                
+                DispatchQueue.main.async {
+                    savedWONumber = wo.WO_Number
+                    showSaveBanner = true
+                    alertMessage = "📱 Work order saved offline. Will sync when connection is restored."
+                    showAlert = true
+
+                    // 🚩 Make a fresh storage namespace immediately for the NEXT WorkOrder
+                    draftWOId = UUID().uuidString
+
+                    // Route back to Active immediately (caller sets AppState)
+                    onSuccess?()
+
+                    // Defer form reset one tick to avoid tearing down subviews mid-update
                     DispatchQueue.main.async {
-                        alertMessage = "❌ Failed to save WorkOrder: \(error.localizedDescription)"
-                        showAlert = true
+                        withAnimation(.none) {
+                            selectedCustomer = nil
+                            customerSearch.resetSearch()
+                            flagged = false
+                            items = [WO_Item.blank()]
+                            expandedIndex = 0
+                        }
                     }
                 }
             }
-            // ───── END Persist via WorkOrdersDatabase ─────
         }
         // ───── END Async save ─────
 
