@@ -25,6 +25,9 @@ struct WorkOrder: Identifiable, Codable, Equatable {
     // Customer snapshot (stored for fast display)
     var customerId: String                    // Firebase doc ID
     var customerName: String                  // Snapshot for display
+    var customerCompany: String?              // Snapshot for display (optional)
+    var customerEmail: String?                // Snapshot for display (optional)
+    var customerTaxExempt: Bool               // Snapshot for display
     var customerPhone: String                 // Snapshot for display (legacy fallback from phoneNumber)
 
     var WO_Type: String                       // Cylinder, Pump, etc.
@@ -91,8 +94,11 @@ struct WorkOrder: Identifiable, Codable, Equatable {
         case createdBy
 
         case customerId
-        case customerName
-        case customerPhone        // current
+                        case customerName
+                case customerCompany      // company name
+                case customerEmail        // email address
+                case customerTaxExempt    // tax exempt status
+                case customerPhone        // current
         case phoneNumber          // legacy fallback
 
         case WO_Type
@@ -128,7 +134,10 @@ struct WorkOrder: Identifiable, Codable, Equatable {
 
         // Customer fields — tolerate legacy shapes
         self.customerId    = try c.decodeIfPresent(String.self, forKey: .customerId) ?? ""
-        self.customerName  = try c.decodeIfPresent(String.self, forKey: .customerName) ?? ""
+                        self.customerName  = try c.decodeIfPresent(String.self, forKey: .customerName) ?? ""
+                self.customerCompany = try c.decodeIfPresent(String.self, forKey: .customerCompany)
+                self.customerEmail = try c.decodeIfPresent(String.self, forKey: .customerEmail)
+                self.customerTaxExempt = try c.decodeIfPresent(Bool.self, forKey: .customerTaxExempt) ?? false
         if let phone = try c.decodeIfPresent(String.self, forKey: .customerPhone) {
             self.customerPhone = phone
         } else {
@@ -175,8 +184,11 @@ struct WorkOrder: Identifiable, Codable, Equatable {
         try c.encode(createdBy, forKey: .createdBy)
 
         try c.encode(customerId,   forKey: .customerId)
-        try c.encode(customerName, forKey: .customerName)
-        try c.encode(customerPhone, forKey: .customerPhone)
+                        try c.encode(customerName, forKey: .customerName)
+                try c.encode(customerCompany, forKey: .customerCompany)
+                try c.encode(customerEmail, forKey: .customerEmail)
+                try c.encode(customerTaxExempt, forKey: .customerTaxExempt)
+                try c.encode(customerPhone, forKey: .customerPhone)
 
         try c.encode(WO_Type,   forKey: .WO_Type)
         try c.encodeIfPresent(imageURL,  forKey: .imageURL)
@@ -209,6 +221,9 @@ struct WorkOrder: Identifiable, Codable, Equatable {
         createdBy: String,
         customerId: String,
         customerName: String,
+        customerCompany: String? = nil,
+        customerEmail: String? = nil,
+        customerTaxExempt: Bool = false,
         customerPhone: String,
         WO_Type: String,
         imageURL: String? = nil,
@@ -233,6 +248,9 @@ struct WorkOrder: Identifiable, Codable, Equatable {
         self.createdBy = createdBy
         self.customerId = customerId
         self.customerName = customerName
+        self.customerCompany = customerCompany
+        self.customerEmail = customerEmail
+        self.customerTaxExempt = customerTaxExempt
         self.customerPhone = customerPhone
         self.WO_Type = WO_Type
         self.imageURL = imageURL
@@ -264,6 +282,9 @@ extension WorkOrder {
         createdBy: "Maria",
         customerId: "sample-id",
         customerName: "Maria Rivera",
+        customerCompany: "Sample Company",
+        customerEmail: "maria@example.com",
+        customerTaxExempt: false,
         customerPhone: "555-1234",
         WO_Type: "Cylinder",
         imageURL: nil,

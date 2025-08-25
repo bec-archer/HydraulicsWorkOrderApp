@@ -70,72 +70,13 @@ struct ItemCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
 
-            // ───── Hero Image + Status Capsule Row ─────
+            // ───── Item Type + Status Row ─────
             HStack(alignment: .center, spacing: 12) {
-
-                // Hero image (first intake image) – keep thumb/full paired
-                let paired = Array(zip(item.thumbUrls, item.imageUrls))
-                if let (thumbStr, _) = paired.first, let thumbURL = URL(string: thumbStr) {
-                    Button {
-                        if let url = resolvedURL(for: item, at: 0) {
-                            onImageTap?(url)
-                        } else {
-                            print("❌ No resolvable URL for item \(item.id) at index 0")
-                        }
-                    } label: {
-                        AsyncImage(url: thumbURL) { phase in
-                            switch phase {
-                            case .empty:
-                                ProgressView().frame(width: 200, height: 200)
-                            case .success(let image):
-                                image
-                                    .resizable()
-                                    .scaledToFill()
-                                    .frame(width: 200, height: 200)
-                                    .clipped()
-                                    .cornerRadius(12)
-                            case .failure:
-                                Color.gray
-                                    .frame(width: 200, height: 200)
-                                    .cornerRadius(12)
-                            @unknown default:
-                                EmptyView()
-                            }
-                        }
-                    }
-                    .buttonStyle(.plain)
-                } else if let thumbStr = item.thumbUrls.first, let thumbURL = URL(string: thumbStr) {
-                    // Legacy fallback: show first thumb if arrays are temporarily unpaired
-                    Button {
-                        if let url = resolvedURL(for: item, at: 0) {
-                            onImageTap?(url)
-                        }
-                    } label: {
-                        AsyncImage(url: thumbURL) { phase in
-                            switch phase {
-                            case .empty:
-                                ProgressView().frame(width: 200, height: 200)
-                            case .success(let image):
-                                image
-                                    .resizable()
-                                    .scaledToFill()
-                                    .frame(width: 200, height: 200)
-                                    .clipped()
-                                    .cornerRadius(12)
-                            case .failure:
-                                Color.gray
-                                    .frame(width: 200, height: 200)
-                                    .cornerRadius(12)
-                            @unknown default:
-                                EmptyView()
-                            }
-                        }
-                    }
-                    .buttonStyle(.plain)
-                }
-
-                Spacer(minLength: 8)
-
+                Text(item.type)
+                    .font(.headline)
+                
+                Spacer()
+                
                 // Color-coded capsule showing current status
                 let currentStatus = item.statusHistory.last?.status ?? "Checked In"
                 Text(currentStatus)
@@ -146,16 +87,97 @@ struct ItemCard: View {
                     .foregroundColor(statusColor(for: currentStatus))
                     .clipShape(Capsule())
             }
-            // END Thumbnails
-
-            // ───── Item Type & Status ─────
-            Text(item.type)
-                .font(.headline)
-
-            let currentStatus = item.statusHistory.last?.status ?? "None"
-            Text("Status: \(currentStatus)")
-                .font(.subheadline)
-                .foregroundColor(.gray)
+            
+            // ───── Images Row ─────
+            // Multiple images in horizontal scroll
+            if !item.thumbUrls.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        // Use paired thumb/full URLs, fallback to individual arrays
+                        let paired = Array(zip(item.thumbUrls, item.imageUrls))
+                        if !paired.isEmpty {
+                            ForEach(Array(paired.enumerated()), id: \.offset) { index, pair in
+                                let (thumb, full) = pair
+                                if let thumbURL = URL(string: thumb) {
+                                    Button {
+                                        if let url = resolvedURL(for: item, at: index) {
+                                            onImageTap?(url)
+                                        } else {
+                                            print("❌ No resolvable URL for item \(item.id) at index \(index)")
+                                        }
+                                    } label: {
+                                        AsyncImage(url: thumbURL) { phase in
+                                            switch phase {
+                                            case .empty:
+                                                ProgressView().frame(width: 200, height: 200)
+                                            case .success(let image):
+                                                image
+                                                    .resizable()
+                                                    .scaledToFill()
+                                                    .frame(width: 200, height: 200)
+                                                    .clipped()
+                                                    .cornerRadius(12)
+                                            case .failure:
+                                                Color.gray
+                                                    .frame(width: 200, height: 200)
+                                                    .cornerRadius(12)
+                                            @unknown default:
+                                                EmptyView()
+                                            }
+                                        }
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                        } else {
+                            // Fallback: use thumbUrls if available
+                            ForEach(Array(item.thumbUrls.enumerated()), id: \.offset) { index, thumb in
+                                if let thumbURL = URL(string: thumb) {
+                                    Button {
+                                        if let url = resolvedURL(for: item, at: index) {
+                                            onImageTap?(url)
+                                        }
+                                    } label: {
+                                        AsyncImage(url: thumbURL) { phase in
+                                            switch phase {
+                                            case .empty:
+                                                ProgressView().frame(width: 200, height: 200)
+                                            case .success(let image):
+                                                image
+                                                    .resizable()
+                                                    .scaledToFill()
+                                                    .frame(width: 200, height: 200)
+                                                    .clipped()
+                                                    .cornerRadius(12)
+                                            case .failure:
+                                                Color.gray
+                                                    .frame(width: 200, height: 200)
+                                                    .cornerRadius(12)
+                                            @unknown default:
+                                                EmptyView()
+                                            }
+                                        }
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 4)
+                }
+            } else {
+                // No images placeholder
+                Rectangle()
+                    .fill(Color(.systemGray5))
+                    .frame(width: 200, height: 200)
+                    .cornerRadius(12)
+                    .overlay(
+                        Image(systemName: "photo")
+                            .font(.largeTitle)
+                            .foregroundColor(.gray)
+                    )
+            }
+            // END Images
 
             // ───── Status Change Picker ─────
             if let onChangeStatus = onChangeStatus {

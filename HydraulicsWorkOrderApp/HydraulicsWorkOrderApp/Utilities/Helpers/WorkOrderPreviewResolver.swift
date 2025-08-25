@@ -29,7 +29,22 @@ struct WorkOrderPreviewResolver {
         let itemFull  = workOrder.items.first?.imageUrls.first?.trimmingCharacters(in: .whitespacesAndNewlines)
         let legacy    = workOrder.imageURLs?.first?.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        return [top, itemThumb, itemFull, legacy]
+        #if DEBUG
+        print("🔍 WorkOrderPreviewResolver for WO \(workOrder.WO_Number):")
+        print("  - items.count: \(workOrder.items.count)")
+        if let firstItem = workOrder.items.first {
+            print("  - firstItem.thumbUrls.count: \(firstItem.thumbUrls.count)")
+            print("  - firstItem.imageUrls.count: \(firstItem.imageUrls.count)")
+            print("  - top: \(top ?? "nil")")
+            print("  - itemThumb: \(itemThumb ?? "nil")")
+            print("  - itemFull: \(itemFull ?? "nil")")
+            print("  - legacy: \(legacy ?? "nil")")
+        } else {
+            print("  - No items found!")
+        }
+        #endif
+
+        return [top, itemFull, itemThumb, legacy]
             .compactMap { $0 }
             .first { !$0.isEmpty }
     }

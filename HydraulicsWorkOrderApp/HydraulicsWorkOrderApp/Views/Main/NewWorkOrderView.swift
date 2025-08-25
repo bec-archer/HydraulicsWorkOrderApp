@@ -496,6 +496,9 @@ struct NewWorkOrderView: View {
                 createdBy: "Tech",
                 customerId: customer.id.uuidString,
                 customerName: customer.name,
+                customerCompany: customer.company,
+                customerEmail: customer.email,
+                customerTaxExempt: customer.taxExempt,
                 customerPhone: customer.phone,
                 WO_Type: "Intake",
                 imageURL: nil,                             // Will be set when images are uploaded

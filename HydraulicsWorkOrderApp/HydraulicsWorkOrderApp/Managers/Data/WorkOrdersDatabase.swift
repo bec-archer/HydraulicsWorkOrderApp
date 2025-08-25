@@ -272,14 +272,8 @@ final class WorkOrdersDatabase: ObservableObject {
                 // Reduce to best candidate per key: prefer the one that has a non‑empty imageURL.
                 var bestByKey: [String: WorkOrder] = [:]
                 for (k, var wo) in keyed {
-                    // Opportunistic preview fill: fall back to first item's thumbnail if top‑level is missing
-                    if (wo.imageURL == nil) || (wo.imageURL?.isEmpty == true) {
-                        if let first = wo.items.first?.thumbUrls.first {
-                            wo.imageURL = first
-                        } else if let first = wo.items.first?.imageUrls.first {
-                            wo.imageURL = first
-                        }
-                    }
+                    // DON'T overwrite the original imageURL - let WorkOrderPreviewResolver handle this
+                    // The original imageURL should be preserved as the authoritative source
                     if let existing = bestByKey[k] {
                         let existingHasPreview = !(existing.imageURL ?? "").isEmpty
                         let candidateHasPreview = !(wo.imageURL ?? "").isEmpty

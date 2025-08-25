@@ -97,6 +97,15 @@ struct WorkOrderCardView: View {
     }
 
     private func resolveImageURL() {
+        #if DEBUG
+        print("🔍 WorkOrderCardView.resolveImageURL for WO \(workOrder.WO_Number):")
+        print("  - items.count: \(workOrder.items.count)")
+        if let firstItem = workOrder.items.first {
+            print("  - firstItem.thumbUrls.count: \(firstItem.thumbUrls.count)")
+            print("  - firstItem.imageUrls.count: \(firstItem.imageUrls.count)")
+        }
+        #endif
+        
         guard let candidate = WorkOrderPreviewResolver.bestCandidate(from: workOrder) else {
             print("🛑 No preview candidates for WO \(workOrder.WO_Number) id=\(workOrder.id ?? "nil")")
             resolvedImageURL = nil
@@ -222,9 +231,21 @@ struct InfoBlockView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(workOrder.customerName)
                     .font(.subheadline)
-                    .fontWeight(.medium)
+                    .fontWeight(.bold)
                     .lineLimit(1)
                     .truncationMode(.tail)
+
+                if let company = workOrder.customerCompany, !company.isEmpty {
+                    Text(company)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                } else {
+                    #if DEBUG
+                    let _ = print("🔍 WorkOrder \(workOrder.WO_Number) - customerCompany: '\(workOrder.customerCompany ?? "nil")'")
+                    #endif
+                }
 
                 Button {
                     if let telURL = URL(string: "tel://\(digitsOnly(workOrder.customerPhone))") {
@@ -232,7 +253,8 @@ struct InfoBlockView: View {
                     }
                 } label: {
                     Text(workOrder.customerPhone)
-                        .font(.caption)
+                        .font(.subheadline)
+                        .fontWeight(.bold)
                         .foregroundColor(Color(hex: "#FFC500"))
                         .underline()
                         .lineLimit(1)
@@ -243,11 +265,59 @@ struct InfoBlockView: View {
 
             StatusBadge(status: workOrder.status)
 
-            Text(workOrder.timestamp.formatted(date: .abbreviated, time: .shortened))
-                .font(.caption)
-                .foregroundColor(.secondary)
-                .lineLimit(1)
+            HStack {
+                Text(workOrder.timestamp.formatted(date: .abbreviated, time: .shortened))
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
+                
+                Spacer()
+                
+                // Display item types inline with timestamp
+                VStack(alignment: .trailing, spacing: 1) {
+                    ForEach(getItemTypeCounts(), id: \.type) { itemInfo in
+                        Text("\(itemInfo.type) x \(itemInfo.count)")
+                            .font(.subheadline)
+                            .fontWeight(.bold)
+                            .foregroundColor(.secondary.opacity(0.8))
+                    }
+                }
+                .frame(minHeight: 20) // Ensure consistent height even when empty
+            }
+            
+            Spacer()
         }
+    }
+    
+    // Helper function to get item type counts
+    private func getItemTypeCounts() -> [ItemTypeCount] {
+        var typeCounts: [String: Int] = [:]
+        
+        #if DEBUG
+        print("🔍 WorkOrder \(workOrder.WO_Number) has \(workOrder.items.count) items")
+        #endif
+        
+        for item in workOrder.items {
+            let type = item.type.isEmpty ? "Item" : item.type
+            typeCounts[type, default: 0] += 1
+            #if DEBUG
+            print("  - Item type: '\(type)'")
+            #endif
+        }
+        
+        let result = typeCounts.map { ItemTypeCount(type: $0.key, count: $0.value) }
+            .sorted { $0.type < $1.type }
+        
+        #if DEBUG
+        print("  Result: \(result.map { "\($0.type) x \($0.count)" }.joined(separator: ", "))")
+        #endif
+        
+        return result
+    }
+    
+    private struct ItemTypeCount {
+        let type: String
+        let count: Int
     }
 
     private func digitsOnly(_ s: String) -> String { s.filter(\.isNumber) }
