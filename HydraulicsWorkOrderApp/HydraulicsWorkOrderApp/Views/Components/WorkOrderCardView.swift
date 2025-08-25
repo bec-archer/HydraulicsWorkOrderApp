@@ -148,7 +148,8 @@ struct WorkOrderCardView: View {
              GridThumbnailView(
                  resolvedImageURLs: resolvedImageURLs,
                  thumbHeight: thumbHeight,
-                 placeholderImage: AnyView(placeholderImage)
+                 placeholderImage: AnyView(placeholderImage),
+                 workOrder: workOrder
              )
              .frame(height: thumbHeight)
              .clipShape(RoundedRectangle(cornerRadius: 12))
@@ -202,6 +203,20 @@ struct GridThumbnailView: View {
     let resolvedImageURLs: [URL?]
     let thumbHeight: CGFloat
     let placeholderImage: AnyView
+    let workOrder: WorkOrder // Add reference to work order for status
+    
+    // Helper to get status color
+    private func statusColor(for status: String) -> Color {
+        switch status.lowercased() {
+        case "checked in": return UIConstants.StatusColors.checkedIn
+        case "disassembly": return UIConstants.StatusColors.disassembly
+        case "in progress": return UIConstants.StatusColors.inProgress
+        case "test failed": return UIConstants.StatusColors.testFailed
+        case "complete": return UIConstants.StatusColors.completed
+        case "closed": return UIConstants.StatusColors.closed
+        default: return UIConstants.StatusColors.fallback
+        }
+    }
     
     private var imageSize: CGSize {
         CGSize(width: thumbHeight, height: thumbHeight)
@@ -221,10 +236,23 @@ struct GridThumbnailView: View {
             if let url = resolvedImageURLs[0] {
                 AsyncImage(url: url) { image in
                     image
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                        .frame(width: thumbHeight, height: thumbHeight)
-                        .clipped()
+                                                            .resizable()
+                                    .aspectRatio(contentMode: .fill)
+                                    .frame(width: thumbHeight, height: thumbHeight)
+                                    .clipped()
+                                    .overlay(alignment: .topTrailing) {
+                                        // Show status for the first item that matches this image URL
+                                        if let item = workOrder.items.first(where: { item in
+                                            item.imageUrls.contains(where: { $0 == url.absoluteString }) ||
+                                            item.thumbUrls.contains(where: { $0 == url.absoluteString })
+                                        }) {
+                                            let status = item.statusHistory.last?.status ?? "Checked In"
+                                            Circle()
+                                                .fill(statusColor(for: status))
+                                                .frame(width: 12, height: 12)
+                                                .padding(8)
+                                        }
+                                    }
                 } placeholder: {
                     ProgressView()
                         .frame(width: thumbHeight, height: thumbHeight)
@@ -249,6 +277,19 @@ struct GridThumbnailView: View {
                                     .frame(height: (thumbHeight - 8) / 2)
                                     .clipped()
                                     .cornerRadius(8)
+                                    .overlay(alignment: .topTrailing) {
+                                        // Show status for the first item that matches this image URL
+                                        if let item = workOrder.items.first(where: { item in
+                                            item.imageUrls.contains(where: { $0 == url.absoluteString }) ||
+                                            item.thumbUrls.contains(where: { $0 == url.absoluteString })
+                                        }) {
+                                            let status = item.statusHistory.last?.status ?? "Checked In"
+                                            Circle()
+                                                .fill(statusColor(for: status))
+                                                .frame(width: 10, height: 10) // Slightly smaller for the grid
+                                                .padding(6)
+                                        }
+                                    }
                             } placeholder: {
                                 ProgressView()
                                     .frame(maxWidth: .infinity)
@@ -280,6 +321,19 @@ struct GridThumbnailView: View {
                                     .frame(width: (thumbHeight - 4) / 2, height: (thumbHeight - 4) / 2)
                                     .clipped()
                                     .cornerRadius(8)
+                                    .overlay(alignment: .topTrailing) {
+                                        // Show status for the first item that matches this image URL
+                                        if let item = workOrder.items.first(where: { item in
+                                            item.imageUrls.contains(where: { $0 == url.absoluteString }) ||
+                                            item.thumbUrls.contains(where: { $0 == url.absoluteString })
+                                        }) {
+                                            let status = item.statusHistory.last?.status ?? "Checked In"
+                                            Circle()
+                                                .fill(statusColor(for: status))
+                                                .frame(width: 8, height: 8) // Even smaller for the 2x2 grid
+                                                .padding(4)
+                                        }
+                                    }
                             } placeholder: {
                                 ProgressView()
                                     .frame(width: (thumbHeight - 4) / 2, height: (thumbHeight - 4) / 2)

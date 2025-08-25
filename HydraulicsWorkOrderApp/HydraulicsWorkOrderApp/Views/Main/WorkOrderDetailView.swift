@@ -316,7 +316,75 @@ struct WorkOrderDetailView: View {
                             onImageTap: handleImageTap,
                             onAddNote: handleAddNote,
                             onChangeStatus: { item, newStatus in
-                                /* unchanged */
+                                // Find the item in our wrapper
+                                if let itemIdx = woWrapper.wo.items.firstIndex(where: { $0.id == item.id }) {
+                                    // Create a status update note
+                                    let note = WO_Note(
+                                        id: UUID(),
+                                        user: "System",
+                                        text: "Status changed to: \(newStatus)",
+                                        timestamp: Date(),
+                                        imageURLs: []
+                                    )
+                                    
+                                    // Update local state
+                                    woWrapper.wo.items[itemIdx].statusHistory.append(
+                                        WO_Status(
+                                            status: newStatus,
+                                            user: "System",
+                                            timestamp: Date()
+                                        )
+                                    )
+                                    woWrapper.wo.items[itemIdx].notes.append(note)
+                                    woWrapper.wo.lastModified = Date()
+                                    woWrapper.wo.lastModifiedBy = "System"
+                                    
+                                    // Update Firestore
+                                    guard let woIdString = woWrapper.wo.id, !woIdString.isEmpty else {
+                                        #if DEBUG
+                                        print("❌ Cannot update status: Work Order ID is empty")
+                                        #endif
+                                        return
+                                    }
+                                    
+                                    // Item ID validation not needed for UUID type
+                                    
+                                    let statusUpdate = WO_Status(
+                                        status: newStatus,
+                                        user: "System",
+                                        timestamp: Date()
+                                    )
+                                    
+                                    #if DEBUG
+                                    print("📝 Updating status for WO: \(woIdString), Item: \(item.id)")
+                                    print("   New Status: \(newStatus)")
+                                    #endif
+                                    
+                                    WorkOrdersDatabase.shared.updateItemStatusAndNote(
+                                        woId: woIdString,
+                                        itemId: item.id,
+                                        status: statusUpdate,
+                                        mirroredNote: note) { result in
+                                        switch result {
+                                        case .success:
+                                            #if DEBUG
+                                            print("✅ Status updated for \(item.type) to '\(newStatus)'")
+                                            #endif
+                                            
+                                            // Notify parent view
+                                            onUpdateItemStatus?(item, WO_Status(
+                                                status: newStatus,
+                                                user: "System",
+                                                timestamp: Date()
+                                            ), note)
+                                            
+                                        case .failure(let error):
+                                            #if DEBUG
+                                            print("❌ Failed to update status: \(error.localizedDescription)")
+                                            #endif
+                                        }
+                                    }
+                                }
                             }
                         )
                         .padding(12)
