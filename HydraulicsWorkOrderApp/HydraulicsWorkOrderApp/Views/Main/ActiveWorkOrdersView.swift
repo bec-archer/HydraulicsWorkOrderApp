@@ -22,10 +22,10 @@ struct ActiveWorkOrdersView: View {
     @State private var errorMessage = ""
     @State private var navigationPath = NavigationPath()
 
-    // Use adaptive columns so layout flows between 1–N columns depending on width (iPad portrait/landscape, iPhone)
+    // Use adaptive columns: 3 per row in portrait, 4 in landscape
     // Minimum keeps card content readable; spacing aligns with Apple Notes–style gutters
     let columns = [
-        GridItem(.adaptive(minimum: 340), spacing: 32, alignment: .top)
+        GridItem(.adaptive(minimum: 280), spacing: 32, alignment: .top)
     ]
     
     // Computed property for active work orders

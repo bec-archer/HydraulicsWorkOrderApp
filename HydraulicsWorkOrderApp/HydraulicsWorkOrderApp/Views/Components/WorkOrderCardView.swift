@@ -20,16 +20,15 @@ struct WorkOrderCardView: View {
     let workOrder: WorkOrder
     @Environment(\.openURL) private var openURL
 
-    @State private var resolvedImageURL: URL? = nil
+    @State private var resolvedImageURLs: [URL?] = []
     @State private var isPressed: Bool = false
-    @State private var lastResolvedCandidate: String? = nil
+    @State private var lastResolvedCandidates: [String?] = []
 
-    private let thumbHeight: CGFloat = 180
+    private let thumbHeight: CGFloat = 200 // Made square by matching width
 
     // ───── Change Tracking Keys (to reduce type‑checker load) ─────
     private var imageURLKey: String { workOrder.imageURL ?? "" }
-    private var firstThumbsKey: String { (workOrder.items.first?.thumbUrls ?? []).joined(separator: ",") }
-    private var firstImagesKey: String { (workOrder.items.first?.imageUrls ?? []).joined(separator: ",") }
+    private var itemsKey: String { workOrder.items.map { "\($0.id)-\($0.imageUrls.first ?? "")" }.joined(separator: ",") }
     private var imageURLsKey: String { (workOrder.imageURLs ?? []).joined(separator: ",") }
     // END
 
@@ -53,16 +52,15 @@ struct WorkOrderCardView: View {
     // ───── Event Binder (onAppear/onChange/tasks/notifications) ─────
     private var eventBinder: some View {
         Color.clear
-            .onAppear { resolveImageURL() }
-            .onChange(of: imageURLKey) { _, _ in resolveImageURL() }
-            .onChange(of: firstThumbsKey) { _, _ in resolveImageURL() }
-            .onChange(of: firstImagesKey) { _, _ in resolveImageURL() }
-            .onChange(of: imageURLsKey) { _, _ in resolveImageURL() }
-            .task(id: workOrder.lastModified) { resolveImageURL() }
-            .task(id: workOrder.WO_Number) { resolveImageURL() }
+            .onAppear { resolveImageURLs() }
+            .onChange(of: imageURLKey) { _, _ in resolveImageURLs() }
+            .onChange(of: itemsKey) { _, _ in resolveImageURLs() }
+            .onChange(of: imageURLsKey) { _, _ in resolveImageURLs() }
+            .task(id: workOrder.lastModified) { resolveImageURLs() }
+            .task(id: workOrder.WO_Number) { resolveImageURLs() }
             .onReceive(NotificationCenter.default.publisher(for: .WOPendingPreviewUpdated)) { note in
                 guard let woId = note.object as? String, woId == (workOrder.id ?? "") else { return }
-                resolveImageURL()
+                resolveImageURLs()
             }
             .onReceive(NotificationCenter.default.publisher(for: .WOPreviewAvailable)) { note in
                 guard
@@ -73,12 +71,15 @@ struct WorkOrderCardView: View {
                 else { return }
 
                 if let url = URL(string: s) {
-                    self.resolvedImageURL = url
-                    self.lastResolvedCandidate = s
+                    // For legacy support, update first image
+                    if !self.resolvedImageURLs.isEmpty {
+                        self.resolvedImageURLs[0] = url
+                    }
                 } else {
                     StorageImageResolver.resolve(s) { url in
-                        self.resolvedImageURL = url
-                        self.lastResolvedCandidate = s
+                        if !self.resolvedImageURLs.isEmpty {
+                            self.resolvedImageURLs[0] = url
+                        }
                     }
                 }
             }
@@ -96,40 +97,56 @@ struct WorkOrderCardView: View {
             )
     }
 
-    private func resolveImageURL() {
+    private func resolveImageURLs() {
         #if DEBUG
-        print("🔍 WorkOrderCardView.resolveImageURL for WO \(workOrder.WO_Number):")
+        print("🔍 WorkOrderCardView.resolveImageURLs for WO \(workOrder.WO_Number):")
         print("  - items.count: \(workOrder.items.count)")
-        if let firstItem = workOrder.items.first {
-            print("  - firstItem.thumbUrls.count: \(firstItem.thumbUrls.count)")
-            print("  - firstItem.imageUrls.count: \(firstItem.imageUrls.count)")
+        for (index, item) in workOrder.items.enumerated() {
+            print("  - Item \(index): type='\(item.type)', images=\(item.imageUrls.count)")
         }
         #endif
         
-        guard let candidate = WorkOrderPreviewResolver.bestCandidate(from: workOrder) else {
-            print("🛑 No preview candidates for WO \(workOrder.WO_Number) id=\(workOrder.id ?? "nil")")
-            resolvedImageURL = nil
-            lastResolvedCandidate = nil
-            return
-        }
-
-        if candidate == lastResolvedCandidate { return }
-        lastResolvedCandidate = candidate
-
-        if candidate.lowercased().hasPrefix("http") {
-            resolvedImageURL = URL(string: candidate)
-        } else {
-            StorageImageResolver.resolve(candidate) { url in
-                self.resolvedImageURL = url
+        // Get first image from each item
+        var newURLs: [URL?] = []
+        var newCandidates: [String?] = []
+        
+        for item in workOrder.items {
+            let candidate = item.imageUrls.first ?? item.thumbUrls.first
+            newCandidates.append(candidate)
+            
+            if let candidate = candidate {
+                if candidate.lowercased().hasPrefix("http") {
+                    newURLs.append(URL(string: candidate))
+                } else {
+                    newURLs.append(nil) // Will be resolved by StorageImageResolver
+                    StorageImageResolver.resolve(candidate) { url in
+                        if let index = newCandidates.firstIndex(of: candidate) {
+                            DispatchQueue.main.async {
+                                if index < self.resolvedImageURLs.count {
+                                    self.resolvedImageURLs[index] = url
+                                }
+                            }
+                        }
+                    }
+                }
+            } else {
+                newURLs.append(nil)
             }
         }
+        
+        // Check if anything changed
+        let currentCandidates = lastResolvedCandidates
+        if currentCandidates == newCandidates { return }
+        
+        lastResolvedCandidates = newCandidates
+        resolvedImageURLs = newURLs
     }
 
      // ───── Card Thumbnail (extracted to aid type‑checker) ─────
      private var cardThumbnail: AnyView {
          AnyView(
-             ThumbnailView(
-                 resolvedImageURL: resolvedImageURL,
+             GridThumbnailView(
+                 resolvedImageURLs: resolvedImageURLs,
                  thumbHeight: thumbHeight,
                  placeholderImage: AnyView(placeholderImage)
              )
@@ -183,29 +200,79 @@ struct WorkOrderCardView: View {
   // END
 }
 
-// ───── ThumbnailView Subview ─────
-struct ThumbnailView: View {
-    let resolvedImageURL: URL?
+// ───── GridThumbnailView Subview ─────
+struct GridThumbnailView: View {
+    let resolvedImageURLs: [URL?]
     let thumbHeight: CGFloat
     let placeholderImage: AnyView
 
     var body: some View {
-        if let url = resolvedImageURL {
-            AsyncImage(url: url,
-                       content: { image in
-                           image
-                               .resizable()
-                               .scaledToFill()
-                               .frame(maxWidth: .infinity, minHeight: thumbHeight, maxHeight: thumbHeight)
-                               .clipped()
-                       },
-                       placeholder: {
-                           ProgressView()
-                               .frame(maxWidth: .infinity, minHeight: thumbHeight, maxHeight: thumbHeight)
-                       })
-        } else {
+        if resolvedImageURLs.isEmpty {
             placeholderImage
                 .frame(maxWidth: .infinity, minHeight: thumbHeight, maxHeight: thumbHeight)
+        } else if resolvedImageURLs.count == 1 {
+            // Single image - full width
+            if let url = resolvedImageURLs[0] {
+                AsyncImage(url: url) { image in
+                    image
+                        .resizable()
+                        .scaledToFill()
+                        .frame(maxWidth: .infinity, minHeight: thumbHeight, maxHeight: thumbHeight)
+                        .clipped()
+                } placeholder: {
+                    ProgressView()
+                        .frame(maxWidth: .infinity, minHeight: thumbHeight, maxHeight: thumbHeight)
+                }
+            } else {
+                placeholderImage
+                    .frame(maxWidth: .infinity, minHeight: thumbHeight, maxHeight: thumbHeight)
+            }
+        } else {
+            // Multiple images - grid layout
+            LazyVGrid(columns: gridColumns, spacing: 2) {
+                ForEach(Array(resolvedImageURLs.enumerated()), id: \.offset) { index, url in
+                    if let url = url {
+                        AsyncImage(url: url) { image in
+                            image
+                                .resizable()
+                                .scaledToFill()
+                                .frame(maxWidth: .infinity, minHeight: gridItemHeight, maxHeight: gridItemHeight)
+                                .clipped()
+                        } placeholder: {
+                            ProgressView()
+                                .frame(maxWidth: .infinity, minHeight: gridItemHeight, maxHeight: gridItemHeight)
+                        }
+                    } else {
+                        placeholderImage
+                            .frame(maxWidth: .infinity, minHeight: gridItemHeight, maxHeight: gridItemHeight)
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, minHeight: thumbHeight, maxHeight: thumbHeight)
+        }
+    }
+    
+    private var gridColumns: [GridItem] {
+        if resolvedImageURLs.count == 2 {
+            // 2 items: side by side
+            return [
+                GridItem(.flexible(), spacing: 2),
+                GridItem(.flexible(), spacing: 2)
+            ]
+        } else {
+            // 3+ items: 2x2 grid
+            return [
+                GridItem(.flexible(), spacing: 2),
+                GridItem(.flexible(), spacing: 2)
+            ]
+        }
+    }
+    
+    private var gridItemHeight: CGFloat {
+        if resolvedImageURLs.count == 2 {
+            return thumbHeight // Full height for 2 items
+        } else {
+            return (thumbHeight - 2) / 2 // Half height for 2x2 grid
         }
     }
 }
