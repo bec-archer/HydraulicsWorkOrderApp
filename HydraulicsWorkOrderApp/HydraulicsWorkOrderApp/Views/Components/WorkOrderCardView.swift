@@ -343,8 +343,34 @@ struct InfoBlockView: View {
                 }
 
                 Button {
-                    if let telURL = URL(string: "tel://\(digitsOnly(workOrder.customerPhone))") {
-                        openURL(telURL)
+                    let phoneNumber = digitsOnly(workOrder.customerPhone)
+                    let telURL = URL(string: "tel://\(phoneNumber)")
+                    
+                    #if DEBUG
+                    print("📞 Phone tap - Number: \(phoneNumber)")
+                    print("📞 Phone tap - URL: \(telURL?.absoluteString ?? "invalid URL")")
+                    
+                    // Show simulator-specific message using haptic feedback
+                    #if targetEnvironment(simulator)
+                    let generator = UINotificationFeedbackGenerator()
+                    generator.notificationOccurred(.success)
+                    print("📱 Simulator: Phone call would dial \(phoneNumber) on a real device")
+                    #endif
+                    #endif
+                    
+                    if let telURL = telURL {
+                        openURL(telURL) { success in
+                            if !success {
+                                #if DEBUG
+                                print("❌ Failed to open phone URL - this is expected in Simulator")
+                                #endif
+                                
+                                // Copy number to clipboard as fallback
+                                UIPasteboard.general.string = phoneNumber
+                                let generator = UINotificationFeedbackGenerator()
+                                generator.notificationOccurred(.success)
+                            }
+                        }
                     }
                 } label: {
                     Text(workOrder.customerPhone)
