@@ -90,21 +90,17 @@ struct WorkOrderDetailView: View {
         } message: {
             Text("This will remove the WorkOrder from Active. Managers/Admins can still access it in Deleted WorkOrders.")
         }
-        .fullScreenCover(isPresented: $showImageViewer) {
-            if let url = selectedImageURL {
-                AnyView(
-                    FullScreenImageViewer(imageURL: url, isPresented: $showImageViewer)
-                )
-            } else {
-                AnyView(
-                    Color.black.overlay(
-                        Text("❌ No image to show")
-                            .foregroundColor(.white)
-                    )
-                )
+        .overlay {
+            if showImageViewer, let url = selectedImageURL {
+                FullScreenImageViewer(imageURL: url, isPresented: $showImageViewer)
+                    .transition(.asymmetric(
+                        insertion: .opacity.combined(with: .scale(scale: 0.8)).animation(.easeOut(duration: 0.3)),
+                        removal: .opacity.combined(with: .scale(scale: 1.1)).animation(.easeIn(duration: 0.2))
+                    ))
             }
         }
-        .onChange(of: showImageViewer) { isShowing in
+        .animation(.easeInOut(duration: 0.3), value: showImageViewer)
+        .onChange(of: showImageViewer) { _, isShowing in
             if !isShowing {
                 selectedImageURL = nil
             }

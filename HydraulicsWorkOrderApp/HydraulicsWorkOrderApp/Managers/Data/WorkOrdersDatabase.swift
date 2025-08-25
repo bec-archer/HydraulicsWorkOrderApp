@@ -271,7 +271,7 @@ final class WorkOrdersDatabase: ObservableObject {
                 }
                 // Reduce to best candidate per key: prefer the one that has a non‑empty imageURL.
                 var bestByKey: [String: WorkOrder] = [:]
-                for (k, var wo) in keyed {
+                for (k, wo) in keyed {
                     // DON'T overwrite the original imageURL - let WorkOrderPreviewResolver handle this
                     // The original imageURL should be preserved as the authoritative source
                     if let existing = bestByKey[k] {

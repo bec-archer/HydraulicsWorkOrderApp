@@ -96,8 +96,8 @@ struct ItemCard: View {
                         // Use paired thumb/full URLs, fallback to individual arrays
                         let paired = Array(zip(item.thumbUrls, item.imageUrls))
                         if !paired.isEmpty {
-                            ForEach(Array(paired.enumerated()), id: \.offset) { index, pair in
-                                let (thumb, full) = pair
+                                                            ForEach(Array(paired.enumerated()), id: \.offset) { index, pair in
+                                    let (thumb, _) = pair
                                 if let thumbURL = URL(string: thumb) {
                                     Button {
                                         if let url = resolvedURL(for: item, at: index) {
@@ -198,7 +198,7 @@ struct ItemCard: View {
                     // Refresh selection when history changes (e.g., after save)
                     selectedStatus = latest ?? "Checked In"
                 }
-                .onChange(of: selectedStatus) { newStatus, _ in
+                .onChange(of: selectedStatus) { _, newStatus in
                     guard !newStatus.isEmpty, newStatus != current else { return }
                     onChangeStatus(item, newStatus)
                 }

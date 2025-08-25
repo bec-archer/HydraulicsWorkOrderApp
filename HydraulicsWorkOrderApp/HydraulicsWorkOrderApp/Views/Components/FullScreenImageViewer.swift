@@ -22,8 +22,9 @@ struct FullScreenImageViewer: View {
     var body: some View {
         GeometryReader { geometry in
             ZStack(alignment: .topTrailing) {
-                // Completely transparent background
-                Color.clear
+                // Blurred background overlay
+                Rectangle()
+                    .fill(.ultraThinMaterial)
                     .ignoresSafeArea()
                     .onTapGesture {
                         closeViewer()
@@ -35,6 +36,7 @@ struct FullScreenImageViewer: View {
                         .scaledToFit()
                         .scaleEffect(pinchScale * scale)
                         .offset(y: offset.height + dragOffset.height)
+                        .shadow(color: .black.opacity(0.3), radius: 20, x: 0, y: 10)
                         .gesture(
                             DragGesture()
                                 .updating($dragOffset) { value, state, _ in
@@ -85,7 +87,10 @@ struct FullScreenImageViewer: View {
                 }
                 .accessibilityLabel("Close Image Viewer")
             }
-            .transition(.opacity.combined(with: .scale))
+            .transition(.asymmetric(
+                insertion: .opacity.combined(with: .scale(scale: 0.8)).animation(.easeOut(duration: 0.3)),
+                removal: .opacity.combined(with: .scale(scale: 1.1)).animation(.easeIn(duration: 0.2))
+            ))
         }
         .onAppear {
             print("🧩 FullScreenImageViewer launched with imageURL: \(imageURL.absoluteString)")

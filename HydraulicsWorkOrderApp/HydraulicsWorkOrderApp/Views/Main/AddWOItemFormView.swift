@@ -36,7 +36,7 @@ struct AddWOItemFormView: View {
             otherReasonNotes
         }
         // ───── Color Hex Persistence ─────
-        .onChange(of: item.dropdowns["color"]) { newValue in
+        .onChange(of: item.dropdowns["color"]) { _, newValue in
             let trimmed = (newValue ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
 
             if trimmed.isEmpty {
@@ -49,7 +49,7 @@ struct AddWOItemFormView: View {
                 item.dropdowns["colorHex"] = ""
             }
         }
-        .onChange(of: customColor) { _ in
+        .onChange(of: customColor) { _, _ in
             let isOther = (item.dropdowns["color"] ?? "").caseInsensitiveCompare("Other") == .orderedSame
             if isOther { updateColorHexFromCustomColor() }
         }
@@ -71,25 +71,25 @@ struct AddWOItemFormView: View {
                 item.type = "Cylinder"
             }
         }
-        .onChange(of: dropdowns.options["reasonsForService"]?.count ?? 0) { _ in
+        .onChange(of: dropdowns.options["reasonsForService"]?.count ?? 0) { _, _ in
             // refresh on the next runloop to avoid mid-diff updates
             DispatchQueue.main.async {
                 reasonOptionsSnapshot = dropdowns.options["reasonsForService"] ?? []
             }
         }
-        .onChange(of: selectedReasons) { newValue in
+        .onChange(of: selectedReasons) { _, newValue in
             // Commit buffered selections to the bound model in a single write
             item.reasonsForService = Array(newValue)
             item.lastModified = Date()
         }
         // Show validation nudge once they interact with required inputs
-        .onChange(of: item.type) { _ in
+        .onChange(of: item.type) { _, _ in
             hasTouchedRequired = true
         }
-        .onChange(of: item.imageUrls.count) { _ in
+        .onChange(of: item.imageUrls.count) { _, _ in
             hasTouchedRequired = true
         }
-        .onChange(of: item.thumbUrls.count) { _ in
+        .onChange(of: item.thumbUrls.count) { _, _ in
             hasTouchedRequired = true
         }
         .id(item.id) // stabilize identity across multiple AddWOItemFormView instances
@@ -233,7 +233,7 @@ struct AddWOItemFormView: View {
         if selectedReasons.contains("Other (opens Service Notes)") || selectedReasons.contains("Other") {
             TextField("Service Notes…", text: $reasonNotes)
                 .textFieldStyle(.roundedBorder)
-                .onChange(of: reasonNotes) {
+                .onChange(of: reasonNotes) { _, _ in
                     item.reasonNotes = reasonNotes
                     DispatchQueue.main.async { item.lastModified = Date() }
                 }

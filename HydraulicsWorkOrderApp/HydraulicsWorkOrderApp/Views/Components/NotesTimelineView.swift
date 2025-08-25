@@ -80,7 +80,7 @@ struct NotesTimelineView: View {
                 .padding(.bottom, 12)
             }
         }
-        .onChange(of: selectedImageURL) { newValue in
+        .onChange(of: selectedImageURL) { _, newValue in
             if let url = newValue {
                 print("📤 selectedImageURL was set to: \(url.absoluteString)")
             }

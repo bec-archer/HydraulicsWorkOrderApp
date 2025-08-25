@@ -401,7 +401,7 @@ struct PhotoCaptureUploadView: View {
             }
         }
         // ───── Auto-upload newly appended images ─────
-        .onChange(of: localImages) { (newImages: [UIImage]) in
+        .onChange(of: localImages) { _, newImages in
             // Only act when new images were appended
             guard newImages.count > uploadedCount else { return }
 

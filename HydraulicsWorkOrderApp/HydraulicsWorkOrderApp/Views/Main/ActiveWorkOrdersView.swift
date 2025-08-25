@@ -146,7 +146,7 @@ struct ActiveWorkOrdersView: View {
                 isLoading = false
             }
         }
-        .onChange(of: appState.currentView) { newView in
+        .onChange(of: appState.currentView) { _, newView in
             // Reset navigation path when app state changes (sidebar navigation)
             if newView != .activeWorkOrders {
                 navigationPath = NavigationPath()

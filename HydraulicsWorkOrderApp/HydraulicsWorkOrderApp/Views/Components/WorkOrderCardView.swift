@@ -54,10 +54,10 @@ struct WorkOrderCardView: View {
     private var eventBinder: some View {
         Color.clear
             .onAppear { resolveImageURL() }
-            .onChange(of: imageURLKey) { resolveImageURL() }
-            .onChange(of: firstThumbsKey) { resolveImageURL() }
-            .onChange(of: firstImagesKey) { resolveImageURL() }
-            .onChange(of: imageURLsKey) { resolveImageURL() }
+            .onChange(of: imageURLKey) { _, _ in resolveImageURL() }
+            .onChange(of: firstThumbsKey) { _, _ in resolveImageURL() }
+            .onChange(of: firstImagesKey) { _, _ in resolveImageURL() }
+            .onChange(of: imageURLsKey) { _, _ in resolveImageURL() }
             .task(id: workOrder.lastModified) { resolveImageURL() }
             .task(id: workOrder.WO_Number) { resolveImageURL() }
             .onReceive(NotificationCenter.default.publisher(for: .WOPendingPreviewUpdated)) { note in

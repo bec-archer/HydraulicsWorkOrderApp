@@ -80,7 +80,7 @@ struct RouterView: View {
             .onAppear {
                 print("🔍 RouterView detail area showing: \(appState.currentView)")
             }
-            .onChange(of: appState.currentView) { newView in
+            .onChange(of: appState.currentView) { _, newView in
                 print("🔄 RouterView detail area switching to: \(newView)")
             }
         }

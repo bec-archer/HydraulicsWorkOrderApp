@@ -209,7 +209,7 @@ struct NewWorkOrderView: View {
 
             
             // ───── CUSTOMER PICKED (observe only; no state writes here) ─────
-            .onChange(of: selectedCustomer?.id) {
+            .onChange(of: selectedCustomer?.id) { _, _ in
                 guard let newID = selectedCustomer?.id else { return }
                 print("✅ selectedCustomer changed → \(newID)")
                 // NOTE: selectCustomer(_:) already resets the search UI.
