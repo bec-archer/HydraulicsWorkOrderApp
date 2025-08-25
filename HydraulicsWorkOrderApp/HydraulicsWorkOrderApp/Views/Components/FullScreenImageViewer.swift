@@ -5,7 +5,7 @@
 import SwiftUI
 import ImageIO
 
-// ───── Full-Screen Image Viewer ─────
+// ───── Full-Screen Image Viewer (Overlay Style) ─────
 
 struct FullScreenImageViewer: View {
     let imageURL: URL
@@ -22,7 +22,12 @@ struct FullScreenImageViewer: View {
     var body: some View {
         GeometryReader { geometry in
             ZStack(alignment: .topTrailing) {
-                Color.black.ignoresSafeArea().background(.ultraThinMaterial)
+                // Completely transparent background
+                Color.clear
+                    .ignoresSafeArea()
+                    .onTapGesture {
+                        closeViewer()
+                    }
 
                 if let image = loadedUIImage {
                     Image(uiImage: image)
@@ -48,6 +53,9 @@ struct FullScreenImageViewer: View {
                                 }
                         )
                         .position(x: geometry.size.width / 2, y: geometry.size.height / 2)
+                        .onTapGesture {
+                            // Prevent tap from closing when tapping on the image
+                        }
                 } else if loadFailed {
                     VStack {
                         Text("❌ Failed to load image")
@@ -65,7 +73,6 @@ struct FullScreenImageViewer: View {
                         .scaleEffect(1.5)
                 }
 
-
                 // ✖️ Close Button (top-right)
                 Button {
                     closeViewer()
@@ -78,7 +85,7 @@ struct FullScreenImageViewer: View {
                 }
                 .accessibilityLabel("Close Image Viewer")
             }
-            .transition(.scale)
+            .transition(.opacity.combined(with: .scale))
         }
         .onAppear {
             print("🧩 FullScreenImageViewer launched with imageURL: \(imageURL.absoluteString)")
@@ -89,7 +96,6 @@ struct FullScreenImageViewer: View {
         self.loadedUIImage = UIImage(systemName: "photo")
     }
 #endif
-
 
             var request = URLRequest(url: imageURL)
             request.setValue("image/jpeg", forHTTPHeaderField: "Accept")
@@ -103,7 +109,6 @@ struct FullScreenImageViewer: View {
 
                 print("🌐 Response: \(String(describing: response))")
 
-
                 guard let data = data else {
                     print("❌ No data received from: \(imageURL.absoluteString)")
                     DispatchQueue.main.async {
@@ -111,8 +116,6 @@ struct FullScreenImageViewer: View {
                     }
                     return
                 }
-
-
 
                 print("📦 Image data size: \(data.count) bytes")
 
