@@ -125,9 +125,34 @@ struct WorkOrderDetailView: View {
                 HStack(spacing: 6) {
                     Image(systemName: "phone.fill")
                     Button {
-                        let digitsOnlyPhone = woWrapper.wo.customerPhone.filter(\.isNumber)
-                        if let telURL = URL(string: "tel://\(digitsOnlyPhone)") {
-                            UIApplication.shared.open(telURL)
+                        let phoneNumber = woWrapper.wo.customerPhone.filter(\.isNumber)
+                        let telURL = URL(string: "tel://\(phoneNumber)")
+                        
+                        #if DEBUG
+                        print("📞 Phone tap - Number: \(phoneNumber)")
+                        print("📞 Phone tap - URL: \(telURL?.absoluteString ?? "invalid URL")")
+                        
+                        // Show simulator-specific message using haptic feedback
+                        #if targetEnvironment(simulator)
+                        let generator = UINotificationFeedbackGenerator()
+                        generator.notificationOccurred(.success)
+                        print("📱 Simulator: Phone call would dial \(phoneNumber) on a real device")
+                        #endif
+                        #endif
+                        
+                        if let telURL = telURL {
+                            UIApplication.shared.open(telURL) { success in
+                                if !success {
+                                    #if DEBUG
+                                    print("❌ Failed to open phone URL - this is expected in Simulator")
+                                    #endif
+                                    
+                                    // Copy number to clipboard as fallback
+                                    UIPasteboard.general.string = phoneNumber
+                                    let generator = UINotificationFeedbackGenerator()
+                                    generator.notificationOccurred(.success)
+                                }
+                            }
                         }
                     } label: {
                         Text(woWrapper.wo.customerPhone)
@@ -136,11 +161,46 @@ struct WorkOrderDetailView: View {
                     .buttonStyle(.plain)
                     .foregroundColor(Color(hex: "#FFC500"))
                     .contextMenu {
-                        Button("Text") {
-                            let digitsOnlyPhone = woWrapper.wo.customerPhone.filter(\.isNumber)
-                            if let smsURL = URL(string: "sms:\(digitsOnlyPhone)") {
-                                UIApplication.shared.open(smsURL)
+                        Button {
+                            let phoneNumber = woWrapper.wo.customerPhone.filter(\.isNumber)
+                            let smsURL = URL(string: "sms:\(phoneNumber)")
+                            
+                            #if DEBUG
+                            print("💬 SMS tap - Number: \(phoneNumber)")
+                            print("💬 SMS tap - URL: \(smsURL?.absoluteString ?? "invalid URL")")
+                            
+                            #if targetEnvironment(simulator)
+                            let generator = UINotificationFeedbackGenerator()
+                            generator.notificationOccurred(.success)
+                            print("📱 Simulator: SMS would open for \(phoneNumber) on a real device")
+                            #endif
+                            #endif
+                            
+                            if let smsURL = smsURL {
+                                UIApplication.shared.open(smsURL) { success in
+                                    if !success {
+                                        #if DEBUG
+                                        print("❌ Failed to open SMS URL - this is expected in Simulator")
+                                        #endif
+                                        
+                                        // Copy number to clipboard as fallback
+                                        UIPasteboard.general.string = phoneNumber
+                                        let generator = UINotificationFeedbackGenerator()
+                                        generator.notificationOccurred(.success)
+                                    }
+                                }
                             }
+                        } label: {
+                            Label("Text Message", systemImage: "message.fill")
+                        }
+                        
+                        Button {
+                            let phoneNumber = woWrapper.wo.customerPhone.filter(\.isNumber)
+                            UIPasteboard.general.string = phoneNumber
+                            let generator = UINotificationFeedbackGenerator()
+                            generator.notificationOccurred(.success)
+                        } label: {
+                            Label("Copy Number", systemImage: "doc.on.doc.fill")
                         }
                     }
                 }
