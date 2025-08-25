@@ -5,14 +5,7 @@
 //  Created by Bec Archer on 8/8/25.
 //
 
-
-// ─────────────────────────────────────────────────────────────
-// 📄 ActiveWorkOrdersView.swift
-// Shows a grid of active WorkOrders from Firestore
-// ─────────────────────────────────────────────────────────────
-
 import SwiftUI
-import Foundation
 
 struct ActiveWorkOrdersView: View {
     @ObservedObject var db = WorkOrdersDatabase.shared
@@ -22,12 +15,6 @@ struct ActiveWorkOrdersView: View {
     @State private var errorMessage = ""
     @State private var navigationPath = NavigationPath()
 
-    // Use adaptive columns: 3 per row in portrait, 4 in landscape
-    // Minimum keeps card content readable; spacing aligns with Apple Notes–style gutters
-    let columns = [
-        GridItem(.adaptive(minimum: 280), spacing: 32, alignment: .top)
-    ]
-    
     // Computed property for active work orders
     private var activeWorkOrders: [WorkOrder] {
         let active = db.workOrders
@@ -44,7 +31,7 @@ struct ActiveWorkOrdersView: View {
         return active
     }
 
-        var body: some View {
+    var body: some View {
         ScrollView {
             VStack(spacing: 20) {
                 // ───── Loading State ─────
@@ -75,62 +62,71 @@ struct ActiveWorkOrdersView: View {
                         .padding(.top, 32)
                     } else {
                         // ───── Work Order Grid ─────
-                        LazyVGrid(columns: columns, spacing: 32) {
-                            ForEach(activeWorkOrders, id: \.WO_Number) { workOrder in
-                                NavigationLink(destination: WorkOrderDetailView(
-                                    workOrder: workOrder,
-                                    onDelete: { deletedWorkOrder in
-                                        // Only try to delete from Firestore if we have a document ID
-                                        if let documentId = deletedWorkOrder.id, !documentId.isEmpty {
-                                            // Delete from Firestore first
-                                            WorkOrdersDatabase.shared.softDelete(deletedWorkOrder) { result in
-                                                DispatchQueue.main.async {
-                                                    switch result {
-                                                    case .success:
-                                                        print("✅ WorkOrder deleted successfully: \(deletedWorkOrder.WO_Number)")
-                                                        // Remove from local cache after successful Firestore delete
-                                                        if let index = db.workOrders.firstIndex(where: { $0.WO_Number == deletedWorkOrder.WO_Number }) {
-                                                            db.workOrders.remove(at: index)
+                        GeometryReader { geometry in
+                            let spacing: CGFloat = 16
+                            let availableWidth = geometry.size.width - 32 // Account for horizontal padding
+                            let cardWidth = (availableWidth - spacing * 2) / 3 // 3 cards with 2 spaces between
+                            
+                            LazyVGrid(columns: [
+                                GridItem(.fixed(cardWidth), spacing: spacing),
+                                GridItem(.fixed(cardWidth), spacing: spacing),
+                                GridItem(.fixed(cardWidth), spacing: spacing)
+                            ], spacing: spacing) {
+                                ForEach(activeWorkOrders, id: \.WO_Number) { workOrder in
+                                    NavigationLink(destination: WorkOrderDetailView(
+                                        workOrder: workOrder,
+                                        onDelete: { deletedWorkOrder in
+                                            // Only try to delete from Firestore if we have a document ID
+                                            if let documentId = deletedWorkOrder.id, !documentId.isEmpty {
+                                                // Delete from Firestore first
+                                                WorkOrdersDatabase.shared.softDelete(deletedWorkOrder) { result in
+                                                    DispatchQueue.main.async {
+                                                        switch result {
+                                                        case .success:
+                                                            print("✅ WorkOrder deleted successfully: \(deletedWorkOrder.WO_Number)")
+                                                            // Remove from local cache after successful Firestore delete
+                                                            if let index = db.workOrders.firstIndex(where: { $0.WO_Number == deletedWorkOrder.WO_Number }) {
+                                                                db.workOrders.remove(at: index)
+                                                            }
+                                                        case .failure(let error):
+                                                            print("❌ Failed to delete WorkOrder: \(error.localizedDescription)")
+                                                            // Optionally show error to user
                                                         }
-                                                    case .failure(let error):
-                                                        print("❌ Failed to delete WorkOrder: \(error.localizedDescription)")
-                                                        // Optionally show error to user
                                                     }
                                                 }
-                                            }
-                                        } else {
-                                            print("⚠️ WorkOrder \(deletedWorkOrder.WO_Number) has no document ID - attempting to find and delete from Firestore")
-                                            // For legacy work orders without document IDs, try to find them in Firestore by WO_Number
-                                            WorkOrdersDatabase.shared.deleteLegacyWorkOrder(woNumber: deletedWorkOrder.WO_Number) { result in
-                                                DispatchQueue.main.async {
-                                                    switch result {
-                                                    case .success:
-                                                        print("✅ Legacy WorkOrder \(deletedWorkOrder.WO_Number) deleted from Firestore")
-                                                        // Remove from local cache after successful Firestore delete
-                                                        if let index = db.workOrders.firstIndex(where: { $0.WO_Number == deletedWorkOrder.WO_Number }) {
-                                                            db.workOrders.remove(at: index)
-                                                        }
-                                                    case .failure(let error):
-                                                        print("❌ Failed to delete legacy WorkOrder from Firestore: \(error.localizedDescription)")
-                                                        // Fall back to local cache marking
-                                                        if let index = db.workOrders.firstIndex(where: { $0.WO_Number == deletedWorkOrder.WO_Number }) {
-                                                            var updatedWorkOrder = db.workOrders[index]
-                                                            updatedWorkOrder.isDeleted = true
-                                                            db.workOrders[index] = updatedWorkOrder
+                                            } else {
+                                                print("⚠️ WorkOrder \(deletedWorkOrder.WO_Number) has no document ID - attempting to find and delete from Firestore")
+                                                // For legacy work orders without document IDs, try to find them in Firestore by WO_Number
+                                                WorkOrdersDatabase.shared.deleteLegacyWorkOrder(woNumber: deletedWorkOrder.WO_Number) { result in
+                                                    DispatchQueue.main.async {
+                                                        switch result {
+                                                        case .success:
+                                                            print("✅ Legacy WorkOrder \(deletedWorkOrder.WO_Number) deleted from Firestore")
+                                                            // Remove from local cache after successful Firestore delete
+                                                            if let index = db.workOrders.firstIndex(where: { $0.WO_Number == deletedWorkOrder.WO_Number }) {
+                                                                db.workOrders.remove(at: index)
+                                                            }
+                                                        case .failure(let error):
+                                                            print("❌ Failed to delete legacy WorkOrder from Firestore: \(error.localizedDescription)")
+                                                            // Fall back to local cache marking
+                                                            if let index = db.workOrders.firstIndex(where: { $0.WO_Number == deletedWorkOrder.WO_Number }) {
+                                                                var updatedWorkOrder = db.workOrders[index]
+                                                                updatedWorkOrder.isDeleted = true
+                                                                db.workOrders[index] = updatedWorkOrder
+                                                            }
                                                         }
                                                     }
                                                 }
                                             }
                                         }
+                                    )) {
+                                        WorkOrderCardView(workOrder: workOrder)
                                     }
-                                )) {
-                                    WorkOrderCardView(workOrder: workOrder)
+                                    .buttonStyle(PlainButtonStyle())
                                 }
-                                .buttonStyle(PlainButtonStyle())
                             }
+                            .padding(.horizontal, 16)
                         }
-                        .padding(.horizontal, 32)
-                        .padding(.vertical, 20)
                     }
                 }
             }
@@ -195,9 +191,7 @@ struct ActiveWorkOrdersView: View {
     }
 }
 
-// ───── Preview Template ─────
 #Preview {
     ActiveWorkOrdersView()
         .environmentObject(AppState.shared)
 }
-// END PREVIEW

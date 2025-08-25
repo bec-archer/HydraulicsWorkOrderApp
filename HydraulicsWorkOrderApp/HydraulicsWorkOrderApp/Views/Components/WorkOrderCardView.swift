@@ -205,74 +205,98 @@ struct GridThumbnailView: View {
     let resolvedImageURLs: [URL?]
     let thumbHeight: CGFloat
     let placeholderImage: AnyView
+    
+    private var imageSize: CGSize {
+        CGSize(width: thumbHeight, height: thumbHeight)
+    }
+    
+    private var halfImageSize: CGSize {
+        CGSize(width: (thumbHeight - 4) / 2, height: (thumbHeight - 4) / 2)
+    }
 
     var body: some View {
         if resolvedImageURLs.isEmpty {
             placeholderImage
-                .frame(maxWidth: .infinity, minHeight: thumbHeight, maxHeight: thumbHeight)
+                .aspectRatio(1, contentMode: .fit)
+                .frame(height: thumbHeight)
         } else if resolvedImageURLs.count == 1 {
-            // Single image - full width
+            // Single image - square aspect ratio
             if let url = resolvedImageURLs[0] {
                 AsyncImage(url: url) { image in
                     image
                         .resizable()
-                        .scaledToFill()
-                        .frame(maxWidth: .infinity, minHeight: thumbHeight, maxHeight: thumbHeight)
+                        .aspectRatio(contentMode: .fill)
+                        .frame(width: thumbHeight, height: thumbHeight)
                         .clipped()
                 } placeholder: {
                     ProgressView()
-                        .frame(maxWidth: .infinity, minHeight: thumbHeight, maxHeight: thumbHeight)
+                        .frame(width: thumbHeight, height: thumbHeight)
                 }
             } else {
                 placeholderImage
-                    .frame(maxWidth: .infinity, minHeight: thumbHeight, maxHeight: thumbHeight)
+                    .aspectRatio(1, contentMode: .fit)
+                    .frame(width: thumbHeight, height: thumbHeight)
             }
         } else {
             // Multiple images - grid layout
-            LazyVGrid(columns: gridColumns, spacing: 2) {
-                ForEach(Array(resolvedImageURLs.enumerated()), id: \.offset) { index, url in
-                    if let url = url {
-                        AsyncImage(url: url) { image in
-                            image
-                                .resizable()
-                                .scaledToFill()
-                                .frame(maxWidth: .infinity, minHeight: gridItemHeight, maxHeight: gridItemHeight)
-                                .clipped()
-                        } placeholder: {
-                            ProgressView()
-                                .frame(maxWidth: .infinity, minHeight: gridItemHeight, maxHeight: gridItemHeight)
+            if resolvedImageURLs.count == 2 {
+                // 2 images stacked vertically
+                VStack(spacing: 8) {
+                    ForEach(Array(resolvedImageURLs.enumerated()), id: \.offset) { index, url in
+                        if let url = url {
+                            AsyncImage(url: url) { image in
+                                image
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fill)
+                                    .frame(maxWidth: .infinity)
+                                    .frame(height: (thumbHeight - 8) / 2)
+                                    .clipped()
+                                    .cornerRadius(8)
+                            } placeholder: {
+                                ProgressView()
+                                    .frame(maxWidth: .infinity)
+                                    .frame(height: (thumbHeight - 8) / 2)
+                                    .cornerRadius(8)
+                            }
+                        } else {
+                            placeholderImage
+                                .aspectRatio(1, contentMode: .fit)
+                                .frame(maxWidth: .infinity)
+                                .frame(height: (thumbHeight - 8) / 2)
+                                .cornerRadius(8)
                         }
-                    } else {
-                        placeholderImage
-                            .frame(maxWidth: .infinity, minHeight: gridItemHeight, maxHeight: gridItemHeight)
+                    }
+                }
+                .frame(maxWidth: .infinity)
+            } else {
+                // 3+ images in 2x2 grid
+                LazyVGrid(columns: [
+                    GridItem(.fixed(thumbHeight / 2), spacing: 4),
+                    GridItem(.fixed(thumbHeight / 2), spacing: 4)
+                ], spacing: 4) {
+                    ForEach(Array(resolvedImageURLs.prefix(4).enumerated()), id: \.offset) { index, url in
+                        if let url = url {
+                            AsyncImage(url: url) { image in
+                                image
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fill)
+                                    .frame(width: (thumbHeight - 4) / 2, height: (thumbHeight - 4) / 2)
+                                    .clipped()
+                                    .cornerRadius(8)
+                            } placeholder: {
+                                ProgressView()
+                                    .frame(width: (thumbHeight - 4) / 2, height: (thumbHeight - 4) / 2)
+                                    .cornerRadius(8)
+                            }
+                        } else {
+                            placeholderImage
+                                .aspectRatio(1, contentMode: .fit)
+                                .frame(width: (thumbHeight - 4) / 2, height: (thumbHeight - 4) / 2)
+                                .cornerRadius(8)
+                        }
                     }
                 }
             }
-            .frame(maxWidth: .infinity, minHeight: thumbHeight, maxHeight: thumbHeight)
-        }
-    }
-    
-    private var gridColumns: [GridItem] {
-        if resolvedImageURLs.count == 2 {
-            // 2 items: side by side
-            return [
-                GridItem(.flexible(), spacing: 2),
-                GridItem(.flexible(), spacing: 2)
-            ]
-        } else {
-            // 3+ items: 2x2 grid
-            return [
-                GridItem(.flexible(), spacing: 2),
-                GridItem(.flexible(), spacing: 2)
-            ]
-        }
-    }
-    
-    private var gridItemHeight: CGFloat {
-        if resolvedImageURLs.count == 2 {
-            return thumbHeight // Full height for 2 items
-        } else {
-            return (thumbHeight - 2) / 2 // Half height for 2x2 grid
         }
     }
 }
