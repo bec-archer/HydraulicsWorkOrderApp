@@ -127,6 +127,7 @@ struct WOItemAccordionRow: View {
                 dropdownSchemaVersion: 1,
                 reasonsForService: [],
                 reasonNotes: nil,
+                completedReasons: [],
                 statusHistory: [
                     WO_Status(status: "In Progress", user: "TestUser", timestamp: Date(), notes: nil)
                 ],

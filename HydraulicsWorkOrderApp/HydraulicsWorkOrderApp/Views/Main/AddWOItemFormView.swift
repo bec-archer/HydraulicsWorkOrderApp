@@ -253,7 +253,7 @@ struct AddWOItemFormView: View {
     }
 
     @ViewBuilder private var otherReasonNotes: some View {
-        if selectedReasons.contains("Other (opens Service Notes)") || selectedReasons.contains("Other") {
+        if selectedReasons.contains("Other") {
             TextField("Service Notes…", text: $reasonNotes)
                 .textFieldStyle(.roundedBorder)
                 .onChange(of: reasonNotes) { _, _ in

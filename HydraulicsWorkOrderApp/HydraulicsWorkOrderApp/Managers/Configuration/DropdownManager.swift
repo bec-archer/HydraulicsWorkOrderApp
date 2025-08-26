@@ -88,7 +88,7 @@ class DropdownManager: ObservableObject {
                 .init(label: "Fittings - Replace",  value: "Fittings - Replace"),
                 .init(label: "Hard Lines - Repair", value: "Hard Lines - Repair"),
                 .init(label: "Hard Lines - Replace",value: "Hard Lines - Replace"),
-                .init(label: "Other (opens Service Notes)", value: "Other (opens Service Notes)")
+                .init(label: "Other", value: "Other")
             ]
         ]
     }

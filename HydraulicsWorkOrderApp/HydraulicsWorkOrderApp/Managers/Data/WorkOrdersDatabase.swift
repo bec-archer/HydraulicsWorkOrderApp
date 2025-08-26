@@ -1032,5 +1032,84 @@ final class WorkOrdersDatabase: ObservableObject {
     }
     // END updateItemStatusAndNote
 
+    // ───── UPDATE COMPLETED REASONS + MIRRORED NOTE ─────
+    /// Updates the completedReasons array and adds a note about the completion.
+    func updateCompletedReasons(woId: String,
+                               itemId: UUID,
+                               completedReasons: [String],
+                               note: WO_Note,
+                               completion: @escaping (Result<Void, Error>) -> Void) {
+        let docRef = db.collection(collectionName).document(woId)
+
+        docRef.getDocument { [weak self] snap, err in
+            guard let self else { return }
+            if let err = err { completion(.failure(err)); return }
+            guard let snap, snap.exists else {
+                return completion(.failure(NSError(domain: "WorkOrdersDatabase",
+                                                   code: 404,
+                                                   userInfo: [NSLocalizedDescriptionKey: "WorkOrder \(woId) not found"])))
+            }
+
+            do {
+                var wo = try snap.data(as: WorkOrder.self)
+
+                guard let idx = wo.items.firstIndex(where: { $0.id == itemId }) else {
+                    return completion(.failure(NSError(domain: "WorkOrdersDatabase",
+                                                       code: 404,
+                                                       userInfo: [NSLocalizedDescriptionKey: "WO_Item \(itemId) not found in WorkOrder \(woId)"])))
+                }
+
+                // Update completed reasons and add note
+                wo.items[idx].completedReasons = completedReasons
+                wo.items[idx].notes.append(note)
+                wo.lastModified = Date()
+                wo.lastModifiedBy = note.user
+
+                try docRef.setData(from: wo, merge: false) { err in
+                    if let err = err { completion(.failure(err)); return }
+
+                    // Update local cache
+                    DispatchQueue.main.async {
+                        #if DEBUG
+                        print("🔄 WorkOrdersDatabase: Updating completed reasons for WO \(wo.WO_Number)")
+                        print("   - Firestore ID: \(wo.id ?? "nil")")
+                        print("   - Completed reasons: \(completedReasons)")
+                        #endif
+                        
+                        // Try to find by WO_Number first (more reliable), then by ID as fallback
+                        if let cacheIdx = self.workOrders.firstIndex(where: { $0.WO_Number == wo.WO_Number }) {
+                            self.workOrders[cacheIdx] = wo
+                            #if DEBUG
+                            print("   ✅ Updated by WO_Number at index \(cacheIdx)")
+                            #endif
+                        } else if let woId = wo.id, !woId.isEmpty, let cacheIdx = self.workOrders.firstIndex(where: { $0.id == woId }) {
+                            self.workOrders[cacheIdx] = wo
+                            #if DEBUG
+                            print("   ✅ Updated by ID at index \(cacheIdx)")
+                            #endif
+                        } else {
+                            #if DEBUG
+                            print("   ⚠️ Work order not found in cache - adding to cache")
+                            #endif
+                            // If not found, add it to the cache
+                            self.workOrders.append(wo)
+                        }
+                        
+                        // Post notification to trigger UI updates
+                        NotificationCenter.default.post(
+                            name: .WorkOrderSaved,
+                            object: wo.id,
+                            userInfo: ["WO_Number": wo.WO_Number]
+                        )
+                    }
+                    completion(.success(()))
+                }
+            } catch {
+                completion(.failure(error))
+            }
+        }
+    }
+    // END updateCompletedReasons
+
     // END
 }

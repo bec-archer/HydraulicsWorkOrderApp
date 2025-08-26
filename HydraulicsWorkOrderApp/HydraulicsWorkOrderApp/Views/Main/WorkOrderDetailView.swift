@@ -364,6 +364,12 @@ struct WorkOrderDetailView: View {
                                 .strokeBorder(Color.gray.opacity(0.1))
                         )
                         
+                        // Reasons for Service Section
+                        if !item.reasonsForService.isEmpty {
+                            self.reasonsForServiceCard(for: item, itemIndex: idx)
+                                .frame(maxWidth: .infinity)
+                        }
+                        
                         self.itemTimelineCard(for: item)
                             .frame(maxWidth: .infinity)
                     }
@@ -445,7 +451,7 @@ extension WorkOrderDetailView {
                                 .padding(.top, 3)
                             
                             VStack(alignment: .leading, spacing: 4) {
-                                Text(n.text)
+                                Text(formatNoteText(n.text, item: item))
                                     .font(.subheadline)
                                 Text("\(n.user) • \(n.timestamp.formatted(date: .abbreviated, time: .shortened))")
                                     .font(.caption)
@@ -500,6 +506,203 @@ extension WorkOrderDetailView {
         )
     }
     
+    // ───── Reasons for Service Card ─────
+    @ViewBuilder
+    private func reasonsForServiceCard(for item: WO_Item, itemIndex: Int) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Reasons for Service")
+                .font(.headline)
+            
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], alignment: .leading, spacing: 8) {
+                ForEach(item.reasonsForService, id: \.self) { reason in
+                    let isCompleted = item.completedReasons.contains(reason)
+                    
+                    Button(action: {
+                        toggleReasonCompletion(for: item, reason: reason, itemIndex: itemIndex)
+                    }) {
+                        HStack(spacing: 8) {
+                            Image(systemName: isCompleted ? "checkmark.square.fill" : "square")
+                                .foregroundColor(isCompleted ? .green : .gray)
+                                .font(.system(size: 16))
+                            
+                            VStack(alignment: .leading, spacing: 2) {
+                                // Display just "Other" instead of "Other (opens Service Notes)"
+                                let displayText = reason.contains("(opens Service Notes)") ? "Other" : reason
+                                Text(displayText)
+                                    .font(.subheadline)
+                                    .foregroundColor(isCompleted ? .secondary : .primary)
+                                    .strikethrough(isCompleted)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                
+                                // Show actual note content for "Other" reason
+                                if reason.contains("Other") && !item.reasonNotes.isNilOrEmpty {
+                                    Text(item.reasonNotes ?? "")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                        .italic()
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                        .padding(.top, 2)
+                                }
+                            }
+                        }
+                        .padding(.vertical, 8)
+                        .padding(.horizontal, 12)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(isCompleted ? Color(.systemGray6) : Color(.systemBackground))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8)
+                                .stroke(isCompleted ? Color.green.opacity(0.3) : Color(.systemGray4), lineWidth: 1)
+                        )
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                }
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(.systemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .strokeBorder(Color.gray.opacity(0.12))
+        )
+    }
+    
+    // ───── Toggle Reason Completion ─────
+    private func toggleReasonCompletion(for item: WO_Item, reason: String, itemIndex: Int) {
+        var updatedCompletedReasons = item.completedReasons
+        
+        if updatedCompletedReasons.contains(reason) {
+            // Remove from completed
+            updatedCompletedReasons.removeAll { $0 == reason }
+        } else {
+            // Add to completed
+            updatedCompletedReasons.append(reason)
+        }
+        
+        // Create completion note
+        let timestamp = Date()
+        let userName = "Joe" // TODO: Get actual user name from app state
+        let checkmark = updatedCompletedReasons.contains(reason) ? "✅" : "❌"
+        
+        // Format the note text to show actual note content for "Other" reason
+        let noteText: String
+        if reason.contains("(opens Service Notes)") && !item.reasonNotes.isNilOrEmpty {
+            noteText = "\(checkmark) Other: \(item.reasonNotes ?? "")"
+        } else if reason.contains("(opens Service Notes)") {
+            noteText = "\(checkmark) Other"
+        } else {
+            noteText = "\(checkmark) \(reason)"
+        }
+        
+        let note = WO_Note(
+            id: UUID(),
+            user: userName,
+            text: noteText,
+            timestamp: timestamp,
+            imageURLs: []
+        )
+        
+        // Update local wrapper
+        var updatedItem = woWrapper.wo.items[itemIndex]
+        updatedItem.completedReasons = updatedCompletedReasons
+        updatedItem.notes.append(note)
+        
+        var updatedWO = woWrapper.wo
+        updatedWO.items[itemIndex] = updatedItem
+        updatedWO.lastModified = timestamp
+        updatedWO.lastModifiedBy = userName
+        
+        woWrapper.wo = updatedWO
+        
+        // Update Firestore
+        let woIdString = woWrapper.wo.id
+        
+        if woIdString == nil || woIdString?.isEmpty == true {
+            #if DEBUG
+            print("⚠️ Work Order ID is empty, attempting to find by WO_Number: \(woWrapper.wo.WO_Number)")
+            #endif
+            
+            // Try to get the document ID from Firestore
+            db.findWorkOrderId(byWONumber: woWrapper.wo.WO_Number) { result in
+                switch result {
+                case .success(let foundId):
+                    #if DEBUG
+                    print("✅ Found Firestore ID for WO \(woWrapper.wo.WO_Number): \(foundId)")
+                    #endif
+                    
+                    // Update completed reasons with found ID
+                    WorkOrdersDatabase.shared.updateCompletedReasons(
+                        woId: foundId,
+                        itemId: item.id,
+                        completedReasons: updatedCompletedReasons,
+                        note: note
+                    ) { result in
+                        switch result {
+                        case .success:
+                            #if DEBUG
+                            print("✅ Updated completed reasons for \(item.type): \(updatedCompletedReasons)")
+                            #endif
+                        case .failure(let error):
+                            #if DEBUG
+                            print("❌ Failed to update completed reasons: \(error.localizedDescription)")
+                            #endif
+                        }
+                    }
+                    
+                case .failure(let error):
+                    #if DEBUG
+                    print("❌ Failed to find Firestore ID: \(error.localizedDescription)")
+                    #endif
+                }
+            }
+            return
+        }
+        
+        #if DEBUG
+        print("📝 Updating completed reasons for WO: \(woIdString ?? "nil"), Item: \(item.id)")
+        print("   Completed reasons: \(updatedCompletedReasons)")
+        #endif
+        
+        WorkOrdersDatabase.shared.updateCompletedReasons(
+            woId: woIdString!,
+            itemId: item.id,
+            completedReasons: updatedCompletedReasons,
+            note: note
+        ) { result in
+            switch result {
+            case .success:
+                #if DEBUG
+                print("✅ Updated completed reasons for \(item.type): \(updatedCompletedReasons)")
+                #endif
+            case .failure(let error):
+                #if DEBUG
+                print("❌ Failed to update completed reasons: \(error.localizedDescription)")
+                #endif
+            }
+        }
+        
+        // Post notification to trigger UI updates
+        NotificationCenter.default.post(
+            name: .WorkOrderSaved,
+            object: woWrapper.wo.id,
+            userInfo: ["WO_Number": woWrapper.wo.WO_Number]
+        )
+    }
+    
+    // ───── Format Note Text Helper ─────
+    private func formatNoteText(_ noteText: String, item: WO_Item) -> String {
+        if noteText.contains("Other (opens Service Notes)") && !item.reasonNotes.isNilOrEmpty {
+            return noteText.replacingOccurrences(of: "Other (opens Service Notes)", with: "Other: \(item.reasonNotes ?? "")")
+        } else if noteText.contains("Other (opens Service Notes)") {
+            return noteText.replacingOccurrences(of: "Other (opens Service Notes)", with: "Other")
+        } else {
+            return noteText
+        }
+    }
+    
     // ───── Status Color Helper ─────
     private func statusColor(for status: String) -> Color {
         switch status.lowercased() {
@@ -514,6 +717,13 @@ extension WorkOrderDetailView {
         case "tested: fail":     return UIConstants.StatusColors.testFailed
         default:                 return UIConstants.StatusColors.fallback
         }
+    }
+}
+
+// MARK: - String Extension
+extension String? {
+    var isNilOrEmpty: Bool {
+        return self?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true
     }
 }
 

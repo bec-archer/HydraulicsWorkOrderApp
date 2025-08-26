@@ -9,6 +9,7 @@ struct WO_Item: Identifiable, Codable, Equatable {
     var dropdowns: [String: String] = [:]
     var reasonsForService: [String] = []
     var reasonNotes: String? = nil
+    var completedReasons: [String] = [] // Track which reasons have been completed
 
     var imageUrls: [String] = []
     var thumbUrls: [String] = []       // 🆕 store thumbnails for fast UI
@@ -39,7 +40,7 @@ struct WO_Item: Identifiable, Codable, Equatable {
 // Ignore localImages in Codable
 extension WO_Item {
     enum CodingKeys: String, CodingKey {
-        case id, tagId, type, dropdowns, reasonsForService, reasonNotes,
+        case id, tagId, type, dropdowns, reasonsForService, reasonNotes, completedReasons,
              imageUrls, thumbUrls, lastModified, dropdownSchemaVersion, lastModifiedBy,
              statusHistory, notes
     }
@@ -58,6 +59,7 @@ extension WO_Item {
         self.dropdowns = try c.decodeIfPresent([String:String].self, forKey: .dropdowns) ?? [:]
         self.reasonsForService = try c.decodeIfPresent([String].self, forKey: .reasonsForService) ?? []
         self.reasonNotes = try c.decodeIfPresent(String.self, forKey: .reasonNotes)
+        self.completedReasons = try c.decodeIfPresent([String].self, forKey: .completedReasons) ?? []
 
         // 🔑 Back-compat: default to [] when key missing
         self.imageUrls = try c.decodeIfPresent([String].self, forKey: .imageUrls) ?? []
@@ -88,6 +90,7 @@ extension WO_Item {
         dropdownSchemaVersion: Int,
         reasonsForService: [String],
         reasonNotes: String?,
+        completedReasons: [String],
         statusHistory: [WO_Status],
         testResult: String?,
         partsUsed: String?,
@@ -106,6 +109,7 @@ extension WO_Item {
         self.dropdownSchemaVersion = dropdownSchemaVersion
         self.reasonsForService = reasonsForService
         self.reasonNotes = reasonNotes
+        self.completedReasons = completedReasons
         self.statusHistory = statusHistory
         self.testResult = testResult
         self.partsUsed = partsUsed
@@ -135,6 +139,7 @@ extension WO_Item {
         ],
         reasonsForService: ["Leaking", "Other"],
         reasonNotes: "This is just a sample note.",
+        completedReasons: [],
         imageUrls: []
     )
 }

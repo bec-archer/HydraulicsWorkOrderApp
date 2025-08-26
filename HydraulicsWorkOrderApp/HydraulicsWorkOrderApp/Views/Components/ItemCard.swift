@@ -461,6 +461,7 @@ private struct NoteCameraCaptureView: UIViewControllerRepresentable {
         dropdownSchemaVersion: 1,
         reasonsForService: [],
         reasonNotes: nil,
+        completedReasons: [],
         statusHistory: statusHistory,
         testResult: nil,
         partsUsed: nil,
@@ -471,7 +472,7 @@ private struct NoteCameraCaptureView: UIViewControllerRepresentable {
         tagReplacementHistory: nil
     )
 
-    return ItemCard(
+    ItemCard(
         item: sampleItem,
         imageURLs: .constant(["https://example.com/full.jpg"]),
         thumbURLs: .constant(["https://example.com/thumb.jpg"]),
