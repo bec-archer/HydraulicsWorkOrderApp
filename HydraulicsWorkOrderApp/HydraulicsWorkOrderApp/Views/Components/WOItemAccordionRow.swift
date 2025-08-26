@@ -14,7 +14,7 @@ struct WOItemAccordionRow: View {
     let index: Int
     let woId: String
     @Binding var items: [WO_Item]
-    @Binding var expandedIndex: Int?
+    @Binding var expandedIndices: Set<Int>
     @Binding var showValidationNudge: Bool
     let onDelete: (Int) -> Void
 
@@ -28,21 +28,21 @@ struct WOItemAccordionRow: View {
     }
 
     var isExpanded: Bool {
-        expandedIndex == index
+        expandedIndices.contains(index)
     }
     
     init(
         index: Int,
         woId: String,
         items: Binding<[WO_Item]>,
-        expandedIndex: Binding<Int?>,
+        expandedIndices: Binding<Set<Int>>,
         showValidationNudge: Binding<Bool> = .constant(false),
         onDelete: @escaping (Int) -> Void
     ) {
         self.index = index
         self.woId = woId
         self._items = items
-        self._expandedIndex = expandedIndex
+        self._expandedIndices = expandedIndices
         self._showValidationNudge = showValidationNudge
         self.onDelete = onDelete
     }
@@ -60,7 +60,11 @@ struct WOItemAccordionRow: View {
 
                         Button {
                             withAnimation {
-                                expandedIndex = isExpanded ? nil : index
+                                if isExpanded {
+                                    expandedIndices.remove(index)
+                                } else {
+                                    expandedIndices.insert(index)
+                                }
                             }
                         } label: {
                             Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
@@ -140,7 +144,7 @@ struct WOItemAccordionRow: View {
                 tagReplacementHistory: nil
             )
         ]
-        @State private var expandedIndex: Int? = 0
+        @State private var expandedIndices: Set<Int> = [0]
         @State private var showValidationNudge: Bool = false
 
         var body: some View {
@@ -148,7 +152,7 @@ struct WOItemAccordionRow: View {
                 index: 0,
                 woId: "PREVIEW-WO-ID",
                 items: $items,
-                expandedIndex: $expandedIndex,
+                expandedIndices: $expandedIndices,
                 showValidationNudge: $showValidationNudge,
                 onDelete: { _ in }
             )

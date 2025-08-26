@@ -32,6 +32,8 @@ struct WorkOrderDetailView: View {
     @State private var showImageViewer = false
     @State private var selectedImageURL: URL? = nil
     @State private var showingPhoneActions = false
+    @State private var showingStatusPicker = false
+    @State private var selectedItemForStatusUpdate: WO_Item? = nil
     
     private var canDelete: Bool {
 #if DEBUG
@@ -76,6 +78,18 @@ struct WorkOrderDetailView: View {
                 phoneNumber: woWrapper.wo.customerPhone,
                 isPresented: $showingPhoneActions
             )
+        }
+        .sheet(isPresented: $showingStatusPicker) {
+            if let item = selectedItemForStatusUpdate {
+                StatusPickerSheet(
+                    currentStatus: item.statusHistory.last?.status ?? "Checked In",
+                    onStatusSelected: { newStatus in
+                        updateItemStatus(item: item, newStatus: newStatus)
+                        showingStatusPicker = false
+                    },
+                    isPresented: $showingStatusPicker
+                )
+            }
         }
         .navigationTitle("Work Order Details")
         .navigationBarTitleDisplayMode(.inline)
@@ -295,6 +309,44 @@ extension WorkOrderDetailView {
             #if DEBUG
             print("✅ Status updated for \(item.type) to '\(newStatus)'")
             #endif
+            
+            // Update local state immediately
+            DispatchQueue.main.async {
+                // Find the item in the local work order and update its status
+                if let itemIndex = woWrapper.wo.items.firstIndex(where: { $0.id == item.id }) {
+                    var updatedItem = woWrapper.wo.items[itemIndex]
+                    
+                    // Add the new status to the history
+                    let newStatusEntry = WO_Status(
+                        status: newStatus,
+                        user: "Tech",
+                        timestamp: Date(),
+                        notes: nil
+                    )
+                    updatedItem.statusHistory.append(newStatusEntry)
+                    
+                    // Add a note about the status change
+                    let statusNote = WO_Note(
+                        user: "Tech",
+                        text: "Status changed to: \(newStatus)",
+                        timestamp: Date(),
+                        imageURLs: []
+                    )
+                    updatedItem.notes.append(statusNote)
+                    
+                    // Update the work order
+                    var updatedWO = woWrapper.wo
+                    updatedWO.items[itemIndex] = updatedItem
+                    updatedWO.lastModified = Date()
+                    updatedWO.lastModifiedBy = "Tech"
+                    
+                    woWrapper.wo = updatedWO
+                    
+                    #if DEBUG
+                    print("🔄 Updated local state for item \(item.type) to status: \(newStatus)")
+                    #endif
+                }
+            }
             
             // Notify parent view
             onUpdateItemStatus?(item, WO_Status(
@@ -709,16 +761,22 @@ extension WorkOrderDetailView {
                         
                         Spacer()
                         
-                        // Status Badge
+                        // Status Badge (Clickable)
                         if let lastStatus = item.statusHistory.last?.status {
-                            Text(lastStatus)
-                                .font(.caption)
-                                .fontWeight(.medium)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(statusColor(for: lastStatus).opacity(0.2))
-                                .foregroundColor(statusColor(for: lastStatus))
-                                .clipShape(Capsule())
+                            Button {
+                                selectedItemForStatusUpdate = item
+                                showingStatusPicker = true
+                            } label: {
+                                Text(lastStatus)
+                                    .font(.caption)
+                                    .fontWeight(.medium)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 4)
+                                    .background(statusColor(for: lastStatus).opacity(0.2))
+                                    .foregroundColor(statusColor(for: lastStatus))
+                                    .clipShape(Capsule())
+                            }
+                            .buttonStyle(PlainButtonStyle())
                         }
                     }
                     
@@ -819,6 +877,64 @@ extension WorkOrderDetailView {
             return noteText.replacingOccurrences(of: "Other (opens Service Notes)", with: "Other")
         } else {
             return noteText
+        }
+    }
+    
+    // ───── Status Update Helper ─────
+    private func updateItemStatus(item: WO_Item, newStatus: String) {
+        let status = WO_Status(
+            status: newStatus,
+            user: "Tech",
+            timestamp: Date(),
+            notes: nil
+        )
+        
+        let note = WO_Note(
+            user: "Tech",
+            text: "Status changed to: \(newStatus)",
+            timestamp: Date(),
+            imageURLs: []
+        )
+        
+        // Check if we have a valid work order ID
+        if let woId = woWrapper.wo.id, !woId.isEmpty {
+            print("🔄 Updating status for WO \(woWrapper.wo.WO_Number) with ID: \(woId)")
+            
+            WorkOrdersDatabase.shared.updateItemStatusAndNote(
+                woId: woId,
+                itemId: item.id,
+                status: status,
+                mirroredNote: note
+            ) { result in
+                handleStatusUpdateResult(result, item: item, newStatus: newStatus)
+            }
+        } else {
+            print("⚠️ Work Order ID is empty, attempting to find by WO_Number: \(woWrapper.wo.WO_Number)")
+            
+            // Try to get the document ID from Firestore using WO_Number
+            WorkOrdersDatabase.shared.findWorkOrderId(byWONumber: woWrapper.wo.WO_Number) { result in
+                switch result {
+                case .success(let foundId):
+                    print("✅ Found Firestore ID for WO \(woWrapper.wo.WO_Number): \(foundId)")
+                    
+                    WorkOrdersDatabase.shared.updateItemStatusAndNote(
+                        woId: foundId,
+                        itemId: item.id,
+                        status: status,
+                        mirroredNote: note
+                    ) { result in
+                        handleStatusUpdateResult(result, item: item, newStatus: newStatus)
+                    }
+                    
+                case .failure(let error):
+                    print("❌ Failed to find Firestore ID: \(error.localizedDescription)")
+                    // Show user feedback that the update failed
+                    DispatchQueue.main.async {
+                        // You could add a @State variable to show an alert here
+                        print("❌ Status update failed - could not find work order in database")
+                    }
+                }
+            }
         }
     }
     
@@ -976,6 +1092,77 @@ struct PhoneActionSheet: View {
                     }
                 }
                 .padding(.horizontal, 20)
+                
+                Spacer()
+            }
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Cancel") {
+                        isPresented = false
+                    }
+                }
+            }
+        }
+        .presentationDetents([.medium])
+        .presentationDragIndicator(.visible)
+    }
+}
+
+// ───── Status Picker Sheet ─────
+struct StatusPickerSheet: View {
+    let currentStatus: String
+    let onStatusSelected: (String) -> Void
+    @Binding var isPresented: Bool
+    
+    private let statusOptions = [
+        "Checked In",
+        "Disassembly", 
+        "In Progress",
+        "Test Failed",
+        "Completed",
+        "Closed"
+    ]
+    
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 20) {
+                Text("Select Status")
+                    .font(.title2)
+                    .fontWeight(.semibold)
+                    .padding(.top)
+                
+                VStack(spacing: 12) {
+                    ForEach(statusOptions, id: \.self) { status in
+                        Button {
+                            onStatusSelected(status)
+                        } label: {
+                            HStack {
+                                Text(status)
+                                    .font(.body)
+                                    .foregroundColor(.primary)
+                                
+                                Spacer()
+                                
+                                if status == currentStatus {
+                                    Image(systemName: "checkmark")
+                                        .foregroundColor(.blue)
+                                }
+                            }
+                            .padding()
+                            .background(
+                                RoundedRectangle(cornerRadius: 10)
+                                    .fill(status == currentStatus ? Color.blue.opacity(0.1) : Color(.systemGray6))
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10)
+                                    .stroke(status == currentStatus ? Color.blue : Color.clear, lineWidth: 2)
+                            )
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                    }
+                }
+                .padding(.horizontal)
                 
                 Spacer()
             }

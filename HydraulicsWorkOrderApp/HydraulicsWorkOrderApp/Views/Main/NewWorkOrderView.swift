@@ -20,7 +20,7 @@ struct NewWorkOrderView: View {
     @State private var items: [WO_Item] = [WO_Item.blank()] // start with one blank item
     @State private var showAlert: Bool = false // for validation errors
     @State private var alertMessage: String = "" // alert content
-    @State private var expandedIndex: Int? = nil    // which WO_Item is expanded (nil = all collapsed)
+    @State private var expandedIndices: Set<Int> = []    // which WO_Items are expanded
     @State private var showingNewCustomerModal: Bool = false   // ✅ fixed: had no Bool type
     @State private var searchDebounce: DispatchWorkItem?  // for debounced search
     @State private var showSaveBanner: Bool = false // show "Saved" banner briefly
@@ -65,7 +65,7 @@ struct NewWorkOrderView: View {
 
     // Completion/blank/partial logic (mirrors AddWOItemFormView)
     private func isCompleteItem(_ item: WO_Item) -> Bool {
-        return itemHasType(item) && itemHasPhoto(item)
+        return itemHasType(item) && itemHasPhoto(item) && !item.reasonsForService.isEmpty
     }
     private func isBlankItem(_ item: WO_Item) -> Bool {
         return !itemHasType(item) && !itemHasPhoto(item)
@@ -73,7 +73,8 @@ struct NewWorkOrderView: View {
     private func isPartiallyFilledItem(_ item: WO_Item) -> Bool {
         let hasType = itemHasType(item)
         let hasPhoto = itemHasPhoto(item)
-        return (hasType && !hasPhoto) || (!hasType && hasPhoto)
+        let hasReasons = !item.reasonsForService.isEmpty
+        return (hasType && !hasPhoto) || (!hasType && hasPhoto) || (hasType && hasPhoto && !hasReasons)
     }
 
     private var hasAtLeastOneCompleteItem: Bool {
@@ -83,8 +84,8 @@ struct NewWorkOrderView: View {
         items.contains { isPartiallyFilledItem($0) }
     }
     private var canShowCheckInButtons: Bool {
-        // ✅ Require: Customer + at least one fully complete item; block if any partial exists
-        (selectedCustomer != nil) && hasAtLeastOneCompleteItem && !hasAnyPartialItem
+        // ✅ Require: Customer + ALL items must be complete (no partial items allowed)
+        (selectedCustomer != nil) && items.count > 0 && items.allSatisfy { isCompleteItem($0) }
     }
 
     // END Readiness Helpers
@@ -217,9 +218,9 @@ struct NewWorkOrderView: View {
             // ─────────────────────────────────────────────────────
 
             .onAppear {
-                if expandedIndex == nil {
-                    expandedIndex = items.indices.first
-                }
+                                    if expandedIndices.isEmpty {
+                        expandedIndices.insert(items.indices.first!)
+                    }
             }
 
             // END onChange
@@ -256,7 +257,7 @@ struct NewWorkOrderView: View {
                     index: idx,
                     woId: draftWOId,
                     items: $items,
-                    expandedIndex: $expandedIndex,
+                    expandedIndices: $expandedIndices,
                     showValidationNudge: $showValidationNudge,   // ⬅️ NEW Binding
                     onDelete: { indexToDelete in
                         handleDeleteWOItem(indexToDelete)
@@ -273,22 +274,25 @@ struct NewWorkOrderView: View {
 
             // ➕ Add Item button
             Button {
-                // Block adding a new item if any existing item is partially filled
-                let hasPartial = items.contains { isPartiallyFilledItem($0) }
-                if hasPartial {
-                    showValidationNudge = false
-                    if let firstPartialIdx = items.firstIndex(where: { isPartiallyFilledItem($0) }) {
-                        expandedIndex = firstPartialIdx   // focus the problem item
-                    }
-                    return
+                print("🔍 Add Item button pressed. items count: \(items.count)")
+                
+                // Debug: Check the state of each item
+                for (index, item) in items.enumerated() {
+                    let hasType = itemHasType(item)
+                    let hasPhoto = itemHasPhoto(item)
+                    print("🔍 Item \(index): type='\(item.type)', hasType=\(hasType), imageUrls.count=\(item.imageUrls.count), thumbUrls.count=\(item.thumbUrls.count), hasPhoto=\(hasPhoto)")
                 }
 
-                // Otherwise safe to add a new, blank WO_Item
+                // Always allow adding new items (no blocking based on partial items)
                 showValidationNudge = false
+                print("🔄 Adding new item. Current count: \(items.count)")
                 withAnimation {
-                    items.append(WO_Item.blank())
-                    expandedIndex = items.indices.last
+                    let newItem = WO_Item.blank()
+                    print("🆕 Created new item with ID: \(newItem.id)")
+                    items.append(newItem)
+                    expandedIndices.insert(items.indices.last!)
                 }
+                print("✅ Added new item. New count: \(items.count), expandedIndices: \(expandedIndices)")
             } label: {
                 Label("Add Item", systemImage: "plus.circle.fill")
                     .font(.headline)
@@ -444,7 +448,7 @@ struct NewWorkOrderView: View {
         // 2) If any partially filled item remains, bump user to finish it
         if let firstPartialIdx = nonBlankItems.firstIndex(where: { isPartiallyFilledItem($0) }) {
             showValidationNudge = true                 // ⬅️ NEW
-            expandedIndex = firstPartialIdx
+            expandedIndices.insert(firstPartialIdx)
             alertMessage = "Please finish the highlighted WO_Item. Each item needs a Type and at least one Photo."
             showAlert = true
             return
@@ -552,7 +556,7 @@ struct NewWorkOrderView: View {
                                     customerSearch.resetSearch()
                                     flagged = false
                                     items = [WO_Item.blank()]
-                                    expandedIndex = 0
+                                    expandedIndices = [0]
                                 }
                             }
                         }
@@ -598,7 +602,7 @@ struct NewWorkOrderView: View {
                             customerSearch.resetSearch()
                             flagged = false
                             items = [WO_Item.blank()]
-                            expandedIndex = 0
+                            expandedIndices = [0]
                         }
                     }
                 }
@@ -614,15 +618,26 @@ struct NewWorkOrderView: View {
         if items.count > 1 {
             _ = withAnimation { items.remove(at: index) }   // ignore return explicitly
             // Keep expansion on a sensible neighbor
-            if let current = expandedIndex, current == index {
-                expandedIndex = max(0, min(index, items.count - 1))
-            } else if let current = expandedIndex, current > index {
-                expandedIndex = current - 1
+            if expandedIndices.contains(index) {
+                expandedIndices.remove(index)
+                if items.count > 0 {
+                    expandedIndices.insert(max(0, min(index, items.count - 1)))
+                }
+            } else {
+                // Adjust indices for items after the deleted one
+                let newExpandedIndices = expandedIndices.compactMap { expandedIndex in
+                    if expandedIndex > index {
+                        return expandedIndex - 1
+                    } else {
+                        return expandedIndex
+                    }
+                }
+                expandedIndices = Set(newExpandedIndices)
             }
         } else {
             // Must always have ≥ 1 WO_Item: reset the lone item
             withAnimation { items[0] = WO_Item.blank() }   // ignore return explicitly
-            expandedIndex = 0
+            expandedIndices = [0]
         }
     }
     // END: Delete / Reset WO_Item

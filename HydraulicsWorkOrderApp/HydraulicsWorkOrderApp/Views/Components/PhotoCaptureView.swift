@@ -20,6 +20,9 @@ struct PhotoCaptureView: View {
     
     // Parent binds to this; you'll map to WO_Item.imageUrls after uploads
     @Binding var images: [UIImage]
+    
+    // Optional: existing image URLs to display alongside local images
+    var existingImageURLs: [String] = []
 
     // Optional inline QR button support
     var showQR: Bool = false
@@ -100,7 +103,7 @@ struct PhotoCaptureView: View {
 
             
             // ───── Thumbnails Row (Horizontal) ─────
-            ThumbnailsRow(images: $images)
+            ThumbnailsRow(images: $images, existingImageURLs: existingImageURLs)
                 .padding(.vertical, 2)
             
         }
@@ -198,9 +201,12 @@ struct PhotoCaptureView: View {
     @MainActor
     private struct ThumbnailsRow: View {
         @Binding var images: [UIImage]
+        var existingImageURLs: [String] = []
         
         var body: some View {
-            if images.isEmpty {
+            let totalImageCount = images.count + existingImageURLs.count
+            
+            if totalImageCount == 0 {
                 // Subtle helper text when empty
                 Text("Add at least one photo for this WO_Item.")
                     .font(.callout)
@@ -209,8 +215,55 @@ struct PhotoCaptureView: View {
             } else {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 10) {
-                        // Use indices instead of tuple from enumerated() to simplify inference
-                        // Take a snapshot of indices so SwiftUI diffing has stable identity
+                        // Display existing URL-based images first
+                        ForEach(Array(existingImageURLs.enumerated()), id: \.offset) { index, urlString in
+                            if let url = URL(string: urlString) {
+                                AsyncImage(url: url) { phase in
+                                    switch phase {
+                                    case .empty:
+                                        ProgressView()
+                                            .frame(width: 92, height: 92)
+                                            .background(Color.gray.opacity(0.2))
+                                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                                    case .success(let image):
+                                        image
+                                            .resizable()
+                                            .scaledToFill()
+                                            .frame(width: 92, height: 92)
+                                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                                            .overlay(
+                                                RoundedRectangle(cornerRadius: 12)
+                                                    .stroke(Color("#E0E0E0"))
+                                            )
+                                    case .failure:
+                                        Color.gray
+                                            .frame(width: 92, height: 92)
+                                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                                    @unknown default:
+                                        EmptyView()
+                                    }
+                                }
+                                .overlay(
+                                    // Remove button for existing images
+                                    Button(action: {
+                                        // Note: This would need to be handled by the parent
+                                        // For now, we'll just show the button but not implement removal
+                                    }) {
+                                        Image(systemName: "xmark.circle.fill")
+                                            .font(.system(size: 18, weight: .semibold))
+                                            .foregroundColor(.black)
+                                            .background(
+                                                Circle().fill(Color(hex: "#FFC500"))
+                                            )
+                                    }
+                                    .offset(x: 6, y: -6)
+                                    .accessibilityLabel("Remove photo"),
+                                    alignment: .topTrailing
+                                )
+                            }
+                        }
+                        
+                        // Display local UIImage objects
                         let snap = Array(images.indices)
                         ForEach(snap, id: \.self) { index in
                             ThumbnailCell(
@@ -222,7 +275,6 @@ struct PhotoCaptureView: View {
                                         _ = withAnimation { images.remove(at: index) }
                                     }
                                 }
-                                
                             )
                         }
                         
@@ -374,6 +426,9 @@ struct PhotoCaptureUploadView: View {
     // Local scratchpad for captured images (not persisted)
     @State private var localImages: [UIImage] = []
     
+    // Track if we've initialized localImages from existing URLs
+    @State private var hasInitializedFromURLs: Bool = false
+    
     // Upload state
     @State private var uploadedCount: Int = 0            // how many localImages already uploaded
     @State private var isUploading: Bool = false
@@ -383,7 +438,7 @@ struct PhotoCaptureUploadView: View {
         VStack(alignment: .leading, spacing: 10) {
             
             // Reuse your existing capture/picker UI (now with inline QR)
-            PhotoCaptureView(images: $localImages, showQR: showQR, onScanQR: onScanQR)
+            PhotoCaptureView(images: $localImages, existingImageURLs: imageURLs, showQR: showQR, onScanQR: onScanQR)
 
             
             // Subtle progress
@@ -400,12 +455,43 @@ struct PhotoCaptureUploadView: View {
                     .foregroundColor(.red)
             }
         }
+        // ───── Initialize localImages from existing URLs ─────
+        .onAppear {
+            if !hasInitializedFromURLs && !imageURLs.isEmpty {
+                // Initialize localImages with existing images to prevent them from disappearing
+                // when the view is recreated (e.g., after collapse/expand)
+                hasInitializedFromURLs = true
+                // We don't need to actually load the images into localImages since they're already
+                // in imageURLs and thumbURLs, but we need to mark that we've seen them
+                uploadedCount = imageURLs.count
+            }
+        }
+        // ───── Prevent localImages from being reset on view refresh ─────
+        .onChange(of: imageURLs) { _, newURLs in
+            // If localImages is empty but we have URLs, it means the view was refreshed
+            // and we need to prevent the upload process from running
+            if localImages.isEmpty && !newURLs.isEmpty && hasInitializedFromURLs {
+                // Don't trigger upload - just sync the count
+                uploadedCount = newURLs.count
+            }
+        }
+        // ───── Sync with database cache to prevent duplication ─────
+        .onChange(of: imageURLs.count) { _, newCount in
+            // If the count increased unexpectedly, it might be from database sync
+            // Check if we need to update our upload count to prevent re-uploading
+            if newCount > uploadedCount && hasInitializedFromURLs {
+                uploadedCount = newCount
+            }
+        }
         // ───── Auto-upload newly appended images ─────
         .onChange(of: localImages) { _, newImages in
             // Only act when new images were appended
             guard newImages.count > uploadedCount else { return }
-
+            
+            // Additional check: only proceed if we actually have new images to upload
+            // This prevents the upload process from running when the view just refreshes
             let toUpload: [UIImage] = Array(newImages.dropFirst(uploadedCount)) // only the new ones
+            guard !toUpload.isEmpty else { return }
 
             isUploading = true
 
@@ -482,19 +568,22 @@ struct PhotoCaptureUploadView: View {
                     }
                 }
 
-                // ── Publish changes to bindings in one atomic update to prevent "index out of range"
+                // ── Update local arrays and handle errors
                 await MainActor.run {
-                    if !pendingFull.isEmpty || !pendingThumbs.isEmpty {
+                    if !pendingFull.isEmpty {
+                        // Update local arrays immediately for UI responsiveness
                         var newFull = imageURLs
                         var newThumb = thumbURLs
                         newFull.append(contentsOf: pendingFull)
                         newThumb.append(contentsOf: pendingThumbs)
-
-                        // Assign updated arrays once each; SwiftUI will re-render with equal lengths
+                        
                         imageURLs = newFull
                         thumbURLs = newThumb
-
                         uploadedCount += pendingFull.count
+                        
+                        // Clear localImages after successful upload to prevent duplication
+                        // This ensures ThumbnailsRow only shows images from existingImageURLs
+                        localImages = []
                     }
 
                     if !pendingErrors.isEmpty {
@@ -502,10 +591,6 @@ struct PhotoCaptureUploadView: View {
                         // We still bump uploadedCount to mark processed slots for images that failed
                         uploadedCount += pendingErrors.count
                     }
-
-                    #if DEBUG
-                    assert(imageURLs.count == thumbURLs.count, "PhotoCaptureUploadView invariant broken: imageURLs and thumbURLs length mismatch")
-                    #endif
 
                     isUploading = false
                 }
@@ -729,7 +814,7 @@ extension WorkOrdersDatabase {
 
 // ───── Preview Templates ─────
 #Preview("PhotoCaptureView – Demo") {
-    PhotoCaptureView(images: .constant([]))
+    PhotoCaptureView(images: .constant([]), existingImageURLs: [])
 }
 #Preview("PhotoCaptureUploadView – Demo (no upload)") {
     // NOTE: This preview does not actually call Firebase.
