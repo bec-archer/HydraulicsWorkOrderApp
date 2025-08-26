@@ -5,6 +5,7 @@
 
 import SwiftUI
 import Foundation
+import FirebaseStorage
 import UIKit
 
 // ───── WorkOrder Wrapper Class ─────
@@ -34,6 +35,8 @@ struct WorkOrderDetailView: View {
     @State private var showingPhoneActions = false
     @State private var showingStatusPicker = false
     @State private var selectedItemForStatusUpdate: WO_Item? = nil
+    @State private var showingAddNoteSheet = false
+    @State private var selectedItemForNote: WO_Item? = nil
     
     private var canDelete: Bool {
 #if DEBUG
@@ -88,6 +91,18 @@ struct WorkOrderDetailView: View {
                         showingStatusPicker = false
                     },
                     isPresented: $showingStatusPicker
+                )
+            }
+        }
+        .sheet(isPresented: $showingAddNoteSheet) {
+            if let item = selectedItemForNote {
+                AddNoteSheet(
+                    item: item,
+                    onNoteAdded: { noteText, imageURLs in
+                        addNoteToItem(item: item, noteText: noteText, imageURLs: imageURLs)
+                        showingAddNoteSheet = false
+                    },
+                    isPresented: $showingAddNoteSheet
                 )
             }
         }
@@ -303,6 +318,43 @@ struct WorkOrderDetailView: View {
 // ───── Helper Functions ─────
 
 extension WorkOrderDetailView {
+    private func handleNoteAddResult(_ result: Result<Void, Error>, item: WO_Item, note: WO_Note) {
+        switch result {
+        case .success:
+            #if DEBUG
+            print("✅ Note added for \(item.type) with \(note.imageURLs.count) images")
+            #endif
+            
+            // Update local state immediately
+            DispatchQueue.main.async {
+                // Find the item in the local work order and add the note
+                if let itemIndex = woWrapper.wo.items.firstIndex(where: { $0.id == item.id }) {
+                    var updatedItem = woWrapper.wo.items[itemIndex]
+                    updatedItem.notes.append(note)
+                    
+                    // Update the work order
+                    var updatedWO = woWrapper.wo
+                    updatedWO.items[itemIndex] = updatedItem
+                    updatedWO.lastModified = Date()
+                    updatedWO.lastModifiedBy = "Tech"
+                    
+                    woWrapper.wo = updatedWO
+                    
+                    #if DEBUG
+                    print("🔄 Updated local state with new note for item \(item.type) with \(note.imageURLs.count) images")
+                    print("   Note text: '\(note.text)'")
+                    print("   Image URLs: \(note.imageURLs)")
+                    #endif
+                }
+            }
+            
+        case .failure(let error):
+            #if DEBUG
+            print("❌ Failed to add note: \(error.localizedDescription)")
+            #endif
+        }
+    }
+    
     private func handleStatusUpdateResult(_ result: Result<Void, Error>, item: WO_Item, newStatus: String) {
         switch result {
         case .success:
@@ -741,7 +793,8 @@ extension WorkOrderDetailView {
                     
                     // Add Note/Image Button
                     Button {
-                        // TODO: Implement add note functionality
+                        selectedItemForNote = item
+                        showingAddNoteSheet = true
                     } label: {
                         HStack {
                             Image(systemName: "plus.circle.fill")
@@ -877,6 +930,51 @@ extension WorkOrderDetailView {
             return noteText.replacingOccurrences(of: "Other (opens Service Notes)", with: "Other")
         } else {
             return noteText
+        }
+    }
+    
+    // ───── Add Note Helper ─────
+    private func addNoteToItem(item: WO_Item, noteText: String, imageURLs: [String]) {
+        print("📝 Adding note to item \(item.type): text='\(noteText)', imageURLs=\(imageURLs)")
+        let note = WO_Note(
+            user: "Tech",
+            text: noteText,
+            timestamp: Date(),
+            imageURLs: imageURLs
+        )
+        
+        // Check if we have a valid work order ID
+        if let woId = woWrapper.wo.id, !woId.isEmpty {
+            print("🔄 Adding note to WO \(woWrapper.wo.WO_Number) with ID: \(woId)")
+            
+            WorkOrdersDatabase.shared.addItemNote(
+                woId: woId,
+                itemId: item.id,
+                note: note
+            ) { result in
+                handleNoteAddResult(result, item: item, note: note)
+            }
+        } else {
+            print("⚠️ Work Order ID is empty, attempting to find by WO_Number: \(woWrapper.wo.WO_Number)")
+            
+            // Try to get the document ID from Firestore using WO_Number
+            WorkOrdersDatabase.shared.findWorkOrderId(byWONumber: woWrapper.wo.WO_Number) { result in
+                switch result {
+                case .success(let foundId):
+                    print("✅ Found Firestore ID for WO \(woWrapper.wo.WO_Number): \(foundId)")
+                    
+                    WorkOrdersDatabase.shared.addItemNote(
+                        woId: foundId,
+                        itemId: item.id,
+                        note: note
+                    ) { result in
+                        handleNoteAddResult(result, item: item, note: note)
+                    }
+                    
+                case .failure(let error):
+                    print("❌ Failed to find Firestore ID: \(error.localizedDescription)")
+                }
+            }
         }
     }
     
@@ -1177,6 +1275,257 @@ struct StatusPickerSheet: View {
         }
         .presentationDetents([.medium])
         .presentationDragIndicator(.visible)
+    }
+}
+
+// ───── Add Note Sheet ─────
+struct AddNoteSheet: View {
+    let item: WO_Item
+    let onNoteAdded: (String, [String]) -> Void
+    @Binding var isPresented: Bool
+    
+    @State private var noteText = ""
+    @State private var selectedImages: [UIImage] = []
+    @State private var showingImagePicker = false
+    @State private var showingCamera = false
+    @State private var isUploading = false
+    
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 20) {
+                Text("Add Note")
+                    .font(.title2)
+                    .fontWeight(.semibold)
+                    .padding(.top)
+                
+                VStack(alignment: .leading, spacing: 16) {
+                    // Note Text
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Note")
+                            .font(.headline)
+                        
+                        TextEditor(text: $noteText)
+                            .frame(minHeight: 100)
+                            .padding(8)
+                            .background(Color(.systemGray6))
+                            .cornerRadius(8)
+                    }
+                    
+                    // Image Selection
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Images (Optional)")
+                            .font(.headline)
+                        
+                        HStack(spacing: 12) {
+                            Button {
+                                showingCamera = true
+                            } label: {
+                                VStack {
+                                    Image(systemName: "camera")
+                                        .font(.title2)
+                                    Text("Camera")
+                                        .font(.caption)
+                                }
+                                .frame(width: 80, height: 80)
+                                .background(Color(.systemGray6))
+                                .cornerRadius(8)
+                            }
+                            
+                            Button {
+                                showingImagePicker = true
+                            } label: {
+                                VStack {
+                                    Image(systemName: "photo.on.rectangle")
+                                        .font(.title2)
+                                    Text("Gallery")
+                                        .font(.caption)
+                                }
+                                .frame(width: 80, height: 80)
+                                .background(Color(.systemGray6))
+                                .cornerRadius(8)
+                            }
+                        }
+                        
+                        // Selected Images Preview
+                        if !selectedImages.isEmpty {
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(spacing: 8) {
+                                    ForEach(Array(selectedImages.enumerated()), id: \.offset) { index, image in
+                                        ZStack(alignment: .topTrailing) {
+                                            Image(uiImage: image)
+                                                .resizable()
+                                                .scaledToFill()
+                                                .frame(width: 80, height: 80)
+                                                .clipShape(RoundedRectangle(cornerRadius: 8))
+                                            
+                                            Button {
+                                                selectedImages.remove(at: index)
+                                            } label: {
+                                                Image(systemName: "xmark.circle.fill")
+                                                    .foregroundColor(.red)
+                                                    .background(Color.white)
+                                                    .clipShape(Circle())
+                                            }
+                                            .offset(x: 5, y: -5)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                .padding(.horizontal)
+                
+                Spacer()
+                
+                // Action Buttons
+                HStack(spacing: 16) {
+                    Button("Cancel") {
+                        isPresented = false
+                    }
+                    .buttonStyle(.bordered)
+                    
+                    Button(isUploading ? "Uploading..." : "Add Note") {
+                        if selectedImages.isEmpty {
+                            // No images to upload, just add the note
+                            onNoteAdded(noteText, [])
+                            isPresented = false
+                        } else {
+                            // Upload images first, then add note
+                            uploadImagesAndAddNote(noteText: noteText, images: selectedImages)
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled((noteText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && selectedImages.isEmpty) || isUploading)
+                }
+                .padding()
+            }
+            .navigationBarTitleDisplayMode(.inline)
+            .sheet(isPresented: $showingCamera) {
+                ImagePicker(selectedImage: Binding(
+                    get: { nil },
+                    set: { image in
+                        if let image = image {
+                            selectedImages.append(image)
+                        }
+                    }
+                ), sourceType: .camera)
+            }
+            .sheet(isPresented: $showingImagePicker) {
+                ImagePicker(selectedImage: Binding(
+                    get: { nil },
+                    set: { image in
+                        if let image = image {
+                            selectedImages.append(image)
+                        }
+                    }
+                ), sourceType: .photoLibrary)
+            }
+        }
+        .presentationDetents([.large])
+        .presentationDragIndicator(.visible)
+    }
+    
+    private func uploadImagesAndAddNote(noteText: String, images: [UIImage]) {
+        isUploading = true
+        
+        // Generate a unique folder name for this note's images
+        let noteId = UUID().uuidString
+        let timestamp = Date()
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyyMMdd_HHmmss"
+        let timeString = dateFormatter.string(from: timestamp)
+        
+        var uploadedURLs: [String] = []
+        let group = DispatchGroup()
+        let queue = DispatchQueue(label: "imageUpload", attributes: .concurrent)
+        
+        for (index, image) in images.enumerated() {
+            group.enter()
+            
+            // Generate filename
+            let filename = "\(timeString)_\(index).jpg"
+            // Use the same path structure as original images: intake/{itemId}/{noteId}/{filename}
+            let path = "intake/\(item.id)/\(noteId)/\(filename)"
+            
+            // Compress image
+            guard let imageData = image.jpegData(compressionQuality: 0.8) else {
+                group.leave()
+                continue
+            }
+            
+            // Upload to Firebase Storage
+            let storageRef = Storage.storage().reference().child(path)
+            let metadata = StorageMetadata()
+            metadata.contentType = "image/jpeg"
+            
+            storageRef.putData(imageData, metadata: metadata) { metadata, error in
+                if let error = error {
+                    print("❌ Failed to upload image \(index): \(error.localizedDescription)")
+                    group.leave()
+                    return
+                }
+                
+                // Get download URL
+                storageRef.downloadURL { url, error in
+                    defer { group.leave() }
+                    
+                    if let downloadURL = url {
+                        queue.async(flags: .barrier) {
+                            uploadedURLs.append(downloadURL.absoluteString)
+                        }
+                        print("✅ Uploaded image \(index): \(downloadURL.absoluteString)")
+                    } else {
+                        print("❌ Failed to get download URL for image \(index)")
+                    }
+                }
+            }
+        }
+        
+        group.notify(queue: .main) {
+            self.isUploading = false
+            print("📸 Upload complete. Note text: '\(noteText)', Image URLs: \(uploadedURLs)")
+            self.onNoteAdded(noteText, uploadedURLs)
+            self.isPresented = false
+        }
+    }
+}
+
+// ───── Image Picker ─────
+struct ImagePicker: UIViewControllerRepresentable {
+    @Binding var selectedImage: UIImage?
+    let sourceType: UIImagePickerController.SourceType
+    
+    func makeUIViewController(context: Context) -> UIImagePickerController {
+        let picker = UIImagePickerController()
+        picker.delegate = context.coordinator
+        picker.sourceType = sourceType
+        return picker
+    }
+    
+    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
+    
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+    
+    class Coordinator: NSObject, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
+        let parent: ImagePicker
+        
+        init(_ parent: ImagePicker) {
+            self.parent = parent
+        }
+        
+        func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey : Any]) {
+            if let image = info[.originalImage] as? UIImage {
+                parent.selectedImage = image
+            }
+            picker.dismiss(animated: true)
+        }
+        
+        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
+            picker.dismiss(animated: true)
+        }
     }
 }
 
