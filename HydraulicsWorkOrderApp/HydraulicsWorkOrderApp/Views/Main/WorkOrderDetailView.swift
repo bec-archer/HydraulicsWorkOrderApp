@@ -271,133 +271,14 @@ struct WorkOrderDetailView: View {
                             onAddItemNote?(item, note)
                         }
                         
-                        VStack(spacing: 16) {
-                            ItemCard(
-                                item: item,
-                                imageURLs: imageURLsBinding,
-                                thumbURLs: thumbURLsBinding,
-                                woId: (woWrapper.wo.id ?? ""),
-                                onImageTap: handleImageTap,
-                                onAddNote: handleAddNote,
-                                onChangeStatus: { item, newStatus in
-                                // Find the item in our wrapper
-                                if let itemIdx = woWrapper.wo.items.firstIndex(where: { $0.id == item.id }) {
-                                    // Create status update objects
-                                    let timestamp = Date()
-                                    let userName = "System"
-                                    
-                                    let statusUpdate = WO_Status(
-                                        status: newStatus,
-                                        user: userName,
-                                        timestamp: timestamp
-                                    )
-                                    
-                                    // Create a status update note
-                                    let note = WO_Note(
-                                        id: UUID(),
-                                        user: userName,
-                                        text: "Status changed to: \(newStatus)",
-                                        timestamp: timestamp,
-                                        imageURLs: []
-                                    )
-                                    
-                                    // Update item status history
-                                    var updatedItem = woWrapper.wo.items[itemIdx]
-                                    updatedItem.statusHistory.append(statusUpdate)
-                                    updatedItem.notes.append(note)
-                                    
-                                    // Update work order
-                                    var updatedWO = woWrapper.wo
-                                    updatedWO.items[itemIdx] = updatedItem
-                                    updatedWO.lastModified = timestamp
-                                    updatedWO.lastModifiedBy = userName
-                                    
-                                    #if DEBUG
-                                    print("🔄 WorkOrderDetailView: Updated work order \(updatedWO.WO_Number)")
-                                    print("   - Item \(itemIdx): \(updatedItem.type) status changed to '\(newStatus)'")
-                                    print("   - Total items: \(updatedWO.items.count)")
-                                    for (idx, item) in updatedWO.items.enumerated() {
-                                        print("     Item \(idx): \(item.type) - images: \(item.imageUrls.count), thumbs: \(item.thumbUrls.count)")
-                                    }
-                                    #endif
-                                    
-                                    // Update local wrapper
-                                    woWrapper.wo = updatedWO
-                                    
-                                    // Post notification to trigger UI updates
-                                    NotificationCenter.default.post(
-                                        name: .WorkOrderSaved,
-                                        object: updatedWO.id,
-                                        userInfo: ["WO_Number": updatedWO.WO_Number]
-                                    )
-                                    
-                                    // Update Firestore
-                                    // Try to find the work order by WO_Number if id is missing
-                                    let woIdString = woWrapper.wo.id
-                                    
-                                    if woIdString == nil || woIdString?.isEmpty == true {
-                                        #if DEBUG
-                                        print("⚠️ Work Order ID is empty, attempting to find by WO_Number: \(woWrapper.wo.WO_Number)")
-                                        #endif
-                                        
-                                        // Try to get the document ID from Firestore
-                                        db.findWorkOrderId(byWONumber: woWrapper.wo.WO_Number) { result in
-                                            switch result {
-                                            case .success(let foundId):
-                                                #if DEBUG
-                                                print("✅ Found Firestore ID for WO \(woWrapper.wo.WO_Number): \(foundId)")
-                                                #endif
-                                                
-                                                // Update status with found ID
-                                                WorkOrdersDatabase.shared.updateItemStatusAndNote(
-                                                    woId: foundId,
-                                                    itemId: item.id,
-                                                    status: statusUpdate,
-                                                    mirroredNote: note) { result in
-                                                        self.handleStatusUpdateResult(result, item: item, newStatus: newStatus)
-                                                    }
-                                                
-                                            case .failure(let error):
-                                                #if DEBUG
-                                                print("❌ Failed to find Firestore ID: \(error.localizedDescription)")
-                                                #endif
-                                            }
-                                        }
-                                        return
-                                    }
-                                    
-                                    #if DEBUG
-                                    print("📝 Updating status for WO: \(woIdString ?? "nil"), Item: \(item.id)")
-                                    print("   New Status: \(newStatus)")
-                                    #endif
-                                    
-                                    WorkOrdersDatabase.shared.updateItemStatusAndNote(
-                                        woId: woIdString!,
-                                        itemId: item.id,
-                                        status: statusUpdate,
-                                        mirroredNote: note) { result in
-                                            self.handleStatusUpdateResult(result, item: item, newStatus: newStatus)
-                                        }
-                                }
-                            }
+                        self.combinedItemCard(
+                            item: item,
+                            itemIndex: idx,
+                            imageURLsBinding: imageURLsBinding,
+                            thumbURLsBinding: thumbURLsBinding,
+                            handleImageTap: handleImageTap,
+                            handleAddNote: handleAddNote
                         )
-                        .padding(12)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Color(.systemGray6))
-                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 16)
-                                .strokeBorder(Color.gray.opacity(0.1))
-                        )
-                        
-                        // Reasons for Service Section
-                        if !item.reasonsForService.isEmpty {
-                            self.reasonsForServiceCard(for: item, itemIndex: idx)
-                                .frame(maxWidth: .infinity)
-                        }
-                        
-                        self.itemTimelineCard(for: item)
-                            .frame(maxWidth: .infinity)
                     }
                 }
             }
@@ -406,7 +287,6 @@ struct WorkOrderDetailView: View {
 }
 
 // ───── Helper Functions ─────
-}
 
 extension WorkOrderDetailView {
     private func handleStatusUpdateResult(_ result: Result<Void, Error>, item: WO_Item, newStatus: String) {
@@ -715,6 +595,219 @@ extension WorkOrderDetailView {
             name: .WorkOrderSaved,
             object: woWrapper.wo.id,
             userInfo: ["WO_Number": woWrapper.wo.WO_Number]
+        )
+    }
+    
+    // ───── Combined Item Card (Item Details + Notes & Status) ─────
+    @ViewBuilder
+    private func combinedItemCard(
+        item: WO_Item,
+        itemIndex: Int,
+        imageURLsBinding: Binding<[String]>,
+        thumbURLsBinding: Binding<[String]>,
+        handleImageTap: @escaping (URL) -> Void,
+        handleAddNote: @escaping (WO_Item, WO_Note) -> Void
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 16) {
+            // Item Header
+                            HStack {
+                    Text(item.type)
+                        .font(.headline)
+                        .fontWeight(.semibold)
+                    
+                    Spacer()
+                }
+            
+            HStack(alignment: .top, spacing: 20) {
+                // Left Column - Item Details (1/2 width)
+                VStack(alignment: .leading, spacing: 12) {
+                    // Main Image
+                    if let firstImageURL = item.imageUrls.first, let url = URL(string: firstImageURL) {
+                        Button {
+                            handleImageTap(url)
+                        } label: {
+                            AsyncImage(url: url) { phase in
+                                switch phase {
+                                case .empty:
+                                    ProgressView()
+                                        .frame(width: 280, height: 280)
+                                case .success(let image):
+                                    image
+                                        .resizable()
+                                        .scaledToFill()
+                                        .frame(width: 280, height: 280)
+                                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                                case .failure:
+                                    Color.gray
+                                        .frame(width: 280, height: 280)
+                                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                                @unknown default:
+                                    EmptyView()
+                                }
+                            }
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    
+                    // Thumbnail Images (additional images)
+                    if item.imageUrls.count > 1 {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 8) {
+                                ForEach(Array(item.imageUrls.dropFirst().enumerated()), id: \.offset) { _, imageURL in
+                                    if let url = URL(string: imageURL) {
+                                        Button {
+                                            handleImageTap(url)
+                                        } label: {
+                                            AsyncImage(url: url) { phase in
+                                                switch phase {
+                                                case .empty:
+                                                    ProgressView()
+                                                        .frame(width: 100, height: 100)
+                                                case .success(let image):
+                                                    image
+                                                        .resizable()
+                                                        .scaledToFill()
+                                                        .frame(width: 100, height: 100)
+                                                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                                                case .failure:
+                                                    Color.gray
+                                                        .frame(width: 100, height: 100)
+                                                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                                                @unknown default:
+                                                    EmptyView()
+                                                }
+                                            }
+                                        }
+                                        .buttonStyle(PlainButtonStyle())
+                                    }
+                                }
+                            }
+                            .padding(.horizontal, 4)
+                        }
+                    }
+                    
+                    // Add Note/Image Button
+                    Button {
+                        // TODO: Implement add note functionality
+                    } label: {
+                        HStack {
+                            Image(systemName: "plus.circle.fill")
+                            Text("Add Note/Image")
+                        }
+                        .font(.subheadline)
+                        .foregroundColor(.blue)
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                
+                // Right Column - Notes & Status
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Text("Notes & Status")
+                            .font(.headline)
+                        
+                        Spacer()
+                        
+                        // Status Badge
+                        if let lastStatus = item.statusHistory.last?.status {
+                            Text(lastStatus)
+                                .font(.caption)
+                                .fontWeight(.medium)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(statusColor(for: lastStatus).opacity(0.2))
+                                .foregroundColor(statusColor(for: lastStatus))
+                                .clipShape(Capsule())
+                        }
+                    }
+                    
+                    // Combined timeline of status history and notes
+                    VStack(alignment: .leading, spacing: 8) {
+                        // Status history entries
+                        ForEach(Array(item.statusHistory.enumerated()), id: \.offset) { _, status in
+                            HStack(alignment: .top, spacing: 10) {
+                                Image(systemName: "circle.fill")
+                                    .font(.system(size: 8))
+                                    .foregroundStyle(statusColor(for: status.status))
+                                    .padding(.top, 6)
+                                
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(status.status)
+                                        .font(.subheadline.weight(.semibold))
+                                        .foregroundColor(statusColor(for: status.status))
+                                    Text("\(status.user) • \(status.timestamp.formatted(date: .abbreviated, time: .shortened))")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+                        
+                        // Text notes
+                        ForEach(Array(item.notes.enumerated()), id: \.offset) { _, note in
+                            HStack(alignment: .top, spacing: 10) {
+                                Image(systemName: "text.bubble")
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(.secondary)
+                                    .padding(.top, 3)
+                                
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(formatNoteText(note.text, item: item))
+                                        .font(.subheadline)
+                                    Text("\(note.user) • \(note.timestamp.formatted(date: .abbreviated, time: .shortened))")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                    
+                                    // Note-attached images
+                                    if !note.imageURLs.isEmpty {
+                                        ScrollView(.horizontal, showsIndicators: false) {
+                                            HStack(spacing: 8) {
+                                                ForEach(Array(note.imageURLs.enumerated()), id: \.offset) { _, urlStr in
+                                                    if let url = URL(string: urlStr) {
+                                                        Button {
+                                                            handleImageTap(url)
+                                                        } label: {
+                                                            AsyncImage(url: url) { phase in
+                                                                switch phase {
+                                                                case .empty:
+                                                                    ProgressView().frame(width: 100, height: 100)
+                                                                case .success(let img):
+                                                                    img.resizable().scaledToFill()
+                                                                        .frame(width: 100, height: 100)
+                                                                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                                                                case .failure:
+                                                                    Color.gray.frame(width: 100, height: 100)
+                                                                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                                                                @unknown default:
+                                                                    EmptyView()
+                                                                }
+                                                            }
+                                                        }
+                                                        .buttonStyle(.plain)
+                                                    }
+                                                }
+                                            }
+                                            .padding(.vertical, 2)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Reasons for Service Section (if exists)
+            if !item.reasonsForService.isEmpty {
+                self.reasonsForServiceCard(for: item, itemIndex: itemIndex)
+            }
+        }
+        .padding(16)
+        .background(Color(.systemGray6))
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .strokeBorder(Color.gray.opacity(0.12))
         )
     }
     
