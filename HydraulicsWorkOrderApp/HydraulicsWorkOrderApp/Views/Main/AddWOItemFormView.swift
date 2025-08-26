@@ -66,10 +66,10 @@ struct AddWOItemFormView: View {
             // If the item already has any data, allow the nudge to render immediately
             hasTouchedRequired = !isBlankItem
 
-            // ⬅️ Default Type to Cylinder if empty
-            if item.type.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                item.type = "Cylinder"
-            }
+            // ⬅️ Don't set a default type - let the dropdown show placeholder
+            // if item.type.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            //     item.type = "Type"
+            // }
         }
         .onChange(of: dropdowns.options["reasonsForService"]?.count ?? 0) { _, _ in
             // refresh on the next runloop to avoid mid-diff updates
@@ -223,7 +223,30 @@ struct AddWOItemFormView: View {
                 .font(.headline)
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], alignment: .leading, spacing: 8) {
                 ForEach(reasonOptionsSnapshot, id: \.value) { option in
-                    Toggle(option.label, isOn: reasonBinding(for: option.value))
+                    Button(action: {
+                        if selectedReasons.contains(option.value) {
+                            selectedReasons.remove(option.value)
+                        } else {
+                            selectedReasons.insert(option.value)
+                        }
+                    }) {
+                        Text(option.label)
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                            .foregroundColor(selectedReasons.contains(option.value) ? .white : .primary)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 10)
+                            .padding(.horizontal, 12)
+                            .background(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .fill(selectedReasons.contains(option.value) ? Color.blue : Color(.systemGray6))
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .stroke(selectedReasons.contains(option.value) ? Color.blue : Color(.systemGray4), lineWidth: 1)
+                            )
+                    }
+                    .buttonStyle(PlainButtonStyle())
                 }
             }
         }
