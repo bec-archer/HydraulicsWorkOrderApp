@@ -50,7 +50,8 @@ class CustomerSearchViewModel: ObservableObject {
                 if qDigits.isEmpty { return false }
                 return digits(c.phone).contains(qDigits)
             }()
-            return nameHit || phoneHit
+            let companyHit = c.company?.lowercased().contains(qLower) ?? false
+            return nameHit || phoneHit || companyHit
         }
 
         var seen = Set<UUID>()

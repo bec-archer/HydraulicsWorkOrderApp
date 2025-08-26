@@ -24,12 +24,13 @@ final class CustomerDatabase: ObservableObject {
 
     private init() {}
 
-    // ───── SEARCH BY NAME OR PHONE ─────
+    // ───── SEARCH BY NAME, PHONE, OR COMPANY ─────
     func searchCustomers(matching query: String) -> [Customer] {
         let lowerQuery = query.lowercased()
         return customers.filter {
             $0.name.lowercased().contains(lowerQuery) ||
-            $0.phone.contains(lowerQuery)
+            $0.phone.contains(lowerQuery) ||
+            ($0.company?.lowercased().contains(lowerQuery) ?? false)
         }
     }
 

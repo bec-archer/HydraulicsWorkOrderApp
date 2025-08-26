@@ -82,16 +82,6 @@ struct AddWOItemFormView: View {
             item.reasonsForService = Array(newValue)
             item.lastModified = Date()
         }
-        // Show validation nudge once they interact with required inputs
-        .onChange(of: item.type) { _, _ in
-            hasTouchedRequired = true
-        }
-        .onChange(of: item.imageUrls.count) { _, _ in
-            hasTouchedRequired = true
-        }
-        .onChange(of: item.thumbUrls.count) { _, _ in
-            hasTouchedRequired = true
-        }
         .id(item.id) // stabilize identity across multiple AddWOItemFormView instances
         .padding(12)
     }
@@ -111,6 +101,9 @@ struct AddWOItemFormView: View {
                 onScanQR: {
                     // ───── QR Scan Tap (stub) ─────
                     print("Scan QR Code tapped for item \(item.id)")
+                },
+                onImagesChanged: {
+                    hasTouchedRequired = true
                 }
             )
         }
@@ -125,7 +118,10 @@ struct AddWOItemFormView: View {
             showColorPickerIfOther: false,
             customColor: $customColor,
             placeholder: "Type *",
-            showLabel: false
+            showLabel: false,
+            onValueChanged: {
+                hasTouchedRequired = true
+            }
         )
     }
 

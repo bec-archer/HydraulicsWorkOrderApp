@@ -75,6 +75,17 @@ struct WorkOrderDetailView: View {
             .padding(.horizontal, 20)
             .padding(.vertical, 16)
         }
+        .onAppear {
+            #if DEBUG
+            print("🔍 WorkOrderDetailView: WorkOrder \(woWrapper.wo.WO_Number) has \(woWrapper.wo.items.count) items")
+            for (i, item) in woWrapper.wo.items.enumerated() {
+                print("  Item \(i): type='\(item.type)', images=\(item.imageUrls.count), thumbs=\(item.thumbUrls.count)")
+            }
+            if woWrapper.wo.items.isEmpty {
+                print("⚠️ WorkOrderDetailView: No items found for work order \(woWrapper.wo.WO_Number)")
+            }
+            #endif
+        }
         .sheet(isPresented: $showingPhoneActions) {
             PhoneActionSheet(
                 customerName: woWrapper.wo.customerName,
@@ -712,18 +723,18 @@ extension WorkOrderDetailView {
         handleImageTap: @escaping (URL) -> Void,
         handleAddNote: @escaping (WO_Item, WO_Note) -> Void
     ) -> some View {
-        VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: 16) {
             // Item Header
-                            HStack {
-                    Text(item.type)
-                        .font(.headline)
-                        .fontWeight(.semibold)
-                    
-                    Spacer()
-                }
+            HStack {
+                Text(item.type)
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                
+                Spacer()
+            }
             
-            HStack(alignment: .top, spacing: 20) {
-                // Left Column - Item Details (1/2 width)
+            HStack(alignment: .top, spacing: 16) {
+                // Left Column - Item Details (responsive width)
                 VStack(alignment: .leading, spacing: 12) {
                     // Main Image
                     if let firstImageURL = item.imageUrls.first, let url = URL(string: firstImageURL) {
@@ -734,16 +745,19 @@ extension WorkOrderDetailView {
                                 switch phase {
                                 case .empty:
                                     ProgressView()
-                                        .frame(width: 280, height: 280)
+                                        .aspectRatio(1, contentMode: .fit)
+                                        .frame(maxWidth: .infinity)
                                 case .success(let image):
                                     image
                                         .resizable()
                                         .scaledToFill()
-                                        .frame(width: 280, height: 280)
+                                        .aspectRatio(1, contentMode: .fit)
+                                        .frame(maxWidth: .infinity)
                                         .clipShape(RoundedRectangle(cornerRadius: 12))
                                 case .failure:
                                     Color.gray
-                                        .frame(width: 280, height: 280)
+                                        .aspectRatio(1, contentMode: .fit)
+                                        .frame(maxWidth: .infinity)
                                         .clipShape(RoundedRectangle(cornerRadius: 12))
                                 @unknown default:
                                     EmptyView()
@@ -767,16 +781,19 @@ extension WorkOrderDetailView {
                                                 switch phase {
                                                 case .empty:
                                                     ProgressView()
-                                                        .frame(width: 100, height: 100)
+                                                        .aspectRatio(1, contentMode: .fit)
+                                                        .frame(width: 80, height: 80)
                                                 case .success(let image):
                                                     image
                                                         .resizable()
                                                         .scaledToFill()
-                                                        .frame(width: 100, height: 100)
+                                                        .aspectRatio(1, contentMode: .fit)
+                                                        .frame(width: 80, height: 80)
                                                         .clipShape(RoundedRectangle(cornerRadius: 8))
                                                 case .failure:
                                                     Color.gray
-                                                        .frame(width: 100, height: 100)
+                                                        .aspectRatio(1, contentMode: .fit)
+                                                        .frame(width: 80, height: 80)
                                                         .clipShape(RoundedRectangle(cornerRadius: 8))
                                                 @unknown default:
                                                     EmptyView()
@@ -804,7 +821,8 @@ extension WorkOrderDetailView {
                         .foregroundColor(.blue)
                     }
                 }
-                .frame(maxWidth: .infinity)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
                 
                 // Right Column - Notes & Status
                 VStack(alignment: .leading, spacing: 12) {
@@ -881,13 +899,18 @@ extension WorkOrderDetailView {
                                                             AsyncImage(url: url) { phase in
                                                                 switch phase {
                                                                 case .empty:
-                                                                    ProgressView().frame(width: 100, height: 100)
+                                                                    ProgressView()
+                                                                        .aspectRatio(1, contentMode: .fit)
+                                                                        .frame(width: 80, height: 80)
                                                                 case .success(let img):
                                                                     img.resizable().scaledToFill()
-                                                                        .frame(width: 100, height: 100)
+                                                                        .aspectRatio(1, contentMode: .fit)
+                                                                        .frame(width: 80, height: 80)
                                                                         .clipShape(RoundedRectangle(cornerRadius: 8))
                                                                 case .failure:
-                                                                    Color.gray.frame(width: 100, height: 100)
+                                                                    Color.gray
+                                                                        .aspectRatio(1, contentMode: .fit)
+                                                                        .frame(width: 80, height: 80)
                                                                         .clipShape(RoundedRectangle(cornerRadius: 8))
                                                                 @unknown default:
                                                                     EmptyView()
@@ -906,6 +929,8 @@ extension WorkOrderDetailView {
                         }
                     }
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
             }
             
             // Reasons for Service Section (if exists)

@@ -26,6 +26,7 @@ struct DropdownField: View {
     // New (backwards-compatible)
     var placeholder: String? = nil          // shown when no selection; defaults to "Select…"
     var showLabel: Bool = false              // whether to render external label text above the control
+    var onValueChanged: (() -> Void)? = nil  // callback when value changes
 
     var body: some View {
         VStack(alignment: .leading, spacing: showLabel ? 8 : 0) {
@@ -77,6 +78,9 @@ struct DropdownField: View {
             }
             .pickerStyle(.menu)
             .id("picker_\(label)") // keep pickers independent
+            .onChange(of: selectedValue) { _, _ in
+                onValueChanged?()
+            }
 
             if showColorPickerIfOther && (selectedValue ?? "") == "Other" {
                 ColorPicker("Pick a color", selection: $customColor)

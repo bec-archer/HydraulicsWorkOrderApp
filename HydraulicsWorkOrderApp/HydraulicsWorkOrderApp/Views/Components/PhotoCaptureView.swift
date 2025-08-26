@@ -172,21 +172,23 @@ struct PhotoCaptureView: View {
                 }
                 
                 let group = DispatchGroup()
-                var gathered: [UIImage] = []
+                var gathered: [UIImage?] = Array(repeating: nil, count: results.count)
                 
-                for result in results {
+                for (index, result) in results.enumerated() {
                     let provider = result.itemProvider
                     group.enter()
                     provider.loadObject(ofClass: UIImage.self) { object, _ in
                         if let img = object as? UIImage {
-                            gathered.append(img)
+                            gathered[index] = img
                         }
                         group.leave()
                     }
                 }
                 
                 group.notify(queue: .main) {
-                    self.onPicked(gathered)
+                    // Filter out any nil values and maintain order
+                    let finalImages = gathered.compactMap { $0 }
+                    self.onPicked(finalImages)
                     picker.dismiss(animated: true)
                 }
             }
@@ -421,6 +423,9 @@ struct PhotoCaptureUploadView: View {
     // Inline QR support (passed down to PhotoCaptureView)
     var showQR: Bool = false
     var onScanQR: (() -> Void)? = nil
+    
+    // Callback when images change (for validation)
+    var onImagesChanged: (() -> Void)? = nil
 
     
     // Local scratchpad for captured images (not persisted)
@@ -493,6 +498,9 @@ struct PhotoCaptureUploadView: View {
             let toUpload: [UIImage] = Array(newImages.dropFirst(uploadedCount)) // only the new ones
             guard !toUpload.isEmpty else { return }
 
+            // Notify parent that images have changed
+            onImagesChanged?()
+
             isUploading = true
 
             Task {
@@ -501,7 +509,8 @@ struct PhotoCaptureUploadView: View {
                 var pendingThumbs: [String] = []
                 var pendingErrors: [String] = []
 
-                for uiImage in toUpload {
+                // Upload images sequentially to maintain order
+                for (index, uiImage) in toUpload.enumerated() {
                     do {
                         // 🔧 Ensure image is < 5 MB per Storage rules before uploading
                         let prepared = compressForFirebase(uiImage)
@@ -509,6 +518,7 @@ struct PhotoCaptureUploadView: View {
                         let (fullURL, thumbURL) = try await StorageManager.shared
                             .uploadWOItemImageWithThumbnail(prepared, woId: woId, woItemId: woItemId)
 
+                        // Add to arrays in the same order as the original images
                         pendingFull.append(fullURL)
                         pendingThumbs.append(thumbURL)
 

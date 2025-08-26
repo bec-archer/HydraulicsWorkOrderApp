@@ -110,7 +110,13 @@ struct NewWorkOrderView: View {
                 HStack(alignment: .center, spacing: 8) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(customer.name).font(.headline)
-                        Text(customer.phone).font(.subheadline).foregroundStyle(.secondary)
+                        HStack(spacing: 4) {
+                            Text(customer.phone).font(.subheadline).foregroundStyle(.secondary)
+                            if let company = customer.company, !company.isEmpty {
+                                Text("•").font(.subheadline).foregroundStyle(.secondary)
+                                Text(company).font(.subheadline).foregroundStyle(.secondary)
+                            }
+                        }
                     }
                     Spacer()
                     Button {
@@ -128,7 +134,7 @@ struct NewWorkOrderView: View {
             } else {
                 VStack(alignment: .leading, spacing: 8) {
                     // TextField OUTSIDE Form to avoid accessory constraint thrash
-                    TextField("Search by name or phone", text: $customerSearch.searchText)
+                    TextField("Search by name, phone, or company", text: $customerSearch.searchText)
                         .textFieldStyle(.roundedBorder)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled(true)
@@ -145,7 +151,13 @@ struct NewWorkOrderView: View {
                             } label: {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(customer.name)
-                                    Text(customer.phone).font(.caption).foregroundStyle(.secondary)
+                                    HStack(spacing: 4) {
+                                        Text(customer.phone).font(.caption).foregroundStyle(.secondary)
+                                        if let company = customer.company, !company.isEmpty {
+                                            Text("•").font(.caption).foregroundStyle(.secondary)
+                                            Text(company).font(.caption).foregroundStyle(.secondary)
+                                        }
+                                    }
                                 }
                                 .padding(.vertical, 4)
                                 .contentShape(Rectangle())
@@ -475,6 +487,8 @@ struct NewWorkOrderView: View {
 
         // Example: build payload with map (no indexing)
         let builtItems: [WO_Item] = itemsSnapshot.map { $0 }
+        
+
          
         // ───── Build WorkOrder (ALL required fields) ─────
         // NOTE: Placeholder values where we haven't wired managers yet.

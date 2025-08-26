@@ -87,8 +87,20 @@ final class WorkOrdersDatabase: ObservableObject {
     // ───── ADD NEW WORK ORDER TO FIRESTORE ─────
     func addWorkOrder(_ workOrder: WorkOrder, completion: @escaping (Result<String, Error>) -> Void) {
         do {
+
+            
             // Ensure there's at least one creation note like: "Checked In" by <user> at <timestamp>
             var woForWrite = workOrder
+            #if DEBUG
+            print("🔍 DEBUG: addWorkOrder called for WO: \(workOrder.WO_Number)")
+            print("📋 WorkOrder items count: \(workOrder.items.count)")
+            for (i, item) in workOrder.items.enumerated() {
+                print("  WO Item[\(i)]: id=\(item.id), type='\(item.type)'")
+                print("    imageUrls=\(item.imageUrls), thumbUrls=\(item.thumbUrls)")
+                print("    reasonsForService=\(item.reasonsForService)")
+            }
+            #endif
+            
             // ───── Ensure each WO_Item has baseline "Checked In" status ─────
             let authorForBaseline = (woForWrite.lastModifiedBy.isEmpty ? woForWrite.createdBy : woForWrite.lastModifiedBy)
             let baselineTimestamp = woForWrite.timestamp
@@ -452,6 +464,9 @@ final class WorkOrdersDatabase: ObservableObject {
     // ───── Lossy decode shim for legacy docs ─────
     /// Attempts to decode a WorkOrder while tolerating missing optional fields like imageUrls.
     private func decodeLossyWorkOrder(from doc: DocumentSnapshot) throws -> WorkOrder {
+        #if DEBUG
+        print("🔍 DEBUG: decodeLossyWorkOrder called for document: \(doc.documentID)")
+        #endif
         struct WO_LOSSY: Decodable {
             let id: String?
             let createdBy: String?
@@ -479,13 +494,19 @@ final class WorkOrdersDatabase: ObservableObject {
             struct ITEM_LOSSY: Decodable {
                 let id: UUID?
                 let tagId: String?
-                let imageUrls: [String]?
                 let type: String?
                 let dropdowns: [String:String]?
-                let dropdownSchemaVersion: Int?
                 let reasonsForService: [String]?
                 let reasonNotes: String?
+                let completedReasons: [String]?
+                let imageUrls: [String]?
+                let thumbUrls: [String]?
+                let lastModified: Date?
+                let dropdownSchemaVersion: Int?
+                let lastModifiedBy: String?
                 let statusHistory: [WO_Status]?
+                let notes: [WO_Note]?
+                // Additional fields not in CodingKeys but needed for full item reconstruction
                 let testResult: String?
                 let partsUsed: String?
                 let hoursWorked: String?
@@ -498,18 +519,27 @@ final class WorkOrdersDatabase: ObservableObject {
 
         let lossy = try doc.data(as: WO_LOSSY.self)
 
+        #if DEBUG
+        print("🔍 DEBUG: Lossy decode successful, items count: \(lossy.items?.count ?? 0)")
+        #endif
+
         var itemsAccum: [WO_Item] = []
         for it in (lossy.items ?? []) {
             // Break up the large initializer into simple locals to help the type checker
             let safeItemId             = it.id ?? UUID()
             let safeTagId              = it.tagId
-            let safeImageUrls          = it.imageUrls ?? []
             let safeType               = it.type ?? "Unknown"
             let safeDropdowns          = it.dropdowns ?? [:]
-            let safeDropdownSchemaVer  = it.dropdownSchemaVersion ?? 1
             let safeReasons            = it.reasonsForService ?? []
             let safeReasonNotes        = it.reasonNotes
+            let safeCompletedReasons   = it.completedReasons ?? []
+            let safeImageUrls          = it.imageUrls ?? []
+            let safeThumbUrls          = it.thumbUrls ?? []
+            let safeLastModified       = it.lastModified ?? Date()
+            let safeDropdownSchemaVer  = it.dropdownSchemaVersion ?? 1
+            let safeLastModifiedBy     = it.lastModifiedBy
             let safeStatusHistory      = it.statusHistory ?? []
+            let safeNotes              = it.notes ?? []
             let safeTestResult         = it.testResult
             let safePartsUsed          = it.partsUsed
             let safeHoursWorked        = it.hoursWorked
@@ -518,24 +548,36 @@ final class WorkOrdersDatabase: ObservableObject {
             let safeIsFlagged          = it.isFlagged ?? false
             let safeTagReplacementHist = it.tagReplacementHistory
 
-            let item = WO_Item(
-                id: safeItemId,
-                tagId: safeTagId,
-                type: safeType,
-                dropdowns: safeDropdowns,
-                reasonsForService: safeReasons, reasonNotes: safeReasonNotes, imageUrls: safeImageUrls, dropdownSchemaVersion: safeDropdownSchemaVer,
-                statusHistory: safeStatusHistory,
-                testResult: safeTestResult,
-                partsUsed: safePartsUsed,
-                hoursWorked: safeHoursWorked,
-                cost: safeCost,
-                assignedTo: safeAssignedTo,
-                isFlagged: safeIsFlagged,
-                tagReplacementHistory: safeTagReplacementHist
-            )
+            // Create item with all fields including notes and lastModified
+            var item = WO_Item()
+            item.id = safeItemId
+            item.tagId = safeTagId
+            item.type = safeType
+            item.dropdowns = safeDropdowns
+            item.reasonsForService = safeReasons
+            item.reasonNotes = safeReasonNotes
+            item.completedReasons = safeCompletedReasons
+            item.imageUrls = safeImageUrls
+            item.thumbUrls = safeThumbUrls
+            item.lastModified = safeLastModified
+            item.dropdownSchemaVersion = safeDropdownSchemaVer
+            item.lastModifiedBy = safeLastModifiedBy
+            item.statusHistory = safeStatusHistory
+            item.notes = safeNotes
+            item.testResult = safeTestResult
+            item.partsUsed = safePartsUsed
+            item.hoursWorked = safeHoursWorked
+            item.cost = safeCost
+            item.assignedTo = safeAssignedTo
+            item.isFlagged = safeIsFlagged
+            item.tagReplacementHistory = safeTagReplacementHist
             itemsAccum.append(item)
         }
         let safeItems: [WO_Item] = itemsAccum
+
+        #if DEBUG
+        print("🔍 DEBUG: Built \(safeItems.count) items from lossy decode")
+        #endif
 
         // Break up the large initializer to help the type checker
         // Don't manually set @DocumentID - let Firestore handle it
@@ -628,32 +670,68 @@ final class WorkOrdersDatabase: ObservableObject {
 
         var items: [WO_Item] = []
         if let arr = raw["items"] as? [[String: Any]] {
+            #if DEBUG
+            print("🔍 DEBUG: buildWorkOrderFromRaw - Found \(arr.count) items in raw data")
+            #endif
             for anyItem in arr {
                 let itemId = (anyItem["id"] as? String).flatMap(UUID.init(uuidString:)) ?? UUID()
                 let tagId  = anyItem["tagId"] as? String
                 let urls   = anyItem["imageUrls"] as? [String]
                              ?? anyItem["imageURLs"] as? [String]
                              ?? []
+                let thumbUrls = anyItem["thumbUrls"] as? [String] ?? []
                 let type   = anyItem["type"] as? String ?? "Unknown"
                 let dd     = anyItem["dropdowns"] as? [String: String] ?? [:]
                 let ddv    = anyItem["dropdownSchemaVersion"] as? Int ?? schemaVer
                 let reasons = anyItem["reasonsForService"] as? [String] ?? []
                 let reasonNotes = anyItem["reasonNotes"] as? String
+                let completedReasons = anyItem["completedReasons"] as? [String] ?? []
                 let assigned = anyItem["assignedTo"] as? String ?? ""
                 let isFlagged = anyItem["isFlagged"] as? Bool ?? false
+                let notes = anyItem["notes"] as? [WO_Note] ?? []
+                let lastModified = {
+                    if let timestamp = anyItem["lastModified"] as? Timestamp {
+                        return timestamp.dateValue()
+                    } else if let date = anyItem["lastModified"] as? Date {
+                        return date
+                    } else {
+                        return Date()
+                    }
+                }()
+                let lastModifiedBy = anyItem["lastModifiedBy"] as? String
 
                 let item = WO_Item(
                     id: itemId,
                     tagId: tagId,
+                    imageUrls: urls,
+                    thumbUrls: thumbUrls,
                     type: type,
                     dropdowns: dd,
-                    reasonsForService: reasons, reasonNotes: reasonNotes, imageUrls: urls, dropdownSchemaVersion: ddv,
-                    statusHistory: [], testResult: nil, partsUsed: nil, hoursWorked: nil, cost: nil,
-                    assignedTo: assigned, isFlagged: isFlagged, tagReplacementHistory: nil
+                    dropdownSchemaVersion: ddv,
+                    reasonsForService: reasons,
+                    reasonNotes: reasonNotes,
+                    completedReasons: completedReasons,
+                    statusHistory: [],
+                    testResult: nil,
+                    partsUsed: nil,
+                    hoursWorked: nil,
+                    cost: nil,
+                    assignedTo: assigned,
+                    isFlagged: isFlagged,
+                    tagReplacementHistory: nil
                 )
-                items.append(item)
+                
+                // Set additional fields that aren't in the initializer
+                var mutableItem = item
+                mutableItem.notes = notes
+                mutableItem.lastModified = lastModified
+                mutableItem.lastModifiedBy = lastModifiedBy
+                items.append(mutableItem)
             }
         }
+        #if DEBUG
+        print("🔍 DEBUG: buildWorkOrderFromRaw - Built \(items.count) items for work order")
+        #endif
 
         let wo = WorkOrder(
             id: nil, // Don't manually set @DocumentID - let Firestore handle it
