@@ -121,35 +121,61 @@ struct WorkOrderDetailView: View {
     @ViewBuilder
     private var headerSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .firstTextBaseline, spacing: 12) {
-                Text("WO #\(woWrapper.wo.WO_Number)")
-                    .font(.largeTitle.bold())
-                StatusBadge(status: woWrapper.wo.status.isEmpty ? "Checked In" : woWrapper.wo.status)
+            HStack(alignment: .top) {
+                // Left Column - Work Order Info
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Work Order #\(woWrapper.wo.WO_Number)")
+                        .font(.largeTitle.bold())
+                    
+                    Text(woWrapper.wo.timestamp.formatted(date: .abbreviated, time: .shortened))
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+                
+                Spacer()
+                
+                // Right Column - Customer Info
+                VStack(alignment: .trailing, spacing: 4) {
+                    Text(woWrapper.wo.customerName)
+                        .font(.headline)
+                        .fontWeight(.semibold)
+                    
+                    if let company = woWrapper.wo.customerCompany, !company.isEmpty {
+                        Text(company)
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                    }
+                    
+                    HStack(spacing: 6) {
+                        Image(systemName: "phone.fill")
+                        Text(woWrapper.wo.customerPhone)
+                            .underline()
+                            .foregroundColor(Color(hex: "#FFC500"))
+                            .onLongPressGesture {
+                                showingPhoneActions = true
+                            }
+                    }
+                    .accessibilityLabel("Call or text customer")
+                    
+                    if woWrapper.wo.customerTaxExempt {
+                        Text("*Customer is tax exempt")
+                            .font(.subheadline)
+                            .foregroundColor(.orange)
+                            .fontWeight(.medium)
+                    }
+                }
             }
             
-            Text(woWrapper.wo.timestamp.formatted(date: .abbreviated, time: .shortened))
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-            
-            HStack(spacing: 12) {
-                HStack(spacing: 6) {
-                    Image(systemName: "phone.fill")
-                    Text(woWrapper.wo.customerPhone)
-                        .underline()
-                        .foregroundColor(Color(hex: "#FFC500"))
-                        .onLongPressGesture {
-                            showingPhoneActions = true
-                        }
-                }
-                .accessibilityLabel("Call or text customer")
-                
-                if woWrapper.wo.flagged {
+            // Flagged indicator (if needed)
+            if woWrapper.wo.flagged {
+                HStack {
                     Label("Flagged", systemImage: "flag.fill")
                         .padding(.horizontal, 10)
                         .padding(.vertical, 6)
                         .background(Color.red.opacity(0.15))
                         .foregroundStyle(.red)
                         .clipShape(Capsule())
+                    Spacer()
                 }
             }
         }

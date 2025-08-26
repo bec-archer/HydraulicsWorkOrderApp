@@ -222,9 +222,9 @@ struct WorkOrderCardView: View {
     @State private var showingFullScreenImage = false
     @State private var selectedImageIndex = 0
     @State private var isPressed: Bool = false
-    
+
     private let thumbHeight: CGFloat = 200 // Made square by matching width
-    
+
     init(workOrder: WorkOrder) {
         self.workOrder = workOrder
         self._imageResolver = StateObject(wrappedValue: ImageResolverViewModel(workOrderNumber: workOrder.WO_Number))
@@ -234,7 +234,7 @@ struct WorkOrderCardView: View {
     private var stableId: String {
         workOrder.WO_Number
     }
-    
+
     var body: some View {
         coreContent
             .background(eventBinder) // lifecycle & notifications separated
@@ -249,7 +249,7 @@ struct WorkOrderCardView: View {
                 }
             }
     }
-    
+
     // ───── Core Content (extracted) ─────
     private var coreContent: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -259,7 +259,7 @@ struct WorkOrderCardView: View {
         .id(stableId) // Use stable ID instead of lastModified to prevent recreation
     }
     // END
-    
+
     // ───── Event Binder (onAppear/onChange/tasks/notifications) ─────
     private var eventBinder: some View {
         Color.clear
@@ -269,7 +269,7 @@ struct WorkOrderCardView: View {
             .onDisappear { isPressed = false }
     }
     // END
-    
+
     private var placeholderImage: some View {
         Rectangle()
             .fill(Color(.systemGray5))
@@ -279,65 +279,65 @@ struct WorkOrderCardView: View {
                     .foregroundColor(.gray)
             )
     }
-    
-    // ───── Card Thumbnail (extracted to aid type‑checker) ─────
-    private var cardThumbnail: AnyView {
-        AnyView(
-            GridThumbnailView(
+
+     // ───── Card Thumbnail (extracted to aid type‑checker) ─────
+     private var cardThumbnail: AnyView {
+         AnyView(
+             GridThumbnailView(
                 resolvedImageURLs: imageResolver.resolvedImageURLs,
-                thumbHeight: thumbHeight,
-                placeholderImage: AnyView(placeholderImage),
+                 thumbHeight: thumbHeight,
+                 placeholderImage: AnyView(placeholderImage),
                 workOrder: workOrder,
                 onImageLongPress: { index in
                     selectedImageIndex = index
                     showingFullScreenImage = true
                 }
-            )
-            .frame(height: thumbHeight)
-            .clipShape(RoundedRectangle(cornerRadius: 12))
-            .shadow(color: Color.black.opacity(0.1), radius: 3, x: 0, y: 1)
-        )
-    }
-    // END
-    
-    // ───── CardChrome ViewModifier (visual styling only) ─────
-    private struct CardChrome: ViewModifier {
-        @Binding var isPressed: Bool
-        func body(content: Content) -> some View {
-            content
-                .padding()
-                .background(Color.white)
-                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .stroke(isPressed ? Color(.systemGray2) : Color.clear, lineWidth: isPressed ? 2 : 0)
-                )
-                .shadow(color: Color.black.opacity(isPressed ? 0.18 : 0.12), radius: isPressed ? 8 : 6, x: 0, y: isPressed ? 4 : 3)
-                .scaleEffect(isPressed ? 0.98 : 1.0)
-                .animation(.spring(response: 0.26, dampingFraction: 0.82, blendDuration: 0.2), value: isPressed)
-                .padding(.vertical, 6)
-                .padding(.horizontal, 6)
-                .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        }
-    }
-    // END
-    
-    // ───── CardPressGesture ViewModifier (gesture only) ─────
-    private struct CardPressGesture: ViewModifier {
-        @Binding var isPressed: Bool
-        func body(content: Content) -> some View {
-            content.simultaneousGesture(
-                DragGesture(minimumDistance: 0)
-                    .onChanged { _ in
-                        if !isPressed { isPressed = true }
-                    }
-                    .onEnded { _ in
-                        isPressed = false
-                    }
-            )
-        }
-    }
-    // END
+             )
+             .frame(height: thumbHeight)
+             .clipShape(RoundedRectangle(cornerRadius: 12))
+             .shadow(color: Color.black.opacity(0.1), radius: 3, x: 0, y: 1)
+         )
+     }
+     // END
+
+  // ───── CardChrome ViewModifier (visual styling only) ─────
+  private struct CardChrome: ViewModifier {
+      @Binding var isPressed: Bool
+      func body(content: Content) -> some View {
+          content
+              .padding()
+              .background(Color.white)
+              .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+              .overlay(
+                  RoundedRectangle(cornerRadius: 16, style: .continuous)
+                      .stroke(isPressed ? Color(.systemGray2) : Color.clear, lineWidth: isPressed ? 2 : 0)
+              )
+              .shadow(color: Color.black.opacity(isPressed ? 0.18 : 0.12), radius: isPressed ? 8 : 6, x: 0, y: isPressed ? 4 : 3)
+              .scaleEffect(isPressed ? 0.98 : 1.0)
+              .animation(.spring(response: 0.26, dampingFraction: 0.82, blendDuration: 0.2), value: isPressed)
+              .padding(.vertical, 6)
+              .padding(.horizontal, 6)
+              .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+      }
+  }
+  // END
+
+  // ───── CardPressGesture ViewModifier (gesture only) ─────
+  private struct CardPressGesture: ViewModifier {
+      @Binding var isPressed: Bool
+      func body(content: Content) -> some View {
+          content.simultaneousGesture(
+              DragGesture(minimumDistance: 0)
+                  .onChanged { _ in
+                      if !isPressed { isPressed = true }
+                  }
+                  .onEnded { _ in
+                      isPressed = false
+                  }
+          )
+      }
+  }
+  // END
 }
 
 // ───── GridThumbnailView Subview ─────
@@ -368,7 +368,7 @@ struct GridThumbnailView: View {
     private var halfImageSize: CGSize {
         CGSize(width: (thumbHeight - 4) / 2, height: (thumbHeight - 4) / 2)
     }
-    
+
     var body: some View {
         if resolvedImageURLs.isEmpty {
             placeholderImage
@@ -383,23 +383,23 @@ struct GridThumbnailView: View {
                         .frame(width: thumbHeight, height: thumbHeight)
                 case .success(let image):
                     image
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                        .frame(width: thumbHeight, height: thumbHeight)
-                        .clipped()
-                        .overlay(alignment: .topTrailing) {
-                            // Show status for the first item that matches this image URL
-                            if let item = workOrder.items.first(where: { item in
+                                                            .resizable()
+                                    .aspectRatio(contentMode: .fill)
+                                    .frame(width: thumbHeight, height: thumbHeight)
+                                    .clipped()
+                                    .overlay(alignment: .topTrailing) {
+                                        // Show status for the first item that matches this image URL
+                                        if let item = workOrder.items.first(where: { item in
                                 item.imageUrls.contains(where: { $0 == resolvedImageURLs[0].absoluteString }) ||
                                 item.thumbUrls.contains(where: { $0 == resolvedImageURLs[0].absoluteString })
-                            }) {
-                                let status = item.statusHistory.last?.status ?? "Checked In"
-                                Circle()
-                                    .fill(statusColor(for: status))
-                                    .frame(width: 12, height: 12)
-                                    .padding(8)
-                            }
-                        }
+                                        }) {
+                                            let status = item.statusHistory.last?.status ?? "Checked In"
+                                            Circle()
+                                                .fill(statusColor(for: status))
+                                                .frame(width: 12, height: 12)
+                                                .padding(8)
+                                        }
+                                    }
                         .onLongPressGesture {
                             onImageLongPress(0)
                         }
@@ -417,32 +417,32 @@ struct GridThumbnailView: View {
                 // 2 images stacked vertically
                 VStack(spacing: 8) {
                     ForEach(Array(resolvedImageURLs.enumerated()), id: \.offset) { index, url in
-                        AsyncImage(url: url) { image in
-                            image
-                                .resizable()
-                                .aspectRatio(contentMode: .fill)
-                                .frame(maxWidth: .infinity)
-                                .frame(height: (thumbHeight - 8) / 2)
-                                .clipped()
-                                .cornerRadius(8)
-                                .overlay(alignment: .topTrailing) {
-                                    // Show status for the first item that matches this image URL
-                                    if let item = workOrder.items.first(where: { item in
-                                        item.imageUrls.contains(where: { $0 == url.absoluteString }) ||
-                                        item.thumbUrls.contains(where: { $0 == url.absoluteString })
-                                    }) {
-                                        let status = item.statusHistory.last?.status ?? "Checked In"
-                                        Circle()
-                                            .fill(statusColor(for: status))
-                                            .frame(width: 10, height: 10) // Slightly smaller for the grid
-                                            .padding(6)
+                            AsyncImage(url: url) { image in
+                                image
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fill)
+                                    .frame(maxWidth: .infinity)
+                                    .frame(height: (thumbHeight - 8) / 2)
+                                    .clipped()
+                                    .cornerRadius(8)
+                                    .overlay(alignment: .topTrailing) {
+                                        // Show status for the first item that matches this image URL
+                                        if let item = workOrder.items.first(where: { item in
+                                            item.imageUrls.contains(where: { $0 == url.absoluteString }) ||
+                                            item.thumbUrls.contains(where: { $0 == url.absoluteString })
+                                        }) {
+                                            let status = item.statusHistory.last?.status ?? "Checked In"
+                                            Circle()
+                                                .fill(statusColor(for: status))
+                                                .frame(width: 10, height: 10) // Slightly smaller for the grid
+                                                .padding(6)
+                                        }
                                     }
-                                }
                                 .onLongPressGesture {
                                     onImageLongPress(index)
                                 }
-                        } placeholder: {
-                            ProgressView()
+                            } placeholder: {
+                                ProgressView()
                                 .frame(maxWidth: .infinity)
                                 .frame(height: (thumbHeight - 8) / 2)
                                 .cornerRadius(8)
@@ -457,31 +457,31 @@ struct GridThumbnailView: View {
                     GridItem(.fixed(thumbHeight / 2), spacing: 4)
                 ], spacing: 4) {
                     ForEach(Array(resolvedImageURLs.prefix(4).enumerated()), id: \.offset) { index, url in
-                        AsyncImage(url: url) { image in
-                            image
-                                .resizable()
-                                .aspectRatio(contentMode: .fill)
-                                .frame(width: (thumbHeight - 4) / 2, height: (thumbHeight - 4) / 2)
-                                .clipped()
-                                .cornerRadius(8)
-                                .overlay(alignment: .topTrailing) {
-                                    // Show status for the first item that matches this image URL
-                                    if let item = workOrder.items.first(where: { item in
-                                        item.imageUrls.contains(where: { $0 == url.absoluteString }) ||
-                                        item.thumbUrls.contains(where: { $0 == url.absoluteString })
-                                    }) {
-                                        let status = item.statusHistory.last?.status ?? "Checked In"
-                                        Circle()
-                                            .fill(statusColor(for: status))
-                                            .frame(width: 8, height: 8) // Even smaller for the 2x2 grid
-                                            .padding(4)
+                            AsyncImage(url: url) { image in
+                                image
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fill)
+                                    .frame(width: (thumbHeight - 4) / 2, height: (thumbHeight - 4) / 2)
+                                    .clipped()
+                                    .cornerRadius(8)
+                                    .overlay(alignment: .topTrailing) {
+                                        // Show status for the first item that matches this image URL
+                                        if let item = workOrder.items.first(where: { item in
+                                            item.imageUrls.contains(where: { $0 == url.absoluteString }) ||
+                                            item.thumbUrls.contains(where: { $0 == url.absoluteString })
+                                        }) {
+                                            let status = item.statusHistory.last?.status ?? "Checked In"
+                                            Circle()
+                                                .fill(statusColor(for: status))
+                                                .frame(width: 8, height: 8) // Even smaller for the 2x2 grid
+                                                .padding(4)
+                                        }
                                     }
-                                }
                                 .onLongPressGesture {
                                     onImageLongPress(index)
                                 }
-                        } placeholder: {
-                            ProgressView()
+                            } placeholder: {
+                                ProgressView()
                                 .frame(width: (thumbHeight - 4) / 2, height: (thumbHeight - 4) / 2)
                                 .cornerRadius(8)
                         }
@@ -499,7 +499,7 @@ struct InfoBlockView: View {
     @State private var showingItemTooltip = false
     @State private var tooltipTimer: Timer?
     @State private var showingPhoneActions = false
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
@@ -526,14 +526,14 @@ struct InfoBlockView: View {
                     }
                 }
             }
-            
+
             VStack(alignment: .leading, spacing: 2) {
                 Text(workOrder.customerName)
                     .font(.subheadline)
                     .fontWeight(.bold)
                     .lineLimit(1)
                     .truncationMode(.tail)
-                
+
                 if let company = workOrder.customerCompany, !company.isEmpty {
                     Text(company)
                         .font(.caption)
@@ -545,19 +545,19 @@ struct InfoBlockView: View {
                     let _ = print("🔍 WorkOrder \(workOrder.WO_Number) - customerCompany: '\(workOrder.customerCompany ?? "nil")'")
                     #endif
                 }
-                
-                Text(workOrder.customerPhone)
-                    .font(.subheadline)
-                    .fontWeight(.bold)
-                    .foregroundColor(Color(hex: "#FFC500"))
-                    .underline()
-                    .lineLimit(1)
-                    .truncationMode(.middle)
+
+                    Text(workOrder.customerPhone)
+                        .font(.subheadline)
+                        .fontWeight(.bold)
+                        .foregroundColor(Color(hex: "#FFC500"))
+                        .underline()
+                        .lineLimit(1)
+                        .truncationMode(.middle)
                     .onLongPressGesture {
                         showingPhoneActions = true
-                    }
+                }
             }
-            
+
             Text(workOrder.timestamp.formatted(date: .abbreviated, time: .shortened))
                 .font(.caption)
                 .foregroundColor(.secondary)
@@ -713,7 +713,7 @@ struct InfoBlockView: View {
         let type: String
         let count: Int
     }
-    
+
     private func digitsOnly(_ s: String) -> String { s.filter(\.isNumber) }
     
     // Helper to get status color
@@ -733,7 +733,7 @@ struct InfoBlockView: View {
 // MARK: - Preview
 struct WorkOrderCardView_Previews: PreviewProvider {
     static var previews: some View {
-        WorkOrderCardView(workOrder: WorkOrder.sample)
+    WorkOrderCardView(workOrder: WorkOrder.sample)
             .padding()
             .previewLayout(.sizeThatFits)
     }
