@@ -83,6 +83,20 @@ struct WorkOrderCardView: View {
                     }
                 }
             }
+            .onReceive(NotificationCenter.default.publisher(for: .WorkOrderSaved)) { note in
+                guard
+                    let info = note.userInfo as? [String: Any],
+                    let number = info["WO_Number"] as? String,
+                    number == workOrder.WO_Number
+                else { return }
+                
+                #if DEBUG
+                print("🔄 WorkOrderCardView: Received WorkOrderSaved notification for WO \(number)")
+                #endif
+                
+                // Trigger image resolution when work order is updated
+                resolveImageURLs()
+            }
             .onDisappear { isPressed = false }
     }
     // END
@@ -102,7 +116,7 @@ struct WorkOrderCardView: View {
         print("🔍 WorkOrderCardView.resolveImageURLs for WO \(workOrder.WO_Number):")
         print("  - items.count: \(workOrder.items.count)")
         for (index, item) in workOrder.items.enumerated() {
-            print("  - Item \(index): type='\(item.type)', images=\(item.imageUrls.count)")
+            print("  - Item \(index): type='\(item.type)', images=\(item.imageUrls.count), thumbs=\(item.thumbUrls.count)")
         }
         #endif
         
@@ -114,23 +128,51 @@ struct WorkOrderCardView: View {
             let candidate = item.imageUrls.first ?? item.thumbUrls.first
             newCandidates.append(candidate)
             
+            #if DEBUG
+            print("  🔍 Candidate for \(item.type): \(candidate ?? "nil")")
+            #endif
+            
             if let candidate = candidate {
                 if candidate.lowercased().hasPrefix("http") {
-                    newURLs.append(URL(string: candidate))
+                    let url = URL(string: candidate)
+                    newURLs.append(url)
+                    #if DEBUG
+                    print("  ✅ Direct HTTP URL: \(url?.absoluteString ?? "invalid")")
+                    #endif
                 } else {
                     newURLs.append(nil) // Will be resolved by StorageImageResolver
+                    #if DEBUG
+                    print("  🔄 Resolving Firebase Storage URL: \(candidate)")
+                    #endif
                     StorageImageResolver.resolve(candidate) { url in
+                        #if DEBUG
+                        print("  📱 StorageImageResolver result for \(candidate): \(url?.absoluteString ?? "nil")")
+                        #endif
                         if let index = newCandidates.firstIndex(of: candidate) {
                             DispatchQueue.main.async {
                                 if index < self.resolvedImageURLs.count {
                                     self.resolvedImageURLs[index] = url
+                                    #if DEBUG
+                                    print("  ✅ Updated resolvedImageURLs[\(index)] = \(url?.absoluteString ?? "nil")")
+                                    #endif
+                                } else {
+                                    #if DEBUG
+                                    print("  ⚠️ Index \(index) out of bounds for resolvedImageURLs.count \(self.resolvedImageURLs.count)")
+                                    #endif
                                 }
                             }
+                        } else {
+                            #if DEBUG
+                            print("  ⚠️ Candidate not found in newCandidates: \(candidate)")
+                            #endif
                         }
                     }
                 }
             } else {
                 newURLs.append(nil)
+                #if DEBUG
+                print("  ❌ No candidate URL found for \(item.type)")
+                #endif
             }
         }
         
@@ -212,7 +254,7 @@ struct GridThumbnailView: View {
         case "disassembly": return UIConstants.StatusColors.disassembly
         case "in progress": return UIConstants.StatusColors.inProgress
         case "test failed": return UIConstants.StatusColors.testFailed
-        case "complete": return UIConstants.StatusColors.completed
+        case "completed": return UIConstants.StatusColors.completed
         case "closed": return UIConstants.StatusColors.closed
         default: return UIConstants.StatusColors.fallback
         }

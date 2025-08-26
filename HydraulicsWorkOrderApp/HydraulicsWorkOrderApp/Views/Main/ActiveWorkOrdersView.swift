@@ -17,8 +17,33 @@ struct ActiveWorkOrdersView: View {
 
     // Computed property for active work orders
     private var activeWorkOrders: [WorkOrder] {
-        let active = db.workOrders
-            .filter { !$0.isDeleted && $0.status != "Closed" }
+        // Remove duplicates by WO_Number, keeping the most recent one
+        var uniqueWorkOrders: [String: WorkOrder] = [:]
+        for workOrder in db.workOrders {
+            if !workOrder.isDeleted && workOrder.status != "Closed" {
+                // If we already have this WO_Number, keep the one with the most recent lastModified
+                if let existing = uniqueWorkOrders[workOrder.WO_Number] {
+                    // Prefer work orders with Firestore IDs, then most recent
+                    let existingHasId = existing.id != nil && !existing.id!.isEmpty
+                    let currentHasId = workOrder.id != nil && !workOrder.id!.isEmpty
+                    
+                    if currentHasId && !existingHasId {
+                        // Current has ID, existing doesn't - prefer current
+                        uniqueWorkOrders[workOrder.WO_Number] = workOrder
+                    } else if !currentHasId && existingHasId {
+                        // Existing has ID, current doesn't - keep existing
+                        // Do nothing
+                    } else if workOrder.lastModified > existing.lastModified {
+                        // Both have same ID status, prefer most recent
+                        uniqueWorkOrders[workOrder.WO_Number] = workOrder
+                    }
+                } else {
+                    uniqueWorkOrders[workOrder.WO_Number] = workOrder
+                }
+            }
+        }
+        
+        let active = Array(uniqueWorkOrders.values)
             .sorted {
                 if $0.flagged != $1.flagged { return $0.flagged && !$1.flagged }
                 return $0.timestamp < $1.timestamp

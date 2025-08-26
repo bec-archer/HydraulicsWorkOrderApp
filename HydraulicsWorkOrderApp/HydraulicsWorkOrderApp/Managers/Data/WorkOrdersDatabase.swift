@@ -837,6 +837,42 @@ final class WorkOrdersDatabase: ObservableObject {
     }
     // END delete legacy work order
 
+    // ───── FIND WORK ORDER ID BY WO_NUMBER ─────
+    /// Finds a work order's Firestore document ID by its WO_Number
+    func findWorkOrderId(byWONumber woNumber: String, completion: @escaping (Result<String, Error>) -> Void) {
+        db.collection(collectionName)
+            .whereField("WO_Number", isEqualTo: woNumber)
+            .getDocuments { snapshot, error in
+                if let error = error {
+                    completion(.failure(error))
+                    return
+                }
+                
+                guard let docs = snapshot?.documents, !docs.isEmpty else {
+                    completion(.failure(NSError(domain: "WorkOrdersDatabase",
+                                              code: 404,
+                                              userInfo: [NSLocalizedDescriptionKey: "WorkOrder with WO_Number \(woNumber) not found in Firestore"])))
+                    return
+                }
+                
+                // Use the first document found (should be unique by WO_Number)
+                let docId = docs[0].documentID
+                
+                // Update local cache with the found ID
+                DispatchQueue.main.async { [weak self] in
+                    guard let self = self else { return }
+                    if let idx = self.workOrders.firstIndex(where: { $0.WO_Number == woNumber }) {
+                        var updated = self.workOrders[idx]
+                        updated.id = docId
+                        self.workOrders[idx] = updated
+                    }
+                }
+                
+                completion(.success(docId))
+            }
+    }
+    // END find work order id
+
     // ───── ADD PER-ITEM NOTE ─────
     /// Append a WO_Note to a specific WO_Item inside a WorkOrder document.
     /// - Parameters:
@@ -875,9 +911,37 @@ final class WorkOrdersDatabase: ObservableObject {
 
                     // Update local cache so UI lists refresh
                     DispatchQueue.main.async {
-                        if let cacheIdx = self.workOrders.firstIndex(where: { $0.id == wo.id }) {
+                        #if DEBUG
+                        print("🔄 WorkOrdersDatabase: Updating cache for WO \(wo.WO_Number) (addItemNote)")
+                        print("   - Firestore ID: \(wo.id ?? "nil")")
+                        print("   - Current cache size: \(self.workOrders.count)")
+                        #endif
+                        
+                        // Try to find by WO_Number first (more reliable), then by ID as fallback
+                        if let cacheIdx = self.workOrders.firstIndex(where: { $0.WO_Number == wo.WO_Number }) {
                             self.workOrders[cacheIdx] = wo
+                            #if DEBUG
+                            print("   ✅ Updated by WO_Number at index \(cacheIdx)")
+                            #endif
+                        } else if let woId = wo.id, !woId.isEmpty, let cacheIdx = self.workOrders.firstIndex(where: { $0.id == woId }) {
+                            self.workOrders[cacheIdx] = wo
+                            #if DEBUG
+                            print("   ✅ Updated by ID at index \(cacheIdx)")
+                            #endif
+                        } else {
+                            #if DEBUG
+                            print("   ⚠️ Work order not found in cache - adding to cache")
+                            #endif
+                            // If not found, add it to the cache
+                            self.workOrders.append(wo)
                         }
+                        
+                        // Post notification to trigger UI updates
+                        NotificationCenter.default.post(
+                            name: .WorkOrderSaved,
+                            object: wo.id,
+                            userInfo: ["WO_Number": wo.WO_Number]
+                        )
                     }
                     completion(.success(()))
                 }
@@ -927,9 +991,37 @@ final class WorkOrdersDatabase: ObservableObject {
 
                     // Update local cache
                     DispatchQueue.main.async {
-                        if let cacheIdx = self.workOrders.firstIndex(where: { $0.id == wo.id }) {
+                        #if DEBUG
+                        print("🔄 WorkOrdersDatabase: Updating cache for WO \(wo.WO_Number)")
+                        print("   - Firestore ID: \(wo.id ?? "nil")")
+                        print("   - Current cache size: \(self.workOrders.count)")
+                        #endif
+                        
+                        // Try to find by WO_Number first (more reliable), then by ID as fallback
+                        if let cacheIdx = self.workOrders.firstIndex(where: { $0.WO_Number == wo.WO_Number }) {
                             self.workOrders[cacheIdx] = wo
+                            #if DEBUG
+                            print("   ✅ Updated by WO_Number at index \(cacheIdx)")
+                            #endif
+                        } else if let woId = wo.id, !woId.isEmpty, let cacheIdx = self.workOrders.firstIndex(where: { $0.id == woId }) {
+                            self.workOrders[cacheIdx] = wo
+                            #if DEBUG
+                            print("   ✅ Updated by ID at index \(cacheIdx)")
+                            #endif
+                        } else {
+                            #if DEBUG
+                            print("   ⚠️ Work order not found in cache - adding to cache")
+                            #endif
+                            // If not found, add it to the cache
+                            self.workOrders.append(wo)
                         }
+                        
+                        // Post notification to trigger UI updates
+                        NotificationCenter.default.post(
+                            name: .WorkOrderSaved,
+                            object: wo.id,
+                            userInfo: ["WO_Number": wo.WO_Number]
+                        )
                     }
                     completion(.success(()))
                 }

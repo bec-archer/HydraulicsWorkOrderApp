@@ -59,10 +59,9 @@ struct ItemCard: View {
 
     let statusOptions: [String] = [
         "Checked In",
+        "Disassembly",
         "In Progress",
-        "Done",
-        "Tested: PASS",
-        "Tested: FAIL",
+        "Test Failed",
         "Completed",
         "Closed"
     ]
@@ -384,14 +383,16 @@ struct ItemCard: View {
 // ───── Status Color Helper ─────
 private func statusColor(for status: String) -> Color {
     switch status.lowercased() {
-    case "checked in":       return Color.blue
-    case "in progress":      return Color.orange
-    case "done":             return Color.green
-    case "tested: pass":     return Color.green
-    case "tested: fail":     return Color.red
-    case "completed":        return Color.gray
-    case "closed":           return Color.gray
-    default:                 return Color.secondary
+    case "checked in":       return UIConstants.StatusColors.checkedIn
+    case "disassembly":      return UIConstants.StatusColors.disassembly
+    case "in progress":      return UIConstants.StatusColors.inProgress
+    case "test failed":      return UIConstants.StatusColors.testFailed
+    case "completed":        return UIConstants.StatusColors.completed
+    case "closed":           return UIConstants.StatusColors.closed
+    case "done":             return UIConstants.StatusColors.completed
+    case "tested: pass":     return UIConstants.StatusColors.completed
+    case "tested: fail":     return UIConstants.StatusColors.testFailed
+    default:                 return UIConstants.StatusColors.fallback
     }
 }
 // ───── Local helper used only in note save ─────

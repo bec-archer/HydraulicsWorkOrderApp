@@ -16,8 +16,15 @@ struct StorageImageResolver {
     
     static func resolve(_ pathOrUrl: String, completion: @escaping (URL?) -> Void) {
         
-        // If it’s already an https URL, return immediately
+        #if DEBUG
+        print("🔄 StorageImageResolver.resolve called with: \(pathOrUrl)")
+        #endif
+        
+        // If it's already an https URL, return immediately
         if pathOrUrl.lowercased().hasPrefix("http") {
+            #if DEBUG
+            print("✅ StorageImageResolver: Already HTTPS URL, returning directly")
+            #endif
             completion(URL(string: pathOrUrl))
             return
         }
@@ -26,16 +33,27 @@ struct StorageImageResolver {
         let storageRef: StorageReference
         if pathOrUrl.lowercased().hasPrefix("gs://") {
             storageRef = Storage.storage().reference(forURL: pathOrUrl)
+            #if DEBUG
+            print("🔗 StorageImageResolver: Using gs:// reference")
+            #endif
         } else {
             storageRef = Storage.storage().reference(withPath: pathOrUrl)
+            #if DEBUG
+            print("🔗 StorageImageResolver: Using relative path reference")
+            #endif
         }
         
         // Fetch a one-time download URL
         storageRef.downloadURL { url, error in
             if let error = error {
-                print("❌ StorageImageResolver failed: \(error.localizedDescription)")
+                #if DEBUG
+                print("❌ StorageImageResolver failed for \(pathOrUrl): \(error.localizedDescription)")
+                #endif
                 completion(nil)
             } else {
+                #if DEBUG
+                print("✅ StorageImageResolver succeeded for \(pathOrUrl): \(url?.absoluteString ?? "nil")")
+                #endif
                 completion(url)
             }
         }
