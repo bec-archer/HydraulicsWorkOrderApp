@@ -31,6 +31,7 @@ struct WorkOrderDetailView: View {
     @State private var showDeleteConfirm = false
     @State private var showImageViewer = false
     @State private var selectedImageURL: URL? = nil
+    @State private var showingPhoneActions = false
     
     private var canDelete: Bool {
 #if DEBUG
@@ -68,6 +69,13 @@ struct WorkOrderDetailView: View {
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 16)
+        }
+        .sheet(isPresented: $showingPhoneActions) {
+            PhoneActionSheet(
+                customerName: woWrapper.wo.customerName,
+                phoneNumber: woWrapper.wo.customerPhone,
+                isPresented: $showingPhoneActions
+            )
         }
         .navigationTitle("Work Order Details")
         .navigationBarTitleDisplayMode(.inline)
@@ -126,85 +134,12 @@ struct WorkOrderDetailView: View {
             HStack(spacing: 12) {
                 HStack(spacing: 6) {
                     Image(systemName: "phone.fill")
-                    Button {
-                        let phoneNumber = woWrapper.wo.customerPhone.filter(\.isNumber)
-                        let telURL = URL(string: "tel://\(phoneNumber)")
-                        
-                        #if DEBUG
-                        print("📞 Phone tap - Number: \(phoneNumber)")
-                        print("📞 Phone tap - URL: \(telURL?.absoluteString ?? "invalid URL")")
-                        
-                        // Show simulator-specific message using haptic feedback
-                        #if targetEnvironment(simulator)
-                        let generator = UINotificationFeedbackGenerator()
-                        generator.notificationOccurred(.success)
-                        print("📱 Simulator: Phone call would dial \(phoneNumber) on a real device")
-                        #endif
-                        #endif
-                        
-                        if let telURL = telURL {
-                            UIApplication.shared.open(telURL) { success in
-                                if !success {
-                                    #if DEBUG
-                                    print("❌ Failed to open phone URL - this is expected in Simulator")
-                                    #endif
-                                    
-                                    // Copy number to clipboard as fallback
-                                    UIPasteboard.general.string = phoneNumber
-                                    let generator = UINotificationFeedbackGenerator()
-                                    generator.notificationOccurred(.success)
-                                }
-                            }
+                    Text(woWrapper.wo.customerPhone)
+                        .underline()
+                        .foregroundColor(Color(hex: "#FFC500"))
+                        .onLongPressGesture {
+                            showingPhoneActions = true
                         }
-                    } label: {
-                        Text(woWrapper.wo.customerPhone)
-                            .underline()
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundColor(Color(hex: "#FFC500"))
-                    .contextMenu {
-                        Button {
-                            let phoneNumber = woWrapper.wo.customerPhone.filter(\.isNumber)
-                            let smsURL = URL(string: "sms:\(phoneNumber)")
-                            
-                            #if DEBUG
-                            print("💬 SMS tap - Number: \(phoneNumber)")
-                            print("💬 SMS tap - URL: \(smsURL?.absoluteString ?? "invalid URL")")
-                            
-                            #if targetEnvironment(simulator)
-                            let generator = UINotificationFeedbackGenerator()
-                            generator.notificationOccurred(.success)
-                            print("📱 Simulator: SMS would open for \(phoneNumber) on a real device")
-                            #endif
-                            #endif
-                            
-                            if let smsURL = smsURL {
-                                UIApplication.shared.open(smsURL) { success in
-                                    if !success {
-                                        #if DEBUG
-                                        print("❌ Failed to open SMS URL - this is expected in Simulator")
-                                        #endif
-                                        
-                                        // Copy number to clipboard as fallback
-                                        UIPasteboard.general.string = phoneNumber
-                                        let generator = UINotificationFeedbackGenerator()
-                                        generator.notificationOccurred(.success)
-                                    }
-                                }
-                            }
-                        } label: {
-                            Label("Text Message", systemImage: "message.fill")
-                        }
-                        
-                        Button {
-                            let phoneNumber = woWrapper.wo.customerPhone.filter(\.isNumber)
-                            UIPasteboard.general.string = phoneNumber
-                            let generator = UINotificationFeedbackGenerator()
-                            generator.notificationOccurred(.success)
-                        } label: {
-                            Label("Copy Number", systemImage: "doc.on.doc.fill")
-                        }
-                    }
                 }
                 .accessibilityLabel("Call or text customer")
                 
@@ -579,6 +514,153 @@ extension WorkOrderDetailView {
         case "tested: fail":     return UIConstants.StatusColors.testFailed
         default:                 return UIConstants.StatusColors.fallback
         }
+    }
+}
+
+// MARK: - PhoneActionSheet
+struct PhoneActionSheet: View {
+    let customerName: String
+    let phoneNumber: String
+    @Binding var isPresented: Bool
+    @Environment(\.openURL) private var openURL
+    
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 0) {
+                // Header
+                VStack(spacing: 8) {
+                    Text("Contact \(customerName)")
+                        .font(.headline)
+                        .fontWeight(.semibold)
+                    
+                    Text("Choose how to contact \(customerName)")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                }
+                .padding(.top, 20)
+                .padding(.bottom, 30)
+                
+                // Action Buttons
+                VStack(spacing: 16) {
+                    // Call Button
+                    Button {
+                        let phoneNumberDigits = phoneNumber.filter(\.isNumber)
+                        let telURL = URL(string: "tel://\(phoneNumberDigits)")
+                        
+                        #if DEBUG
+                        print("📞 Phone call selected - Number: \(phoneNumberDigits)")
+                        print("📞 Phone call selected - URL: \(telURL?.absoluteString ?? "invalid URL")")
+                        #endif
+                        
+                        if let telURL = telURL {
+                            openURL(telURL) { success in
+                                if !success {
+                                    #if DEBUG
+                                    print("❌ Failed to open phone URL - this is expected in Simulator")
+                                    #endif
+                                    
+                                    // Copy number to clipboard as fallback
+                                    UIPasteboard.general.string = phoneNumberDigits
+                                    let generator = UINotificationFeedbackGenerator()
+                                    generator.notificationOccurred(.success)
+                                }
+                            }
+                        }
+                        isPresented = false
+                    } label: {
+                        HStack {
+                            Image(systemName: "phone.fill")
+                                .foregroundColor(.white)
+                            Text("Call \(phoneNumber)")
+                                .fontWeight(.medium)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 16)
+                        .background(Color.green)
+                        .foregroundColor(.white)
+                        .cornerRadius(12)
+                    }
+                    
+                    // Text Button
+                    Button {
+                        let phoneNumberDigits = phoneNumber.filter(\.isNumber)
+                        let smsURL = URL(string: "sms://\(phoneNumberDigits)")
+                        
+                        #if DEBUG
+                        print("💬 Text selected - Number: \(phoneNumberDigits)")
+                        print("💬 Text selected - URL: \(smsURL?.absoluteString ?? "invalid URL")")
+                        #endif
+                        
+                        if let smsURL = smsURL {
+                            openURL(smsURL) { success in
+                                if !success {
+                                    #if DEBUG
+                                    print("❌ Failed to open SMS URL - this is expected in Simulator")
+                                    #endif
+                                    
+                                    // Copy number to clipboard as fallback
+                                    UIPasteboard.general.string = phoneNumberDigits
+                                    let generator = UINotificationFeedbackGenerator()
+                                    generator.notificationOccurred(.success)
+                                }
+                            }
+                        }
+                        isPresented = false
+                    } label: {
+                        HStack {
+                            Image(systemName: "message.fill")
+                                .foregroundColor(.white)
+                            Text("Text \(phoneNumber)")
+                                .fontWeight(.medium)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 16)
+                        .background(Color.blue)
+                        .foregroundColor(.white)
+                        .cornerRadius(12)
+                    }
+                    
+                    // Copy Button
+                    Button {
+                        let phoneNumberDigits = phoneNumber.filter(\.isNumber)
+                        UIPasteboard.general.string = phoneNumberDigits
+                        
+                        #if DEBUG
+                        print("📋 Phone number copied to clipboard: \(phoneNumberDigits)")
+                        #endif
+                        
+                        let generator = UINotificationFeedbackGenerator()
+                        generator.notificationOccurred(.success)
+                        isPresented = false
+                    } label: {
+                        HStack {
+                            Image(systemName: "doc.on.doc.fill")
+                                .foregroundColor(.primary)
+                            Text("Copy Number")
+                                .fontWeight(.medium)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 16)
+                        .background(Color(.systemGray5))
+                        .foregroundColor(.primary)
+                        .cornerRadius(12)
+                    }
+                }
+                .padding(.horizontal, 20)
+                
+                Spacer()
+            }
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Cancel") {
+                        isPresented = false
+                    }
+                }
+            }
+        }
+        .presentationDetents([.medium])
+        .presentationDragIndicator(.visible)
     }
 }
 

@@ -288,7 +288,7 @@ struct WorkOrderCardView: View {
                 thumbHeight: thumbHeight,
                 placeholderImage: AnyView(placeholderImage),
                 workOrder: workOrder,
-                onImageTap: { index in
+                onImageLongPress: { index in
                     selectedImageIndex = index
                     showingFullScreenImage = true
                 }
@@ -346,7 +346,7 @@ struct GridThumbnailView: View {
     let thumbHeight: CGFloat
     let placeholderImage: AnyView
     let workOrder: WorkOrder // Add reference to work order for status
-    let onImageTap: (Int) -> Void
+    let onImageLongPress: (Int) -> Void
     
     // Helper to get status color
     private func statusColor(for status: String) -> Color {
@@ -400,8 +400,8 @@ struct GridThumbnailView: View {
                                     .padding(8)
                             }
                         }
-                        .onTapGesture {
-                            onImageTap(0)
+                        .onLongPressGesture {
+                            onImageLongPress(0)
                         }
                 case .failure(_):
                     ProgressView()
@@ -438,8 +438,8 @@ struct GridThumbnailView: View {
                                             .padding(6)
                                     }
                                 }
-                                .onTapGesture {
-                                    onImageTap(index)
+                                .onLongPressGesture {
+                                    onImageLongPress(index)
                                 }
                         } placeholder: {
                             ProgressView()
@@ -477,8 +477,8 @@ struct GridThumbnailView: View {
                                             .padding(4)
                                     }
                                 }
-                                .onTapGesture {
-                                    onImageTap(index)
+                                .onLongPressGesture {
+                                    onImageLongPress(index)
                                 }
                         } placeholder: {
                             ProgressView()
@@ -498,6 +498,7 @@ struct InfoBlockView: View {
     @Environment(\.openURL) private var openURL
     @State private var showingItemTooltip = false
     @State private var tooltipTimer: Timer?
+    @State private var showingPhoneActions = false
     
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -514,7 +515,16 @@ struct InfoBlockView: View {
                 
                 Spacer()
                 
-                StatusBadge(status: workOrder.status)
+                // Status dots for each item
+                HStack(spacing: 4) {
+                    ForEach(workOrder.items.indices, id: \.self) { index in
+                        let item = workOrder.items[index]
+                        let status = item.statusHistory.last?.status ?? "Checked In"
+                        Circle()
+                            .fill(statusColor(for: status))
+                            .frame(width: 8, height: 8)
+                    }
+                }
             }
             
             VStack(alignment: .leading, spacing: 2) {
@@ -536,46 +546,16 @@ struct InfoBlockView: View {
                     #endif
                 }
                 
-                Button {
-                    let phoneNumber = digitsOnly(workOrder.customerPhone)
-                    let telURL = URL(string: "tel://\(phoneNumber)")
-                    
-                    #if DEBUG
-                    print("📞 Phone tap - Number: \(phoneNumber)")
-                    print("📞 Phone tap - URL: \(telURL?.absoluteString ?? "invalid URL")")
-                    
-                    // Show simulator-specific message using haptic feedback
-                    #if targetEnvironment(simulator)
-                    let generator = UINotificationFeedbackGenerator()
-                    generator.notificationOccurred(.success)
-                    print("📱 Simulator: Phone call would dial \(phoneNumber) on a real device")
-                    #endif
-                    #endif
-                    
-                    if let telURL = telURL {
-                        openURL(telURL) { success in
-                            if !success {
-                                #if DEBUG
-                                print("❌ Failed to open phone URL - this is expected in Simulator")
-                                #endif
-                                
-                                // Copy number to clipboard as fallback
-                                UIPasteboard.general.string = phoneNumber
-                                let generator = UINotificationFeedbackGenerator()
-                                generator.notificationOccurred(.success)
-                            }
-                        }
+                Text(workOrder.customerPhone)
+                    .font(.subheadline)
+                    .fontWeight(.bold)
+                    .foregroundColor(Color(hex: "#FFC500"))
+                    .underline()
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .onLongPressGesture {
+                        showingPhoneActions = true
                     }
-                } label: {
-                    Text(workOrder.customerPhone)
-                        .font(.subheadline)
-                        .fontWeight(.bold)
-                        .foregroundColor(Color(hex: "#FFC500"))
-                        .underline()
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                }
-                .buttonStyle(.plain)
             }
             
             Text(workOrder.timestamp.formatted(date: .abbreviated, time: .shortened))
@@ -634,6 +614,73 @@ struct InfoBlockView: View {
                 }
             }
         }
+        .confirmationDialog("Contact \(workOrder.customerName)", isPresented: $showingPhoneActions) {
+            Button("Call \(workOrder.customerPhone)") {
+                let phoneNumber = digitsOnly(workOrder.customerPhone)
+                let telURL = URL(string: "tel://\(phoneNumber)")
+                
+                #if DEBUG
+                print("📞 Phone call selected - Number: \(phoneNumber)")
+                print("📞 Phone call selected - URL: \(telURL?.absoluteString ?? "invalid URL")")
+                #endif
+                
+                if let telURL = telURL {
+                    openURL(telURL) { success in
+                        if !success {
+                            #if DEBUG
+                            print("❌ Failed to open phone URL - this is expected in Simulator")
+                            #endif
+                            
+                            // Copy number to clipboard as fallback
+                            UIPasteboard.general.string = phoneNumber
+                            let generator = UINotificationFeedbackGenerator()
+                            generator.notificationOccurred(.success)
+                        }
+                    }
+                }
+            }
+            
+            Button("Text \(workOrder.customerPhone)") {
+                let phoneNumber = digitsOnly(workOrder.customerPhone)
+                let smsURL = URL(string: "sms://\(phoneNumber)")
+                
+                #if DEBUG
+                print("💬 Text selected - Number: \(phoneNumber)")
+                print("💬 Text selected - URL: \(smsURL?.absoluteString ?? "invalid URL")")
+                #endif
+                
+                if let smsURL = smsURL {
+                    openURL(smsURL) { success in
+                        if !success {
+                            #if DEBUG
+                            print("❌ Failed to open SMS URL - this is expected in Simulator")
+                            #endif
+                            
+                            // Copy number to clipboard as fallback
+                            UIPasteboard.general.string = phoneNumber
+                            let generator = UINotificationFeedbackGenerator()
+                            generator.notificationOccurred(.success)
+                        }
+                    }
+                }
+            }
+            
+            Button("Copy Number", role: .none) {
+                let phoneNumber = digitsOnly(workOrder.customerPhone)
+                UIPasteboard.general.string = phoneNumber
+                
+                #if DEBUG
+                print("📋 Phone number copied to clipboard: \(phoneNumber)")
+                #endif
+                
+                let generator = UINotificationFeedbackGenerator()
+                generator.notificationOccurred(.success)
+            }
+            
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("Choose how to contact \(workOrder.customerName)")
+        }
     }
     
     // Helper function to get item type counts
@@ -668,6 +715,19 @@ struct InfoBlockView: View {
     }
     
     private func digitsOnly(_ s: String) -> String { s.filter(\.isNumber) }
+    
+    // Helper to get status color
+    private func statusColor(for status: String) -> Color {
+        switch status.lowercased() {
+        case "checked in": return UIConstants.StatusColors.checkedIn
+        case "disassembly": return UIConstants.StatusColors.disassembly
+        case "in progress": return UIConstants.StatusColors.inProgress
+        case "test failed": return UIConstants.StatusColors.testFailed
+        case "completed": return UIConstants.StatusColors.completed
+        case "closed": return UIConstants.StatusColors.closed
+        default: return UIConstants.StatusColors.fallback
+        }
+    }
 }
 
 // MARK: - Preview
