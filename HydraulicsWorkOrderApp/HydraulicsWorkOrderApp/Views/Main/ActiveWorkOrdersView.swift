@@ -146,6 +146,7 @@ struct ActiveWorkOrdersView: View {
                                         }
                                     )) {
                                         WorkOrderCardView(workOrder: workOrder)
+                                            .id(workOrder.WO_Number) // Add stable ID to prevent recreation
                                     }
                                     .buttonStyle(PlainButtonStyle())
                                 }
