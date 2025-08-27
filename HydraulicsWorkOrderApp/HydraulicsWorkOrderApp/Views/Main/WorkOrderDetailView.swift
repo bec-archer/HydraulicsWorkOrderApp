@@ -371,7 +371,9 @@ struct WorkOrderDetailView: View {
             .padding(.horizontal, 20)
             .padding(.vertical, 16)
         .onAppear {
-            setupDebugLogging()
+            #if DEBUG
+            print("🔍 WorkOrderDetailView: WorkOrder \(viewModel.workOrder.WO_Number) has \(viewModel.workOrder.items.count) items")
+            #endif
         }
         .sheet(isPresented: $showingPhoneActions) {
             PhoneActionSheet(
@@ -624,8 +626,8 @@ struct WorkOrderDetailView: View {
                             .font(.subheadline)
                             .fontWeight(.medium)
                         
-                        VStack(alignment: .leading, spacing: 8) {
-                            // First image (large square - adaptive)
+                        VStack(alignment: .leading, spacing: 12) {
+                            // First image (adaptive square)
                             if let firstUrl = URL(string: item.imageUrls[0]) {
                                 Button {
                                     selectedImageURL = firstUrl
@@ -635,23 +637,20 @@ struct WorkOrderDetailView: View {
                                         switch phase {
                                         case .empty:
                                             ProgressView()
-                                                .frame(maxWidth: .infinity)
                                                 .aspectRatio(1, contentMode: .fit)
+                                                .clipShape(RoundedRectangle(cornerRadius: 12))
                                         case .success(let image):
                                             image
                                                 .resizable()
                                                 .scaledToFill()
-                                                .frame(maxWidth: .infinity)
                                                 .aspectRatio(1, contentMode: .fit)
                                                 .clipShape(RoundedRectangle(cornerRadius: 12))
                                         case .failure:
                                             Color.gray
-                                                .frame(maxWidth: .infinity)
                                                 .aspectRatio(1, contentMode: .fit)
                                                 .clipShape(RoundedRectangle(cornerRadius: 12))
                                         @unknown default:
                                             Color.gray
-                                                .frame(maxWidth: .infinity)
                                                 .aspectRatio(1, contentMode: .fit)
                                                 .clipShape(RoundedRectangle(cornerRadius: 12))
                                         }
@@ -660,49 +659,49 @@ struct WorkOrderDetailView: View {
                                 .buttonStyle(.plain)
                             }
                             
-                            // Additional images in 2x grid
+                            // Additional images in 2x2 grid below main image
                             if item.imageUrls.count > 1 {
                                 let additionalImages = Array(item.imageUrls.dropFirst())
                                 LazyVGrid(columns: [
                                     GridItem(.flexible()),
                                     GridItem(.flexible())
                                 ], spacing: 8) {
-                                                                                ForEach(Array(additionalImages.enumerated()), id: \.offset) { _, urlString in
-                                                if let url = URL(string: urlString) {
-                                                    Button {
-                                                        selectedImageURL = url
-                                                        showImageViewer = true
-                                                    } label: {
-                                                        AsyncImage(url: url) { (phase: AsyncImagePhase) in
-                                                            switch phase {
-                                                            case .empty:
-                                                                ProgressView()
-                                                                    .aspectRatio(1, contentMode: .fit)
-                                                            case .success(let image):
-                                                                image
-                                                                    .resizable()
-                                                                    .scaledToFill()
-                                                                    .aspectRatio(1, contentMode: .fit)
-                                                                    .clipShape(RoundedRectangle(cornerRadius: 8))
-                                                            case .failure:
-                                                                Color.gray
-                                                                    .aspectRatio(1, contentMode: .fit)
-                                                                    .clipShape(RoundedRectangle(cornerRadius: 8))
-                                                            @unknown default:
-                                                                Color.gray
-                                                                    .aspectRatio(1, contentMode: .fit)
-                                                                    .clipShape(RoundedRectangle(cornerRadius: 8))
-                                                            }
-                                                        }
+                                    ForEach(Array(additionalImages.enumerated()), id: \.offset) { _, urlString in
+                                        if let url = URL(string: urlString) {
+                                            Button {
+                                                selectedImageURL = url
+                                                showImageViewer = true
+                                            } label: {
+                                                AsyncImage(url: url) { (phase: AsyncImagePhase) in
+                                                    switch phase {
+                                                    case .empty:
+                                                        ProgressView()
+                                                            .aspectRatio(1, contentMode: .fit)
+                                                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                                                    case .success(let image):
+                                                        image
+                                                            .resizable()
+                                                            .scaledToFill()
+                                                            .aspectRatio(1, contentMode: .fit)
+                                                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                                                    case .failure:
+                                                        Color.gray
+                                                            .aspectRatio(1, contentMode: .fit)
+                                                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                                                    @unknown default:
+                                                        Color.gray
+                                                            .aspectRatio(1, contentMode: .fit)
+                                                            .clipShape(RoundedRectangle(cornerRadius: 8))
                                                     }
-                                                    .buttonStyle(.plain)
                                                 }
                                             }
+                                            .buttonStyle(.plain)
+                                        }
+                                    }
                                 }
                             }
                         }
                     }
-                    .frame(maxWidth: .infinity)
                 }
                 
                 // Notes & Status section (right side)
@@ -722,82 +721,64 @@ struct WorkOrderDetailView: View {
                         }
                         .buttonStyle(.plain)
                     }
-
-            // Reasons for Service section
-            if !item.reasonsForService.isEmpty {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Reasons for Service")
-                        .font(.subheadline)
-                        .fontWeight(.medium)
                     
-                    VStack(alignment: .leading, spacing: 4) {
-                        ForEach(item.reasonsForService, id: \.self) { reason in
-                            HStack {
-                                Button {
-                                    Task {
-                                        await viewModel.toggleReasonCompletion(reason, for: itemIndex)
-                                    }
-                                } label: {
-                                    Image(systemName: viewModel.isReasonCompleted(reason, for: item) ? "checkmark.square.fill" : "square")
-                                        .foregroundColor(viewModel.isReasonCompleted(reason, for: item) ? .green : .primary)
-                                }
-                                .buttonStyle(.plain)
-                                
-                                Text(reason)
-                                    .font(.subheadline)
-                                
-                                Spacer()
-                            }
-                        }
-                    }
-                }
-            }
-            
-            // Notes & Status section
-        VStack(alignment: .leading, spacing: 12) {
-                HStack {
-            Text("Notes & Status")
-                .font(.headline)
-            
-                    Spacer()
-                    
-                    Button {
-                        viewModel.selectedItemIndex = itemIndex
-                        viewModel.showAddNoteSheet = true
-                    } label: {
-                        Label("Add Note/Image", systemImage: "plus.circle")
-                            .font(.caption)
-                    }
-                    .buttonStyle(.plain)
-                }
-                
-                // Status history
-            if !item.statusHistory.isEmpty {
-                VStack(alignment: .leading, spacing: 8) {
-                        ForEach(Array(item.statusHistory.enumerated()), id: \.offset) { _, status in
-                        HStack(alignment: .top, spacing: 10) {
-                            Image(systemName: "circle.fill")
-                                .font(.system(size: 8))
-                                    .foregroundStyle(viewModel.getStatusColor(status.status))
-                                .padding(.top, 6)
+                    // Reasons for Service section
+                    if !item.reasonsForService.isEmpty {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Reasons for Service")
+                                .font(.subheadline)
+                                .fontWeight(.medium)
                             
-                            VStack(alignment: .leading, spacing: 2) {
-                                    Text(status.status)
-                                    .font(.subheadline.weight(.semibold))
-                                        .foregroundColor(viewModel.getStatusColor(status.status))
-                                    Text("\(status.user) • \(status.timestamp.formatted(date: .abbreviated, time: .shortened))")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
+                            VStack(alignment: .leading, spacing: 4) {
+                                ForEach(item.reasonsForService, id: \.self) { reason in
+                                    HStack {
+                                        Button {
+                                            Task {
+                                                await viewModel.toggleReasonCompletion(reason, for: itemIndex)
+                                            }
+                                        } label: {
+                                            Image(systemName: viewModel.isReasonCompleted(reason, for: item) ? "checkmark.square.fill" : "square")
+                                                .foregroundColor(viewModel.isReasonCompleted(reason, for: item) ? .green : .primary)
+                                        }
+                                        .buttonStyle(.plain)
+                                        
+                                        Text(reason)
+                                            .font(.subheadline)
+                                        
+                                        Spacer()
+                                    }
+                                }
                             }
                         }
                     }
-                }
-            }
-            
-                // Notes
-            if !item.notes.isEmpty {
-                VStack(alignment: .leading, spacing: 10) {
-                        ForEach(Array(item.notes.enumerated()), id: \.offset) { _, note in
+                    
+                    // Status history
+                    if !item.statusHistory.isEmpty {
+                        VStack(alignment: .leading, spacing: 8) {
+                            ForEach(Array(item.statusHistory.enumerated()), id: \.offset) { _, status in
+                                HStack(alignment: .top, spacing: 10) {
+                                    Image(systemName: "circle.fill")
+                                        .font(.system(size: 8))
+                                        .foregroundStyle(viewModel.getStatusColor(status.status))
+                                        .padding(.top, 6)
+                                    
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(status.status)
+                                            .font(.subheadline.weight(.semibold))
+                                            .foregroundColor(viewModel.getStatusColor(status.status))
+                                        Text("\(status.user) • \(status.timestamp.formatted(date: .abbreviated, time: .shortened))")
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Notes
+                    if !item.notes.isEmpty {
+                        VStack(alignment: .leading, spacing: 10) {
+                            ForEach(Array(item.notes.enumerated()), id: \.offset) { _, note in
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(note.text)
                                     .font(.subheadline)
@@ -843,31 +824,12 @@ struct WorkOrderDetailView: View {
                         }
                     }
                 }
-                
-                // Close the Notes & Status VStack
-                }
-                
-                // Close the main HStack
-                }
             }
         }
         .padding(16)
         .background(Color(.systemGray6))
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
-    
-    // MARK: - Helper Methods
-    
-    private func setupDebugLogging() {
-        #if DEBUG
-        print("🔍 WorkOrderDetailView: WorkOrder \(viewModel.workOrder.WO_Number) has \(viewModel.workOrder.items.count) items")
-        for (i, item) in viewModel.workOrder.items.enumerated() {
-            print("  Item \(i): type='\(item.type)', images=\(item.imageUrls.count), thumbs=\(item.thumbUrls.count)")
-        }
-        if viewModel.workOrder.items.isEmpty {
-            print("⚠️ WorkOrderDetailView: No items found for work order \(viewModel.workOrder.WO_Number)")
-        }
-        #endif
     }
 }
 
