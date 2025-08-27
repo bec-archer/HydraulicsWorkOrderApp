@@ -440,7 +440,7 @@ struct GridThumbnailView: View {
                                     }
                                 .onLongPressGesture {
                                     onImageLongPress(index)
-                                }
+                                    }
                             } placeholder: {
                                 ProgressView()
                                 .frame(maxWidth: .infinity)
@@ -479,7 +479,7 @@ struct GridThumbnailView: View {
                                     }
                                 .onLongPressGesture {
                                     onImageLongPress(index)
-                                }
+                                    }
                             } placeholder: {
                                 ProgressView()
                                 .frame(width: (thumbHeight - 4) / 2, height: (thumbHeight - 4) / 2)
@@ -567,12 +567,12 @@ struct InfoBlockView: View {
             let itemTypes = getItemTypeCounts()
             if !itemTypes.isEmpty {
                 let itemTypeText = itemTypes.map { "\($0.type) × \($0.count)" }.joined(separator: " • ")
-                Text(itemTypeText)
-                    .font(.subheadline)
-                    .fontWeight(.bold)
-                    .foregroundColor(.secondary.opacity(0.8))
-                    .lineLimit(1)
-                    .truncationMode(.tail)
+                    Text(itemTypeText)
+                        .font(.subheadline)
+                        .fontWeight(.bold)
+                        .foregroundColor(.secondary.opacity(0.8))
+                        .lineLimit(1)
+                        .truncationMode(.tail)
             }
         }
         .confirmationDialog("Contact \(workOrder.customerName)", isPresented: $showingPhoneActions) {

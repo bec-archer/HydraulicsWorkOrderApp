@@ -1,0 +1,34 @@
+{
+	"HydraulicsWorkOrderApp Guardrail": {
+	  "scope": "markdown,plaintext",
+	  "prefix": "guardrail",
+	  "body": [
+		"# 🛑 Cursor Editing Guardrail – Hydraulics Work Order App",
+		"",
+		"**Role:** Assist in editing SwiftUI code for the Hydraulics Work Order App.",
+		"**Objective:** Make only the requested edits without inventing new features, files, or UI.",
+		"",
+		"## 🚫 Do NOT",
+		"- Do **not** change any functionality or UI unless explicitly requested.",
+		"- Do **not** rename models, variables, or files. Must use: `WorkOrder`, `WO_Item`, `WO_Status`, `WO_Note`, `Customer`, etc.",
+		"- Do **not** suggest replacing existing flows.",
+		"- Do **not** output entire files unless explicitly asked.",
+		"- Do **not** rely on your own screenshot interpretation. Only act on screenshots if I explicitly confirm your description is correct.",
+		"",
+		"## ✅ Do",
+		"- **Always anchor edits with `find → replace`** format, showing a few context lines above and below.",
+		"- **Keep file structure intact** per [HydraulicsWorkOrderApp_FileStructure].",
+		"- **Follow Developer Checklist & PRD**.",
+		"- **Use Apple Notes style UI** (grid layout, yellow accents).",
+		"- **End all Swift files with a `#Preview` block**.",
+		"- **Comment heavily** with headers (`// ───── SECTION ─────`) and `// END` markers.",
+		"",
+		"## 🧭 Response Style",
+		"1. Begin with a **concise checklist** (3–7 bullets) of conceptual steps.",
+		"2. Then provide **surgical patch instructions** (not whole rewrites).",
+		"3. After patch: confirm expected result in 1–2 lines.",
+		"4. If context is missing, **stop and ask** before guessing."
+	  ],
+	  "description": "Guardrail instructions for Cursor AI when editing HydraulicsWorkOrderApp, with explicit rule to ignore screenshot interpretations unless confirmed."
+	}
+  }

@@ -362,14 +362,61 @@ struct WorkOrderDetailView: View {
             Section {
                 // Header Section
                 headerSection
+                    .listRowSeparator(.hidden)
                 
                 // Work Order Items Section
                 itemsSection()
             }
+            .listSectionSeparator(.hidden)
         }
+        .listSectionSeparator(.hidden)
+        .listRowSeparator(.hidden)
         .listStyle(PlainListStyle())
-            .padding(.horizontal, 20)
-            .padding(.vertical, 16)
+        .environment(\.defaultMinListRowHeight, 0)
+        .padding(.horizontal, 20)
+        .padding(.vertical, 16)
+        .navigationTitle("Work Order Details")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            if canDelete {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(role: .destructive) {
+                        showDeleteConfirm = true
+                    } label: {
+                        Label("Delete", systemImage: "trash")
+                    }
+                }
+            }
+        }
+        .alert("Delete this Work Order?", isPresented: $showDeleteConfirm) {
+            Button("Delete", role: .destructive) {
+                onDelete?(viewModel.workOrder)
+                dismiss()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This will remove the WorkOrder from Active. Managers/Admins can still access it in Deleted WorkOrders.")
+        }
+        .alert("Error", isPresented: $viewModel.showError) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(viewModel.errorMessage ?? "An error occurred")
+        }
+        .overlay {
+            if showImageViewer, let url = selectedImageURL {
+                FullScreenImageViewer(imageURL: url, isPresented: $showImageViewer)
+                    .transition(.asymmetric(
+                        insertion: .opacity.combined(with: .scale(scale: 0.8)).animation(.easeOut(duration: 0.3)),
+                        removal: .opacity.combined(with: .scale(scale: 1.1)).animation(.easeIn(duration: 0.2))
+                    ))
+            }
+        }
+        .animation(.easeInOut(duration: 0.3), value: showImageViewer)
+        .onChange(of: showImageViewer) { _, isShowing in
+            if !isShowing {
+                selectedImageURL = nil
+            }
+        }
         .onAppear {
             #if DEBUG
             print("🔍 WorkOrderDetailView: WorkOrder \(viewModel.workOrder.WO_Number) has \(viewModel.workOrder.items.count) items")
@@ -419,37 +466,6 @@ struct WorkOrderDetailView: View {
                     print("  Work Order Number: \(viewModel.workOrder.WO_Number)")
                     print("  Item ID: \(item.id)")
                 }
-            }
-        }
-        .navigationTitle("Work Order Details")
-        .navigationBarTitleDisplayMode(.inline)
-        .alert("Delete this Work Order?", isPresented: $showDeleteConfirm) {
-            Button("Delete", role: .destructive) {
-                onDelete?(viewModel.workOrder)
-                dismiss()
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("This will remove the WorkOrder from Active. Managers/Admins can still access it in Deleted WorkOrders.")
-        }
-        .alert("Error", isPresented: $viewModel.showError) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(viewModel.errorMessage ?? "An error occurred")
-        }
-        .overlay {
-            if showImageViewer, let url = selectedImageURL {
-                FullScreenImageViewer(imageURL: url, isPresented: $showImageViewer)
-                    .transition(.asymmetric(
-                        insertion: .opacity.combined(with: .scale(scale: 0.8)).animation(.easeOut(duration: 0.3)),
-                        removal: .opacity.combined(with: .scale(scale: 1.1)).animation(.easeIn(duration: 0.2))
-                    ))
-            }
-        }
-        .animation(.easeInOut(duration: 0.3), value: showImageViewer)
-        .onChange(of: showImageViewer) { _, isShowing in
-            if !isShowing {
-                selectedImageURL = nil
             }
         }
     }
@@ -541,7 +557,7 @@ struct WorkOrderDetailView: View {
     @ViewBuilder
     private func itemsSection() -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("WO Items")
+            Text("Work Order Items")
                 .font(.title3.weight(.semibold))
             
             if viewModel.workOrder.items.isEmpty {
@@ -600,6 +616,37 @@ struct WorkOrderDetailView: View {
                 
                 Spacer()
                 
+                // Reasons for Service section
+                if !item.reasonsForService.isEmpty {
+                    VStack(alignment: .trailing, spacing: 4) {
+                        Text("Reasons for Service")
+                            .font(.subheadline)
+                            .fontWeight(.bold)
+                        
+                        VStack(alignment: .trailing, spacing: 2) {
+                            ForEach(item.reasonsForService, id: \.self) { reason in
+                                HStack {
+                                    Text(reason)
+                                        .font(.caption)
+                                        .fontWeight(.medium)
+                                    
+                                    Button {
+                                        Task {
+                                            await viewModel.toggleReasonCompletion(reason, for: itemIndex)
+                                        }
+                                    } label: {
+                                        Image(systemName: viewModel.isReasonCompleted(reason, for: item) ? "checkmark.square.fill" : "square")
+                                            .foregroundColor(viewModel.isReasonCompleted(reason, for: item) ? .green : .primary)
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                Spacer()
+                
                 // Status badge (clickable)
                 Button {
                     viewModel.selectedItemIndex = itemIndex
@@ -617,41 +664,38 @@ struct WorkOrderDetailView: View {
                 .buttonStyle(.plain)
             }
             
-            // Images and Notes & Status side by side
-            HStack(alignment: .top, spacing: 16) {
-                // Images section (left side)
-                if !item.imageUrls.isEmpty {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Images")
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-                        
+            // Main content area with GeometryReader for precise control
+            GeometryReader { geometry in
+                HStack(alignment: .top, spacing: 16) {
+                    // Images section - 45% width
+                    if !item.imageUrls.isEmpty {
                         VStack(alignment: .leading, spacing: 12) {
-                            // First image (adaptive square)
+                            // Main image
                             if let firstUrl = URL(string: item.imageUrls[0]) {
                                 Button {
                                     selectedImageURL = firstUrl
                                     showImageViewer = true
                                 } label: {
-                                    AsyncImage(url: firstUrl) { (phase: AsyncImagePhase) in
+                                    AsyncImage(url: firstUrl) { phase in
                                         switch phase {
                                         case .empty:
                                             ProgressView()
-                                                .aspectRatio(1, contentMode: .fit)
+                                                .frame(width: geometry.size.width * 0.45 - 32, height: 200)
                                                 .clipShape(RoundedRectangle(cornerRadius: 12))
                                         case .success(let image):
                                             image
                                                 .resizable()
                                                 .scaledToFill()
-                                                .aspectRatio(1, contentMode: .fit)
+                                                .frame(width: geometry.size.width * 0.45 - 32, height: 200)
+                                                .clipped()
                                                 .clipShape(RoundedRectangle(cornerRadius: 12))
                                         case .failure:
                                             Color.gray
-                                                .aspectRatio(1, contentMode: .fit)
+                                                .frame(width: geometry.size.width * 0.45 - 32, height: 200)
                                                 .clipShape(RoundedRectangle(cornerRadius: 12))
                                         @unknown default:
                                             Color.gray
-                                                .aspectRatio(1, contentMode: .fit)
+                                                .frame(width: geometry.size.width * 0.45 - 32, height: 200)
                                                 .clipShape(RoundedRectangle(cornerRadius: 12))
                                         }
                                     }
@@ -659,38 +703,36 @@ struct WorkOrderDetailView: View {
                                 .buttonStyle(.plain)
                             }
                             
-                            // Additional images in 2x2 grid below main image
+                            // Thumbnail grid
                             if item.imageUrls.count > 1 {
                                 let additionalImages = Array(item.imageUrls.dropFirst())
-                                LazyVGrid(columns: [
-                                    GridItem(.flexible()),
-                                    GridItem(.flexible())
-                                ], spacing: 8) {
+                                HStack(spacing: 8) {
                                     ForEach(Array(additionalImages.enumerated()), id: \.offset) { _, urlString in
                                         if let url = URL(string: urlString) {
                                             Button {
                                                 selectedImageURL = url
                                                 showImageViewer = true
                                             } label: {
-                                                AsyncImage(url: url) { (phase: AsyncImagePhase) in
+                                                AsyncImage(url: url) { phase in
                                                     switch phase {
                                                     case .empty:
                                                         ProgressView()
-                                                            .aspectRatio(1, contentMode: .fit)
+                                                            .frame(width: (geometry.size.width * 0.45 - 32 - 8) / 2, height: (geometry.size.width * 0.45 - 32 - 8) / 2)
                                                             .clipShape(RoundedRectangle(cornerRadius: 8))
                                                     case .success(let image):
                                                         image
                                                             .resizable()
                                                             .scaledToFill()
-                                                            .aspectRatio(1, contentMode: .fit)
+                                                            .frame(width: (geometry.size.width * 0.45 - 32 - 8) / 2, height: (geometry.size.width * 0.45 - 32 - 8) / 2)
+                                                            .clipped()
                                                             .clipShape(RoundedRectangle(cornerRadius: 8))
                                                     case .failure:
                                                         Color.gray
-                                                            .aspectRatio(1, contentMode: .fit)
+                                                            .frame(width: (geometry.size.width * 0.45 - 32 - 8) / 2, height: (geometry.size.width * 0.45 - 32 - 8) / 2)
                                                             .clipShape(RoundedRectangle(cornerRadius: 8))
                                                     @unknown default:
                                                         Color.gray
-                                                            .aspectRatio(1, contentMode: .fit)
+                                                            .frame(width: (geometry.size.width * 0.45 - 32 - 8) / 2, height: (geometry.size.width * 0.45 - 32 - 8) / 2)
                                                             .clipShape(RoundedRectangle(cornerRadius: 8))
                                                     }
                                                 }
@@ -701,120 +743,92 @@ struct WorkOrderDetailView: View {
                                 }
                             }
                         }
-                    }
-                }
-                
-                // Notes & Status section (right side)
-                VStack(alignment: .leading, spacing: 12) {
-                    HStack {
-                        Text("Notes & Status")
-                            .font(.headline)
-                        
-                        Spacer()
-                        
-                        Button {
-                            viewModel.selectedItemIndex = itemIndex
-                            viewModel.showAddNoteSheet = true
-                        } label: {
-                            Label("Add Note/Image", systemImage: "plus.circle")
-                                .font(.caption)
-                        }
-                        .buttonStyle(.plain)
+                        .frame(width: geometry.size.width * 0.45)
                     }
                     
-                    // Reasons for Service section
-                    if !item.reasonsForService.isEmpty {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Reasons for Service")
-                                .font(.subheadline)
-                                .fontWeight(.medium)
+                    // Notes & Status section - 55% width
+                    VStack(alignment: .leading, spacing: 16) {
+                        HStack {
+                            Text("Notes & Status")
+                                .font(.headline)
                             
-                            VStack(alignment: .leading, spacing: 4) {
-                                ForEach(item.reasonsForService, id: \.self) { reason in
-                                    HStack {
-                                        Button {
-                                            Task {
-                                                await viewModel.toggleReasonCompletion(reason, for: itemIndex)
-                                            }
-                                        } label: {
-                                            Image(systemName: viewModel.isReasonCompleted(reason, for: item) ? "checkmark.square.fill" : "square")
-                                                .foregroundColor(viewModel.isReasonCompleted(reason, for: item) ? .green : .primary)
+                            Spacer()
+                            
+                            Button {
+                                viewModel.selectedItemIndex = itemIndex
+                                viewModel.showAddNoteSheet = true
+                            } label: {
+                                Label("Add Note/Image", systemImage: "plus.circle")
+                                    .font(.caption)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        
+                        // Status history
+                        if !item.statusHistory.isEmpty {
+                            VStack(alignment: .leading, spacing: 8) {
+                                ForEach(Array(item.statusHistory.enumerated()), id: \.offset) { _, status in
+                                    HStack(alignment: .top, spacing: 10) {
+                                        Image(systemName: "circle.fill")
+                                            .font(.system(size: 8))
+                                            .foregroundStyle(viewModel.getStatusColor(status.status))
+                                            .padding(.top, 6)
+                                        
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text(status.status)
+                                                .font(.subheadline.weight(.semibold))
+                                                .foregroundColor(viewModel.getStatusColor(status.status))
+                                            Text("\(status.user) • \(status.timestamp.formatted(date: .abbreviated, time: .shortened))")
+                                                .font(.caption)
+                                                .foregroundStyle(.secondary)
                                         }
-                                        .buttonStyle(.plain)
-                                        
-                                        Text(reason)
-                                            .font(.subheadline)
-                                        
-                                        Spacer()
                                     }
                                 }
                             }
                         }
-                    }
-                    
-                    // Status history
-                    if !item.statusHistory.isEmpty {
-                        VStack(alignment: .leading, spacing: 8) {
-                            ForEach(Array(item.statusHistory.enumerated()), id: \.offset) { _, status in
-                                HStack(alignment: .top, spacing: 10) {
-                                    Image(systemName: "circle.fill")
-                                        .font(.system(size: 8))
-                                        .foregroundStyle(viewModel.getStatusColor(status.status))
-                                        .padding(.top, 6)
-                                    
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(status.status)
-                                            .font(.subheadline.weight(.semibold))
-                                            .foregroundColor(viewModel.getStatusColor(status.status))
-                                        Text("\(status.user) • \(status.timestamp.formatted(date: .abbreviated, time: .shortened))")
+                        
+                        // Notes
+                        if !item.notes.isEmpty {
+                            VStack(alignment: .leading, spacing: 10) {
+                                ForEach(Array(item.notes.enumerated()), id: \.offset) { _, note in
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text(note.text)
+                                            .font(.subheadline)
+                                        Text("\(note.user) • \(note.timestamp.formatted(date: .abbreviated, time: .shortened))")
                                             .font(.caption)
                                             .foregroundStyle(.secondary)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    
-                    // Notes
-                    if !item.notes.isEmpty {
-                        VStack(alignment: .leading, spacing: 10) {
-                            ForEach(Array(item.notes.enumerated()), id: \.offset) { _, note in
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(note.text)
-                                    .font(.subheadline)
-                                Text("\(note.user) • \(note.timestamp.formatted(date: .abbreviated, time: .shortened))")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                
-                                // Note-attached images
-                                if !note.imageURLs.isEmpty {
-                                    ScrollView(.horizontal, showsIndicators: false) {
-                                        HStack(spacing: 8) {
-                                            ForEach(Array(note.imageURLs.enumerated()), id: \.offset) { _, urlStr in
-                                                if let url = URL(string: urlStr) {
-                                                    Button {
-                                                        selectedImageURL = url
-                                                        showImageViewer = true
-                                                    } label: {
-                                                        AsyncImage(url: url) { (phase: AsyncImagePhase) in
-                                                            switch phase {
-                                                            case .empty:
-                                                                ProgressView()
-                                                                    .frame(width: 72, height: 72)
-                                                            case .success(let img):
-                                                                img.resizable().scaledToFill()
-                                                                    .frame(width: 72, height: 72)
-                                                                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                                                            case .failure:
-                                                                Color.gray.frame(width: 72, height: 72)
-                                                                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                                                            @unknown default:
-                                                                Color.gray.frame(width: 72, height: 72)
-                                                                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                                        
+                                        // Note-attached images
+                                        if !note.imageURLs.isEmpty {
+                                            ScrollView(.horizontal, showsIndicators: false) {
+                                                HStack(spacing: 8) {
+                                                    ForEach(Array(note.imageURLs.enumerated()), id: \.offset) { _, urlStr in
+                                                        if let url = URL(string: urlStr) {
+                                                            Button {
+                                                                selectedImageURL = url
+                                                                showImageViewer = true
+                                                            } label: {
+                                                                AsyncImage(url: url) { phase in
+                                                                    switch phase {
+                                                                    case .empty:
+                                                                        ProgressView()
+                                                                            .frame(width: 72, height: 72)
+                                                                    case .success(let img):
+                                                                        img.resizable().scaledToFill()
+                                                                            .frame(width: 72, height: 72)
+                                                                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                                                                    case .failure:
+                                                                        Color.gray.frame(width: 72, height: 72)
+                                                                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                                                                    @unknown default:
+                                                                        Color.gray.frame(width: 72, height: 72)
+                                                                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                                                                    }
+                                                                }
                                                             }
+                                                            .buttonStyle(.plain)
                                                         }
                                                     }
-                                                    .buttonStyle(.plain)
                                                 }
                                             }
                                         }
@@ -823,13 +837,14 @@ struct WorkOrderDetailView: View {
                             }
                         }
                     }
+                    .frame(width: geometry.size.width * 0.55)
                 }
             }
+            .frame(height: 400) // Fixed height to prevent layout issues
         }
         .padding(16)
         .background(Color(.systemGray6))
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-    }
     }
 }
 
@@ -1332,23 +1347,23 @@ struct ImagePicker: UIViewControllerRepresentable {
 #Preview {
     WorkOrderDetailView(
         workOrder: WorkOrder(
-            id: UUID().uuidString,
+            id: "preview-work-order-id",
             createdBy: "Preview User",
             customerId: "preview-customer-id",
-            customerName: "Maria Hydraulic",
-            customerCompany: nil,
-            customerEmail: nil,
+            customerName: "Bec Archer",
+            customerCompany: "Hydraulic Solutions Inc.",
+            customerEmail: "bec@hydraulics.com",
             customerTaxExempt: false,
-            customerPhone: "555-1212",
-            WO_Type: "Pump",
+            customerPhone: "239-246-7352",
+            WO_Type: "Cylinder",
             imageURL: nil,
             imageURLs: nil,
             timestamp: Date(),
-            status: "Checked In",
-            WO_Number: "250818-001",
-            flagged: true,
-            tagId: nil,
-            estimatedCost: nil,
+            status: "Disassembly",
+            WO_Number: "250827-785",
+            flagged: false,
+            tagId: "TAG-001",
+            estimatedCost: "1250.00",
             finalCost: nil,
             dropdowns: [:],
             dropdownSchemaVersion: 1,
@@ -1357,7 +1372,63 @@ struct ImagePicker: UIViewControllerRepresentable {
             tagBypassReason: nil,
             isDeleted: false,
             notes: [],
-            items: []
+            items: [
+                WO_Item(
+                    id: UUID(),
+                    woItemId: "250827-785-WOI-001",
+                    tagId: "TAG-001",
+                    imageUrls: [
+                        "https://picsum.photos/400/400?random=1",
+                        "https://picsum.photos/200/200?random=2",
+                        "https://picsum.photos/200/200?random=3",
+                        "https://picsum.photos/200/200?random=4"
+                    ],
+                    thumbUrls: [],
+                    type: "Cylinder",
+                    dropdowns: [:],
+                    dropdownSchemaVersion: 1,
+                    reasonsForService: ["Replace Seals", "Inspect Piston", "Check for Wear"],
+                    reasonNotes: nil,
+                    completedReasons: [],
+                    statusHistory: [
+                        WO_Status(status: "Checked In", user: "Tech", timestamp: Date().addingTimeInterval(-86400)),
+                        WO_Status(status: "Disassembly", user: "Tech", timestamp: Date())
+                    ],
+                    testResult: nil,
+                    partsUsed: nil,
+                    hoursWorked: nil,
+                    cost: nil,
+                    assignedTo: "",
+                    isFlagged: false,
+                    tagReplacementHistory: nil
+                ),
+                WO_Item(
+                    id: UUID(),
+                    woItemId: "250827-785-WOI-002",
+                    tagId: "TAG-002",
+                    imageUrls: [
+                        "https://picsum.photos/400/400?random=5",
+                        "https://picsum.photos/200/200?random=6"
+                    ],
+                    thumbUrls: [],
+                    type: "Pump",
+                    dropdowns: [:],
+                    dropdownSchemaVersion: 1,
+                    reasonsForService: ["Replace Bearings", "Check Pressure"],
+                    reasonNotes: nil,
+                    completedReasons: [],
+                    statusHistory: [
+                        WO_Status(status: "Checked In", user: "Tech", timestamp: Date().addingTimeInterval(-7200))
+                    ],
+                    testResult: nil,
+                    partsUsed: nil,
+                    hoursWorked: nil,
+                    cost: nil,
+                    assignedTo: "",
+                    isFlagged: false,
+                    tagReplacementHistory: nil
+                )
+            ]
         ),
         onDelete: nil,
         onAddItemNote: nil,
