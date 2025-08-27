@@ -123,6 +123,7 @@ struct WOItemAccordionRow: View {
         @State private var items: [WO_Item] = [
             WO_Item(
                 id: UUID(),
+                woItemId: "250826-001-WOI-001",
                 tagId: "XYZ123",
                 imageUrls: [],
                 thumbUrls: [],

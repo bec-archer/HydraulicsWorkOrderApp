@@ -99,7 +99,6 @@ struct AddWOItemFormView: View {
                 woItemId: item.id,
                 showQR: true,
                 onScanQR: {
-                    // ───── QR Scan Tap (stub) ─────
                     print("Scan QR Code tapped for item \(item.id)")
                 },
                 onImagesChanged: {

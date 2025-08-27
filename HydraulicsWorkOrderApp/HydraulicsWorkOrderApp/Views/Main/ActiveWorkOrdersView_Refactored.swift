@@ -24,8 +24,6 @@ class ActiveWorkOrdersViewModel: ObservableObject {
     // MARK: - Private Properties
     private var cancellables = Set<AnyCancellable>()
     private let workOrdersDB = WorkOrdersDatabase.shared
-    // TODO: Re-enable after fixing module resolution
-    // private let imageService = ImageManagementService.shared
     
     // MARK: - Computed Properties
     var activeWorkOrders: [WorkOrder] {
@@ -98,24 +96,7 @@ class ActiveWorkOrdersViewModel: ObservableObject {
                 switch result {
                 case .success(_):
                     // Data is already loaded into the @ObservedObject workOrdersDB
-                    
-                    // Run migration for existing work orders to have WO Item IDs
-                    self?.workOrdersDB.migrateExistingWorkOrdersToHaveWOItemIds { migrationResult in
-                        DispatchQueue.main.async {
-                            switch migrationResult {
-                            case .success:
-                                #if DEBUG
-                                print("✅ WO Item ID migration completed successfully")
-                                #endif
-                            case .failure(let error):
-                                #if DEBUG
-                                print("⚠️ WO Item ID migration failed: \(error.localizedDescription)")
-                                #endif
-                                // Don't show error to user as this is a background migration
-                            }
-                        }
-                    }
-                    
+                    break
                 case .failure(let error):
                     self?.setError(error.localizedDescription)
                 }
@@ -181,7 +162,7 @@ class ActiveWorkOrdersViewModel: ObservableObject {
 }
 
 // MARK: - View
-struct ActiveWorkOrdersView: View {
+struct ActiveWorkOrdersView_Refactored: View {
     // MARK: - ViewModel
     @StateObject private var viewModel = ActiveWorkOrdersViewModel()
     
@@ -284,6 +265,6 @@ struct ActiveWorkOrdersView: View {
 
 // MARK: - Preview
 #Preview {
-    ActiveWorkOrdersView()
+    ActiveWorkOrdersView_Refactored()
         .environmentObject(AppState.shared)
 }

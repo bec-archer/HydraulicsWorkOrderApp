@@ -12,246 +12,8 @@
 import SwiftUI
 import FirebaseFirestore
 import FirebaseFirestoreSwift
-import Combine
-import FirebaseStorage
 
-// MARK: - ViewModel (Temporarily included for testing)
-@MainActor
-class NewWorkOrderViewModel: ObservableObject {
-    // MARK: - Published Properties
-    @Published var selectedCustomer: Customer?
-    @Published var items: [WO_Item] = []
-    @Published var isLoading = false
-    @Published var errorMessage: String?
-    @Published var showError = false
-    @Published var canCheckIn = false
-    
-    // MARK: - Private Properties
-    private var cancellables = Set<AnyCancellable>()
-    private let workOrdersDB = WorkOrdersDatabase.shared
-    private let customerDB = CustomerDatabase.shared
-    // TODO: Re-enable after fixing module resolution
-    // private let imageService = ImageManagementService.shared
-    
-    // MARK: - Computed Properties
-    var workOrderNumber: String {
-        WorkOrderNumberGenerator.make(sequence: Int(Date().timeIntervalSince1970.truncatingRemainder(dividingBy: 1000)))
-    }
-    
-    var hasValidCustomer: Bool {
-        selectedCustomer != nil
-    }
-    
-    var hasValidItems: Bool {
-        !items.isEmpty && items.allSatisfy { item in
-            itemHasType(item) && 
-            itemHasPhoto(item) && 
-            !item.reasonsForService.isEmpty
-        }
-    }
-    
-    // MARK: - Validation Helpers
-    private func itemHasType(_ item: WO_Item) -> Bool {
-        let t = item.type.isEmpty ? (item.dropdowns["type"] ?? "") : item.type
-        return !t.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-    }
-
-    private func itemHasPhoto(_ item: WO_Item) -> Bool {
-        return !item.thumbUrls.isEmpty || !item.imageUrls.isEmpty
-    }
-
-    private func isCompleteItem(_ item: WO_Item) -> Bool {
-        return itemHasType(item) && itemHasPhoto(item) && !item.reasonsForService.isEmpty
-    }
-    
-    private func isBlankItem(_ item: WO_Item) -> Bool {
-        return !itemHasType(item) && !itemHasPhoto(item)
-    }
-    
-    private func isPartiallyFilledItem(_ item: WO_Item) -> Bool {
-        let hasType = itemHasType(item)
-        let hasPhoto = itemHasPhoto(item)
-        let hasReasons = !item.reasonsForService.isEmpty
-        return (hasType && !hasPhoto) || (!hasType && hasPhoto) || (hasType && hasPhoto && !hasReasons)
-    }
-    
-    // MARK: - Initialization
-    init() {
-        setupBindings()
-        addInitialItem()
-    }
-    
-    // MARK: - Setup
-    private func setupBindings() {
-        Publishers.CombineLatest3(
-            $selectedCustomer,
-            $items,
-            $isLoading
-        )
-        .map { customer, items, loading in
-            guard !loading else { return false }
-            guard customer != nil else { return false }
-            guard !items.isEmpty else { return false }
-            return items.allSatisfy { item in
-                self.itemHasType(item) && 
-                self.itemHasPhoto(item) && 
-                !item.reasonsForService.isEmpty
-            }
-        }
-        .assign(to: &$canCheckIn)
-    }
-    
-    // MARK: - Public Methods
-    func addItem() {
-        var newItem = WO_Item.blank()
-        // Generate WO Item ID for the new item
-        let itemIndex = items.count
-        newItem.woItemId = WO_Item.generateWOItemId(woNumber: workOrderNumber, itemIndex: itemIndex)
-        items.append(newItem)
-    }
-    
-    func removeItem(at index: Int) {
-        guard index >= 0 && index < items.count else { return }
-        items.remove(at: index)
-        
-        // Regenerate WO Item IDs for remaining items to maintain sequential order
-        for (itemIndex, _) in items.enumerated() {
-            items[itemIndex].woItemId = WO_Item.generateWOItemId(woNumber: workOrderNumber, itemIndex: itemIndex)
-        }
-        
-        if items.isEmpty {
-            addInitialItem()
-        }
-    }
-    
-    func updateItem(_ item: WO_Item, at index: Int) {
-        guard index >= 0 && index < items.count else { return }
-        items[index] = item
-    }
-    
-    // MARK: - Image Management
-    
-    /// Upload images for a specific item
-    func uploadImages(_ images: [UIImage], for itemIndex: Int) async {
-        // TODO: Re-enable after fixing module resolution
-        print("Image upload temporarily disabled - module resolution issue")
-    }
-    
-    /// Delete an image from a specific item
-    func deleteImage(_ imageURL: String, from itemIndex: Int) async {
-        // TODO: Re-enable after fixing module resolution
-        print("Image deletion temporarily disabled - module resolution issue")
-    }
-    
-    /// Get image URLs for a specific item
-    func getImageURLs(for itemIndex: Int) async -> [String] {
-        // TODO: Re-enable after fixing module resolution
-        return []
-    }
-    
-    func saveWorkOrder() async {
-        guard let customer = selectedCustomer else {
-            setError("Please select or add a Customer before saving this WorkOrder.")
-            return
-        }
-        
-        let nonBlankItems = items.filter { !isBlankItem($0) }
-        
-        if nonBlankItems.contains(where: { isPartiallyFilledItem($0) }) {
-            setError("Please finish the highlighted WO_Item. Each item needs a Type and at least one Photo.")
-            return
-        }
-        
-        guard !nonBlankItems.isEmpty, nonBlankItems.contains(where: { isCompleteItem($0) }) else {
-            setError("Add at least one WO_Item with a Type and Photo before checking in.")
-            return
-        }
-        
-        isLoading = true
-        errorMessage = nil
-        
-        do {
-            print("📝 DEBUG Save Attempt")
-            print("Customer: \(customer.name) – \(customer.phone)")
-            print("WO_Items count: \(items.count)")
-            
-            let itemsSnapshot = nonBlankItems
-            let builtItems: [WO_Item] = itemsSnapshot.map { $0 }
-            
-            let workOrder = WorkOrder(
-                id: nil,
-                createdBy: "Tech",
-                customerId: customer.id.uuidString,
-                customerName: customer.name,
-                customerCompany: customer.company,
-                customerEmail: customer.email,
-                customerTaxExempt: customer.taxExempt,
-                customerPhone: customer.phone,
-                WO_Type: "Intake",
-                imageURL: nil,
-                imageURLs: [],
-                timestamp: Date(),
-                status: "Checked In",
-                WO_Number: workOrderNumber,
-                flagged: false,
-                tagId: nil,
-                estimatedCost: nil,
-                finalCost: nil,
-                dropdowns: [:],
-                dropdownSchemaVersion: 1,
-                lastModified: Date(),
-                lastModifiedBy: "Tech",
-                tagBypassReason: nil,
-                isDeleted: false,
-                notes: [],
-                items: builtItems
-            )
-            
-            print("🚀 Attempting to save WorkOrder: \(workOrder.WO_Number)")
-            try await withCheckedThrowingContinuation { continuation in
-                workOrdersDB.addWorkOrder(workOrder) { result in
-                    switch result {
-                    case .success(let docId):
-                        print("✅ WorkOrder saved successfully: \(workOrder.WO_Number) with ID: \(docId)")
-                        continuation.resume()
-                    case .failure(let error):
-                        continuation.resume(throwing: error)
-                    }
-                }
-            }
-            
-        } catch {
-            setError("Failed to save work order: \(error.localizedDescription)")
-        }
-        
-        isLoading = false
-    }
-    
-    func resetForm() async {
-        selectedCustomer = nil
-        items.removeAll()
-        addInitialItem()
-        errorMessage = nil
-        showError = false
-    }
-    
-    private func addInitialItem() {
-        if items.isEmpty {
-            var newItem = WO_Item.blank()
-            // Generate WO Item ID for the initial item
-            newItem.woItemId = WO_Item.generateWOItemId(woNumber: workOrderNumber, itemIndex: 0)
-            items.append(newItem)
-        }
-    }
-    
-    private func setError(_ message: String) {
-        errorMessage = message
-        showError = true
-    }
-}
-
-// MARK: - View
-struct NewWorkOrderView: View {
+struct NewWorkOrderView_Refactored: View {
     // MARK: - ViewModel
     @StateObject private var viewModel = NewWorkOrderViewModel()
     
@@ -328,89 +90,89 @@ struct NewWorkOrderView: View {
     @ViewBuilder
     private func customerLookupSection() -> some View {
         VStack(alignment: .leading, spacing: 8) {
-        // Required field header
-        HStack(spacing: 4) {
-            Text("Customer")
-                .font(.headline)
-            Text("*")
-                .foregroundColor(.red)
-                .font(.headline)
-        }
-        .padding(.horizontal, 16)
-        .padding(.top, 8)
-
-        GroupBox {
+            // Required field header
+            HStack(spacing: 4) {
+                Text("Customer")
+                    .font(.headline)
+                Text("*")
+                    .foregroundColor(.red)
+                    .font(.headline)
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 8)
+            
+            GroupBox {
                 if let customer = viewModel.selectedCustomer {
-                // Selected customer summary with inline Clear
-                HStack(alignment: .center, spacing: 8) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(customer.name).font(.headline)
+                    // Selected customer summary with inline Clear
+                    HStack(alignment: .center, spacing: 8) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(customer.name).font(.headline)
                             HStack(spacing: 4) {
-                        Text(customer.phone).font(.subheadline).foregroundStyle(.secondary)
+                                Text(customer.phone).font(.subheadline).foregroundStyle(.secondary)
                                 if let company = customer.company, !company.isEmpty {
                                     Text("•").font(.subheadline).foregroundStyle(.secondary)
                                     Text(company).font(.subheadline).foregroundStyle(.secondary)
                                 }
                             }
-                    }
-                    Spacer()
-                    Button {
+                        }
+                        Spacer()
+                        Button {
                             viewModel.selectedCustomer = nil
-                        customerSearch.resetSearch()
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundColor(.red)
-                            .imageScale(.large)
-                            .padding(.leading, 4)
-                            .accessibilityLabel("Clear selected customer")
+                            customerSearch.resetSearch()
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundColor(.red)
+                                .imageScale(.large)
+                                .padding(.leading, 4)
+                                .accessibilityLabel("Clear selected customer")
+                        }
                     }
-                }
-                .padding(.vertical, 4)
-            } else {
-                VStack(alignment: .leading, spacing: 8) {
+                    .padding(.vertical, 4)
+                } else {
+                    VStack(alignment: .leading, spacing: 8) {
                         TextField("Search by name, phone, or company", text: $customerSearch.searchText)
-                        .textFieldStyle(.roundedBorder)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled(true)
-                        .keyboardType(.default)
-
-                    if !customerSearch.matchingCustomers.isEmpty {
-                        ForEach(customerSearch.matchingCustomers, id: \.id) { customer in
-                            Button {
-                                customerSearch.isPickingCustomer = true
-                                selectCustomer(customer)
-                                customerSearch.resetSearch()
-                                DispatchQueue.main.async { customerSearch.isPickingCustomer = false }
-                            } label: {
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(customer.name)
+                            .textFieldStyle(.roundedBorder)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled(true)
+                            .keyboardType(.default)
+                        
+                        if !customerSearch.matchingCustomers.isEmpty {
+                            ForEach(customerSearch.matchingCustomers, id: \.id) { customer in
+                                Button {
+                                    customerSearch.isPickingCustomer = true
+                                    selectCustomer(customer)
+                                    customerSearch.resetSearch()
+                                    DispatchQueue.main.async { customerSearch.isPickingCustomer = false }
+                                } label: {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(customer.name)
                                         HStack(spacing: 4) {
-                                    Text(customer.phone).font(.caption).foregroundStyle(.secondary)
+                                            Text(customer.phone).font(.caption).foregroundStyle(.secondary)
                                             if let company = customer.company, !company.isEmpty {
                                                 Text("•").font(.caption).foregroundStyle(.secondary)
                                                 Text(company).font(.caption).foregroundStyle(.secondary)
                                             }
                                         }
+                                    }
+                                    .padding(.vertical, 4)
+                                    .contentShape(Rectangle())
                                 }
-                                .padding(.vertical, 4)
-                                .contentShape(Rectangle())
+                                .buttonStyle(.plain)
                             }
-                            .buttonStyle(.plain)
+                        } else if !customerSearch.searchText.isEmpty {
+                            Button {
+                                showingNewCustomerModal = true
+                            } label: {
+                                Label("Add New Customer", systemImage: "plus.circle")
+                                    .foregroundStyle(.blue)
+                            }
+                            .padding(.top, 4)
                         }
-                    } else if !customerSearch.searchText.isEmpty {
-                        Button {
-                            showingNewCustomerModal = true
-                        } label: {
-                            Label("Add New Customer", systemImage: "plus.circle")
-                                .foregroundStyle(.blue)
-                        }
-                        .padding(.top, 4)
                     }
                 }
             }
-        }
-        .padding(.horizontal, 16)
-        .padding(.top, 8)
+            .padding(.horizontal, 16)
+            .padding(.top, 8)
             .animation(nil, value: customerSearch.matchingCustomers.count)
         }
     }
@@ -438,7 +200,7 @@ struct NewWorkOrderView: View {
                         .shadow(color: Color.black.opacity(0.06), radius: 4, x: 0, y: 2)
                 )
             }
-
+            
             // Add Item button
             Button {
                 addNewItem()
@@ -472,7 +234,7 @@ struct NewWorkOrderView: View {
             }
         }
     }
-
+    
     // MARK: - Sticky Check-In
     @ViewBuilder
     private func stickyCheckIn() -> some View {
@@ -480,7 +242,7 @@ struct NewWorkOrderView: View {
             VStack(spacing: 10) {
                 Divider()
                     .padding(.top, 2)
-
+                
                 Button {
                     saveWorkOrder {
                         dismiss()
@@ -503,7 +265,7 @@ struct NewWorkOrderView: View {
             EmptyView()
         }
     }
-
+    
     // MARK: - Save Banner Overlay
     @ViewBuilder
     private func saveBannerOverlay() -> some View {
@@ -545,15 +307,15 @@ struct NewWorkOrderView: View {
             print("⚠️ selectCustomer: already selected, skipping redundant update.")
             return
         }
-
+        
         withTransaction(Transaction(animation: .none)) {
             viewModel.selectedCustomer = customer
             customerSearch.resetSearch()
         }
-
+        
         print("✅ selectCustomer:", customer.id.uuidString, customer.name, customer.phone)
     }
-
+    
     private func addNewItem() {
         print("🔍 Add Item button pressed. items count: \(viewModel.items.count)")
         
@@ -582,10 +344,10 @@ struct NewWorkOrderView: View {
             if !viewModel.showError {
                 // Success
                 savedWONumber = viewModel.workOrderNumber
-                            showSaveBanner = true
-                            draftWOId = UUID().uuidString
-                            onSuccess?()
-
+                showSaveBanner = true
+                draftWOId = UUID().uuidString
+                onSuccess?()
+                
                 // Reset form
                 await viewModel.resetForm()
                 expandedIndices = [0]
@@ -628,6 +390,6 @@ struct NewWorkOrderView: View {
 
 // MARK: - Preview
 #Preview {
-    NewWorkOrderView()
+    NewWorkOrderView_Refactored()
         .environmentObject(AppState.shared)
 }

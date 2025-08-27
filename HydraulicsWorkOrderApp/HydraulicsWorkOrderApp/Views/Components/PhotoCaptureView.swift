@@ -218,7 +218,7 @@ struct PhotoCaptureView: View {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 10) {
                         // Display existing URL-based images first
-                        ForEach(Array(existingImageURLs.enumerated()), id: \.offset) { index, urlString in
+                        ForEach(Array(existingImageURLs.enumerated()), id: \.offset) { _, urlString in
                             if let url = URL(string: urlString) {
                                 AsyncImage(url: url) { phase in
                                     switch phase {
@@ -510,7 +510,7 @@ struct PhotoCaptureUploadView: View {
                 var pendingErrors: [String] = []
 
                 // Upload images sequentially to maintain order
-                for (index, uiImage) in toUpload.enumerated() {
+                for (_, uiImage) in toUpload.enumerated() {
                     do {
                         // 🔧 Ensure image is < 5 MB per Storage rules before uploading
                         let prepared = compressForFirebase(uiImage)

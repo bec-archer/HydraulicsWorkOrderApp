@@ -61,16 +61,25 @@ struct AddWOItemView: View {
         guard !type.isEmpty else { return }
 
         let newItem = WO_Item(
+            id: UUID(),
+            woItemId: nil,  // Will be set when added to work order
             tagId: tagId.isEmpty ? nil : tagId,
+            imageUrls: [],
+            thumbUrls: [],
             type: type,
             dropdowns: [:],
+            dropdownSchemaVersion: 1,
             reasonsForService: reason.isEmpty ? [] : [reason],
             reasonNotes: nil,
-            imageUrls: [],
-            localImages: [],
-            lastModified: Date(),
-            dropdownSchemaVersion: 1,
-            lastModifiedBy: nil
+            completedReasons: [],
+            statusHistory: [],
+            testResult: nil,
+            partsUsed: nil,
+            hoursWorked: nil,
+            cost: nil,
+            assignedTo: "",
+            isFlagged: isFlagged,
+            tagReplacementHistory: nil
         )
 
         items.append(newItem)

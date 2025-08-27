@@ -197,9 +197,11 @@ final class WorkOrdersDatabase: ObservableObject {
 
                 for doc in docs {
                     do {
-                        let wo = try doc.data(as: WorkOrder.self)
-                        // Don't manually set @DocumentID - let Firestore handle it
-                        // if wo.id == nil { wo.id = doc.documentID } // backfill if custom decoder didn't set it
+                        var wo = try doc.data(as: WorkOrder.self)
+                        // Manually set @DocumentID if it's missing
+                        if wo.id == nil || wo.id!.isEmpty {
+                            wo.id = doc.documentID
+                        }
                         decoded.append(wo)
                     } catch let DecodingError.keyNotFound(key, context) {
                         // ───── Lossy fallback for legacy docs (try once) ─────
@@ -216,9 +218,11 @@ final class WorkOrdersDatabase: ObservableObject {
                             var raw = doc.data()
                             if raw["imageURLs"] == nil { raw["imageURLs"] = [] }
                             do {
-                                let wo = try Firestore.Decoder().decode(WorkOrder.self, from: raw)
-                                // Don't manually set @DocumentID - let Firestore handle it
-                                // if patched.id == nil { patched.id = doc.documentID }
+                                var wo = try Firestore.Decoder().decode(WorkOrder.self, from: raw)
+                                // Manually set @DocumentID if it's missing
+                                if wo.id == nil || wo.id!.isEmpty {
+                                    wo.id = doc.documentID
+                                }
                                 decoded.append(wo)
                                 #if DEBUG
                                 print("ℹ️ Patched missing imageURLs for \(doc.documentID)")
@@ -248,9 +252,11 @@ final class WorkOrdersDatabase: ObservableObject {
                         var raw = doc.data()
                         if raw["imageURLs"] == nil { raw["imageURLs"] = [] }
                         do {
-                            let wo = try Firestore.Decoder().decode(WorkOrder.self, from: raw)
-                            // Don't manually set @DocumentID - let Firestore handle it
-                            // if patched.id == nil { patched.id = doc.documentID }
+                            var wo = try Firestore.Decoder().decode(WorkOrder.self, from: raw)
+                            // Manually set @DocumentID if it's missing
+                            if wo.id == nil || wo.id!.isEmpty {
+                                wo.id = doc.documentID
+                            }
                             decoded.append(wo)
                             #if DEBUG
                             print("ℹ️ Patched valueNotFound(imageURLs) for \(doc.documentID)")
@@ -300,7 +306,18 @@ final class WorkOrdersDatabase: ObservableObject {
                 // Preserve local deletions when updating cache
                 DispatchQueue.main.async {
                     // Create a map of existing work orders by WO_Number for quick lookup
-                    let existingByNumber = Dictionary(uniqueKeysWithValues: self.workOrders.map { ($0.WO_Number, $0) })
+                    // Handle duplicates by keeping the most recent one (highest timestamp)
+                    var existingByNumber: [String: WorkOrder] = [:]
+                    for workOrder in self.workOrders {
+                        if let existing = existingByNumber[workOrder.WO_Number] {
+                            // If we have a duplicate, keep the one with the higher timestamp
+                            if workOrder.timestamp > existing.timestamp {
+                                existingByNumber[workOrder.WO_Number] = workOrder
+                            }
+                        } else {
+                            existingByNumber[workOrder.WO_Number] = workOrder
+                        }
+                    }
                     
                     // Merge Firestore data with local deletions
                     let merged = deduped.map { firestoreWO in
@@ -580,8 +597,8 @@ final class WorkOrdersDatabase: ObservableObject {
         #endif
 
         // Break up the large initializer to help the type checker
-        // Don't manually set @DocumentID - let Firestore handle it
-        let safeId: String?      = nil
+        // Set the document ID manually
+        let safeId: String?      = doc.documentID
         let safeCreatedBy        = lossy.createdBy ?? ""
         let safePhone            = lossy.phoneNumber ?? ""
         let safeCustomerId        = lossy.customerId ?? ""
@@ -702,6 +719,7 @@ final class WorkOrdersDatabase: ObservableObject {
 
                 let item = WO_Item(
                     id: itemId,
+                    woItemId: nil,  // Will be set when needed
                     tagId: tagId,
                     imageUrls: urls,
                     thumbUrls: thumbUrls,
@@ -734,7 +752,7 @@ final class WorkOrdersDatabase: ObservableObject {
         #endif
 
         let wo = WorkOrder(
-            id: nil, // Don't manually set @DocumentID - let Firestore handle it
+            id: id, // Set the document ID manually
             createdBy: createdBy,
             customerId: custId,
             customerName: custName,
@@ -1188,6 +1206,100 @@ final class WorkOrdersDatabase: ObservableObject {
         }
     }
     // END updateCompletedReasons
+
+    // ───── MIGRATE EXISTING WORK ORDERS TO HAVE WO ITEM IDS ─────
+    /// Generates WO Item IDs for existing work orders that don't have them.
+    /// This is a one-time migration function for backward compatibility.
+    func migrateExistingWorkOrdersToHaveWOItemIds(completion: @escaping (Result<Void, Error>) -> Void) {
+        #if DEBUG
+        print("🔄 Starting WO Item ID migration for existing work orders...")
+        #endif
+        
+        let workOrdersToMigrate = workOrders.filter { workOrder in
+            workOrder.items.contains { item in
+                item.woItemId == nil
+            }
+        }
+        
+        guard !workOrdersToMigrate.isEmpty else {
+            #if DEBUG
+            print("✅ No work orders need WO Item ID migration")
+            #endif
+            completion(.success(()))
+            return
+        }
+        
+        #if DEBUG
+        print("📋 Found \(workOrdersToMigrate.count) work orders that need WO Item ID migration")
+        #endif
+        
+        let group = DispatchGroup()
+        var errors: [Error] = []
+        
+        for workOrder in workOrdersToMigrate {
+            group.enter()
+            
+            // Generate WO Item IDs for items that don't have them
+            var updatedWorkOrder = workOrder
+            for (itemIndex, item) in updatedWorkOrder.items.enumerated() {
+                if item.woItemId == nil {
+                    updatedWorkOrder.items[itemIndex].woItemId = WO_Item.generateWOItemId(
+                        woNumber: workOrder.WO_Number,
+                        itemIndex: itemIndex
+                    )
+                    #if DEBUG
+                    print("   📝 Generated WO Item ID for \(workOrder.WO_Number): \(updatedWorkOrder.items[itemIndex].woItemId ?? "nil")")
+                    #endif
+                }
+            }
+            
+            // Update in Firestore
+            guard let woId = workOrder.id, !woId.isEmpty else {
+                #if DEBUG
+                print("   ⚠️ Skipping work order \(workOrder.WO_Number) - no valid ID")
+                #endif
+                group.leave()
+                continue
+            }
+            
+            let docRef = db.collection(collectionName).document(woId)
+            try? docRef.setData(from: updatedWorkOrder, merge: false) { error in
+                if let error = error {
+                    #if DEBUG
+                    print("   ❌ Failed to migrate \(workOrder.WO_Number): \(error.localizedDescription)")
+                    #endif
+                    errors.append(error)
+                } else {
+                    #if DEBUG
+                    print("   ✅ Successfully migrated \(workOrder.WO_Number)")
+                    #endif
+                    
+                    // Update local cache
+                    DispatchQueue.main.async {
+                        if let cacheIdx = self.workOrders.firstIndex(where: { $0.WO_Number == workOrder.WO_Number }) {
+                            self.workOrders[cacheIdx] = updatedWorkOrder
+                        }
+                    }
+                }
+                group.leave()
+            }
+        }
+        
+        group.notify(queue: .main) {
+            if errors.isEmpty {
+                #if DEBUG
+                print("✅ WO Item ID migration completed successfully")
+                #endif
+                completion(.success(()))
+            } else {
+                #if DEBUG
+                print("❌ WO Item ID migration failed with \(errors.count) errors")
+                #endif
+                completion(.failure(errors.first!))
+            }
+        }
+    }
+    // END migrateExistingWorkOrdersToHaveWOItemIds
 
     // END
 }

@@ -496,8 +496,6 @@ struct GridThumbnailView: View {
 struct InfoBlockView: View {
     let workOrder: WorkOrder
     @Environment(\.openURL) private var openURL
-    @State private var showingItemTooltip = false
-    @State private var tooltipTimer: Timer?
     @State private var showingPhoneActions = false
 
     var body: some View {
@@ -569,49 +567,12 @@ struct InfoBlockView: View {
             let itemTypes = getItemTypeCounts()
             if !itemTypes.isEmpty {
                 let itemTypeText = itemTypes.map { "\($0.type) × \($0.count)" }.joined(separator: " • ")
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(itemTypeText)
-                        .font(.subheadline)
-                        .fontWeight(.bold)
-                        .foregroundColor(.secondary.opacity(0.8))
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                        .onLongPressGesture {
-                            // Cancel existing timer if any
-                            tooltipTimer?.invalidate()
-                            tooltipTimer = nil
-                            
-                            // Show tooltip with animation
-                            withAnimation(.easeInOut(duration: 0.2)) {
-                                showingItemTooltip = true
-                            }
-                            
-                            // Haptic feedback
-                            let generator = UIImpactFeedbackGenerator(style: .light)
-                            generator.impactOccurred()
-                            
-                            // Set timer to hide tooltip
-                            tooltipTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: false) { _ in
-                                withAnimation(.easeInOut(duration: 0.2)) {
-                                    showingItemTooltip = false
-                                }
-                            }
-                        }
-                    
-                    if showingItemTooltip {
-                        Text(itemTypeText)
-                            .font(.subheadline)
-                            .foregroundColor(.white)
-                            .padding(8)
-                            .background(Color.black.opacity(0.8))
-                            .cornerRadius(8)
-                            .transition(.opacity.combined(with: .move(edge: .top)))
-                    }
-                }
-                .onDisappear {
-                    tooltipTimer?.invalidate()
-                    tooltipTimer = nil
-                }
+                Text(itemTypeText)
+                    .font(.subheadline)
+                    .fontWeight(.bold)
+                    .foregroundColor(.secondary.opacity(0.8))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
             }
         }
         .confirmationDialog("Contact \(workOrder.customerName)", isPresented: $showingPhoneActions) {

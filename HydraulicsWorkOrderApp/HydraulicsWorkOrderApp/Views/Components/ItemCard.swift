@@ -453,6 +453,7 @@ private struct NoteCameraCaptureView: UIViewControllerRepresentable {
 
     let sampleItem = WO_Item(
         id: UUID(),
+        woItemId: "250826-001-WOI-001",
         tagId: "ABC123",
         imageUrls: ["https://example.com/full.jpg"],
         thumbUrls: ["https://example.com/thumb.jpg"],
