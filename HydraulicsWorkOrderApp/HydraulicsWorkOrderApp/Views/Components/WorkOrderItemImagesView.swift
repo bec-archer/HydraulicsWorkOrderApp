@@ -7,7 +7,7 @@ struct WorkOrderItemImagesView: View {
     var onShowAllThumbs: (() -> Void)? = nil
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 8) {
             // Primary Image
             if !item.imageUrls.isEmpty, let firstUrl = URL(string: item.imageUrls[0]) {
                 Button {
@@ -16,12 +16,14 @@ struct WorkOrderItemImagesView: View {
                 } label: {
                     StableImageLoader(url: firstUrl)
                         .aspectRatio(1, contentMode: .fit)
+                        .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.plain)
             } else {
                 Rectangle()
                     .fill(Color(.systemGray5))
                     .aspectRatio(1, contentMode: .fit)
+                    .frame(maxWidth: .infinity)
                     .mask { RoundedRectangle(cornerRadius: 8, style: .continuous) }
                     .overlay(
                         Image(systemName: "photo")
@@ -33,14 +35,17 @@ struct WorkOrderItemImagesView: View {
             // Thumbnail Grid
             if item.imageUrls.count > 1 {
                 let displayImages = Array(item.imageUrls.dropFirst())
+                let maxThumbnails = 4
+                let thumbnailsToShow = Array(displayImages.prefix(maxThumbnails))
+                let hasMoreImages = displayImages.count > maxThumbnails
                 
                 LazyVGrid(columns: [
                     GridItem(.flexible()),
                     GridItem(.flexible())
-                ], spacing: 6) {
-                    ForEach(Array(displayImages.enumerated()), id: \.offset) { idx, urlString in
+                ], spacing: 8) {
+                    ForEach(Array(thumbnailsToShow.enumerated()), id: \.offset) { idx, urlString in
                         Button {
-                            if idx == 3 && displayImages.count > 4 {
+                            if idx == 3 && hasMoreImages {
                                 onShowAllThumbs?()
                             } else if let url = URL(string: urlString) {
                                 selectedImageURL = url
@@ -51,12 +56,12 @@ struct WorkOrderItemImagesView: View {
                                 StableImageLoader(url: URL(string: urlString)!)
                                     .aspectRatio(1, contentMode: .fit)
                                 
-                                if idx == 3 && displayImages.count > 4 {
+                                if idx == 3 && hasMoreImages {
                                     Color.black.opacity(0.5)
                                         .aspectRatio(1, contentMode: .fit)
                                         .mask { RoundedRectangle(cornerRadius: 8, style: .continuous) }
                                     
-                                    Text("+\(displayImages.count - 4)")
+                                    Text("+\(displayImages.count - maxThumbnails)")
                                         .font(.headline)
                                         .fontWeight(.bold)
                                         .foregroundColor(.white)
@@ -68,6 +73,7 @@ struct WorkOrderItemImagesView: View {
                 }
             }
         }
+        .padding(.horizontal, 12)
     }
     
 
@@ -89,7 +95,6 @@ struct StableImageLoader: View {
                     .mask { RoundedRectangle(cornerRadius: 8, style: .continuous) }
             } else if isLoading {
                 ProgressView()
-                    .aspectRatio(1, contentMode: .fit)
             } else {
                 Color.gray
                     .mask { RoundedRectangle(cornerRadius: 8, style: .continuous) }
@@ -100,6 +105,7 @@ struct StableImageLoader: View {
                     )
             }
         }
+        .aspectRatio(1, contentMode: .fit)
         .onAppear {
             loadImage()
         }

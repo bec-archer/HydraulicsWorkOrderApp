@@ -103,6 +103,22 @@ class WorkOrderDetailViewModel: ObservableObject {
                 self?.objectWillChange.send()
             }
             .store(in: &cancellables)
+        
+        // Listen for work order updates from the database
+        NotificationCenter.default.publisher(for: .WorkOrderSaved)
+            .sink { [weak self] notification in
+                guard let self = self,
+                      let woNumber = notification.userInfo?["WO_Number"] as? String,
+                      woNumber == self.workOrder.WO_Number else { return }
+                
+                print("🔄 WorkOrderDetailViewModel: Received notification for WO \(woNumber)")
+                
+                // Update the work order from the database
+                Task { @MainActor in
+                    await self.refreshWorkOrder()
+                }
+            }
+            .store(in: &cancellables)
     }
     
     // MARK: - Public Methods
@@ -195,6 +211,9 @@ class WorkOrderDetailViewModel: ObservableObject {
             
             // Save to Firebase using addItemNote method
             let workOrderId = workOrder.id ?? ""
+            print("🔍 DEBUG: Adding note - workOrder.id: '\(workOrder.id ?? "nil")'")
+            print("🔍 DEBUG: Adding note - workOrderId: '\(workOrderId)'")
+            print("🔍 DEBUG: Adding note - workOrder.WO_Number: '\(workOrder.WO_Number)'")
             guard !workOrderId.isEmpty else {
                 setError("Work order ID is missing")
                 return
@@ -219,18 +238,22 @@ class WorkOrderDetailViewModel: ObservableObject {
                                 itemId: self.workOrder.items[itemIndex].id,
                                 imageURLs: imageURLs,
                                 uploadedBy: "Tech"
-                            ) { result in
-                                switch result {
+                            ) { imageResult in
+                                switch imageResult {
                                 case .success:
                                     print("📸 IMAGES: Added \(imageURLs.count) images to item collection")
+                                    // Both note and images are now saved, resume continuation
+                                    continuation.resume()
                                 case .failure(let error):
                                     print("⚠️ IMAGES: Failed to add to item collection: \(error)")
                                     // Don't fail the note save if image persistence fails
+                                    continuation.resume()
                                 }
                             }
+                        } else {
+                            // No images to add, resume continuation
+                            continuation.resume()
                         }
-                        
-                        continuation.resume()
                     case .failure(let error):
                         print("❌ NOTE: Failed to save: \(error.localizedDescription)")
                         continuation.resume(throwing: error)
@@ -304,9 +327,34 @@ class WorkOrderDetailViewModel: ObservableObject {
         isLoading = true
         errorMessage = nil
         
-        // TODO: Implement refresh functionality when getWorkOrder method is available
-        // For now, just return success without refreshing
-        print("⚠️ Refresh functionality not yet implemented")
+        print("🔄 WorkOrderDetailViewModel: Starting refresh for \(workOrder.WO_Number)")
+        
+        do {
+            let updatedWorkOrder = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<WorkOrder, Error>) in
+                workOrdersDB.fetchWorkOrder(woId: workOrder.id ?? "") { result in
+                    switch result {
+                    case .success(let wo):
+                        continuation.resume(returning: wo)
+                    case .failure(let error):
+                        continuation.resume(throwing: error)
+                    }
+                }
+            }
+            
+            await MainActor.run {
+                let oldImageCount = self.workOrder.items.first?.imageUrls.count ?? 0
+                let newImageCount = updatedWorkOrder.items.first?.imageUrls.count ?? 0
+                
+                self.workOrder = updatedWorkOrder
+                print("🔄 WorkOrderDetailViewModel: Refreshed work order \(workOrder.WO_Number)")
+                print("  - Old image count: \(oldImageCount)")
+                print("  - New image count: \(newImageCount)")
+                print("  - Items updated: \(updatedWorkOrder.items.count)")
+            }
+        } catch {
+            print("❌ WorkOrderDetailViewModel: Failed to refresh work order: \(error)")
+            setError("Failed to refresh work order: \(error.localizedDescription)")
+        }
         
         isLoading = false
     }

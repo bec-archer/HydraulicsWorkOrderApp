@@ -176,6 +176,49 @@ final class WorkOrdersDatabase: ObservableObject {
     }
 
 
+    // ───── FETCH SINGLE WORK ORDER FROM FIRESTORE ─────
+    func fetchWorkOrder(woId: String, completion: @escaping (Result<WorkOrder, Error>) -> Void) {
+        #if DEBUG
+        print("🔍 DEBUG: fetchWorkOrder called for ID: \(woId)")
+        #endif
+        
+        let docRef = db.collection(collectionName).document(woId)
+        
+        docRef.getDocument { snapshot, error in
+            if let error = error {
+                #if DEBUG
+                print("❌ fetchWorkOrder failed: \(error.localizedDescription)")
+                #endif
+                completion(.failure(error))
+                return
+            }
+            
+            guard let doc = snapshot, doc.exists else {
+                #if DEBUG
+                print("❌ fetchWorkOrder: Document not found for ID: \(woId)")
+                #endif
+                completion(.failure(NSError(domain: "WorkOrdersDatabase", code: 404, userInfo: [NSLocalizedDescriptionKey: "WorkOrder \(woId) not found"])))
+                return
+            }
+            
+            do {
+                var workOrder = try doc.data(as: WorkOrder.self)
+                if workOrder.id == nil || workOrder.id!.isEmpty {
+                    workOrder.id = doc.documentID
+                }
+                #if DEBUG
+                print("✅ fetchWorkOrder successful: \(workOrder.WO_Number)")
+                #endif
+                completion(.success(workOrder))
+            } catch {
+                #if DEBUG
+                print("❌ fetchWorkOrder decode failed: \(error)")
+                #endif
+                completion(.failure(error))
+            }
+        }
+    }
+    
     // ───── FETCH ALL WORK ORDERS FROM FIRESTORE (lenient decode) ─────
     func fetchAllWorkOrders(completion: @escaping (Result<[WorkOrder], Error>) -> Void) {
         #if DEBUG
@@ -548,12 +591,22 @@ final class WorkOrdersDatabase: ObservableObject {
     // END image URL merge (robust)
 
     // ───── ADD IMAGES FROM NOTES TO ITEM COLLECTION ─────
-    /// Adds images from notes to the end of the item's imageUrls array (doesn't replace primary image)
+    /// Adds images from notes to both imageUrls and thumbUrls arrays
     func appendItemImagesFromNote(woId: String,
                                   itemId: UUID,
                                   imageURLs: [String],
                                   uploadedBy user: String = "system",
                                   completion: @escaping (Result<Void, Error>) -> Void) {
+        
+        #if DEBUG
+        print("🔍 DEBUG: appendItemImagesFromNote called")
+        print("  - woId: \(woId)")
+        print("  - itemId: \(itemId)")
+        print("  - imageURLs.count: \(imageURLs.count)")
+        for (i, url) in imageURLs.enumerated() {
+            print("  - imageURLs[\(i)]: \(url)")
+        }
+        #endif
         
         let docRef = db.collection(collectionName).document(woId)
         
@@ -575,12 +628,27 @@ final class WorkOrdersDatabase: ObservableObject {
                                                         userInfo: [NSLocalizedDescriptionKey: "WO_Item \(itemId) not found in WorkOrder \(woId)"])))
                 }
                 
-                // Add images to the end of the array (not beginning)
+                // Add images to both imageUrls and thumbUrls arrays
                 for imageURL in imageURLs {
                     if !wo.items[idx].imageUrls.contains(imageURL) {
                         wo.items[idx].imageUrls.append(imageURL)
+                        #if DEBUG
+                        print("✅ Added to imageUrls: \(imageURL)")
+                        #endif
+                    }
+                    if !wo.items[idx].thumbUrls.contains(imageURL) {
+                        wo.items[idx].thumbUrls.append(imageURL)
+                        #if DEBUG
+                        print("✅ Added to thumbUrls: \(imageURL)")
+                        #endif
                     }
                 }
+                
+                #if DEBUG
+                print("📊 Final counts for item \(itemId):")
+                print("  - imageUrls.count: \(wo.items[idx].imageUrls.count)")
+                print("  - thumbUrls.count: \(wo.items[idx].thumbUrls.count)")
+                #endif
                 
                 wo.lastModified = Date()
                 wo.lastModifiedBy = user
