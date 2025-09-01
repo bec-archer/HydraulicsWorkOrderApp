@@ -1256,7 +1256,7 @@ final class WorkOrdersDatabase: ObservableObject {
         print("   - Found by WO_Number: \(workOrders.firstIndex { $0.WO_Number == woId } != nil)")
         #endif
         
-        guard let cacheIdx = itemIndex else {
+        guard itemIndex != nil else {
             print("❌ STATUS UPDATE: Work order not found in cache")
             print("   - woId: \(woId)")
             print("   - Available WO Numbers: \(workOrders.map { $0.WO_Number })")

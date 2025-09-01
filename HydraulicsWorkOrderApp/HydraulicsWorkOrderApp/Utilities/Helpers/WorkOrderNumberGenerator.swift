@@ -11,6 +11,16 @@ struct WorkOrderNumberGenerator {
 
     // ───── Public API (Creation-time only) ─────
 
+    /// Generates the next available work order number for today's date.
+    static func generateWorkOrderNumber() -> String {
+        print("🚨🚨🚨 WORK ORDER NUMBER GENERATOR CALLED! 🚨🚨🚨")
+        let today = Date()
+        let nextSequence = getNextSequenceForDate(today)
+        let result = make(date: today, sequence: nextSequence)
+        print("🚨🚨🚨 Generated work order number: \(result) 🚨🚨🚨")
+        return result
+    }
+
     /// Formats a work order number using a specific date and a 1-based sequence.
     /// - Parameters:
     ///   - date: The creation date to freeze into the WO number.
@@ -40,6 +50,46 @@ struct WorkOrderNumberGenerator {
         let mm = comps.month ?? 1
         let dd = comps.day ?? 1
         return String(format: "%02d%02d%02d", yy, mm, dd)
+    }
+
+    /// Gets the next available sequence number for a given date by querying existing work orders.
+    private static func getNextSequenceForDate(_ date: Date) -> Int {
+        let todayPrefix = prefix(from: date)
+        print("🔍 DEBUG: Generating work order number for date: \(todayPrefix)")
+        
+        let workOrders = WorkOrdersDatabase.shared.workOrders
+        print("🔍 DEBUG: Total work orders in database: \(workOrders.count)")
+        
+        let todaysWorkOrders = workOrders.filter { workOrder in
+            workOrder.WO_Number.hasPrefix(todayPrefix)
+        }
+        print("🔍 DEBUG: Work orders for today (\(todayPrefix)): \(todaysWorkOrders.count)")
+        
+        for wo in todaysWorkOrders {
+            print("🔍 DEBUG: Found today's WO: \(wo.WO_Number)")
+        }
+        
+        let sequences = todaysWorkOrders.compactMap { workOrder -> Int? in
+            let components = workOrder.WO_Number.components(separatedBy: "-")
+            print("🔍 DEBUG: Parsing WO \(workOrder.WO_Number) - components: \(components)")
+            
+            guard components.count == 2,
+                  let sequenceStr = components.last,
+                  let sequence = Int(sequenceStr) else {
+                print("🔍 DEBUG: Failed to parse sequence from \(workOrder.WO_Number)")
+                return nil
+            }
+            print("🔍 DEBUG: Successfully parsed sequence: \(sequence)")
+            return sequence
+        }
+        
+        print("🔍 DEBUG: Extracted sequences: \(sequences)")
+        
+        let maxSequence = sequences.max() ?? 0
+        let nextSequence = maxSequence + 1
+        print("🔍 DEBUG: Max sequence: \(maxSequence), Next sequence: \(nextSequence)")
+        
+        return nextSequence
     }
 }
 // END

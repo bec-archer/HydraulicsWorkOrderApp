@@ -35,7 +35,7 @@ class NewWorkOrderViewModel: ObservableObject {
     
     // MARK: - Computed Properties
     var workOrderNumber: String {
-        WorkOrderNumberGenerator.make(sequence: Int(Date().timeIntervalSince1970.truncatingRemainder(dividingBy: 1000)))
+        WorkOrderNumberGenerator.generateWorkOrderNumber()
     }
     
     var hasValidCustomer: Bool {
