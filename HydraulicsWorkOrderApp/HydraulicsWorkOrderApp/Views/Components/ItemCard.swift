@@ -48,6 +48,9 @@ struct ItemCard: View {
     var onAddNote: ((WO_Item, WO_Note) -> Void)? = nil
     var onChangeStatus: ((WO_Item, String) -> Void)? = nil
 
+    // Debug: render without interactive wrappers to make Xcode Selectable happy
+    var debugSelectable: Bool = false
+
     @State private var showingAddNote = false
     @State private var noteText: String = ""
     @State private var selectedStatus: String = ""
@@ -87,96 +90,161 @@ struct ItemCard: View {
                     .clipShape(Capsule())
             }
             
+            // Debug-only subtitle for easy styling in Selectable
+            if debugSelectable {
+                Text("WO Item #: \(item.woItemId)")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            
             // ───── Images Row ─────
-            // Multiple images in horizontal scroll
+            // Multiple images in horizontal scroll (or plain row for Selectable)
             if !item.thumbUrls.isEmpty {
-                ScrollView(.horizontal, showsIndicators: false) {
+                if debugSelectable {
+                    // Plain row helps Xcode Selectable pick inner elements
                     HStack(spacing: 8) {
                         // Use paired thumb/full URLs, fallback to individual arrays
                         let paired = Array(zip(item.thumbUrls, item.imageUrls))
                         if !paired.isEmpty {
-                                                            ForEach(Array(paired.enumerated()), id: \.offset) { index, pair in
-                                    let (thumb, _) = pair
-                                if let thumbURL = URL(string: thumb) {
-                                    Button {
-                                        if let url = resolvedURL(for: item, at: index) {
-                                            onImageTap?(url)
-                                        } else {
-                                            print("❌ No resolvable URL for item \(item.id) at index \(index)")
-                                        }
-                                    } label: {
-                                        AsyncImage(url: thumbURL) { phase in
-                                            switch phase {
-                                            case .empty:
-                                                ProgressView().frame(width: 200, height: 200)
-                                            case .success(let image):
-                                                image
-                                                    .resizable()
-                                                    .scaledToFill()
-                                                    .frame(width: 200, height: 200)
-                                                    .clipped()
-                                                    .cornerRadius(12)
-                                            case .failure:
-                                                Color.gray
-                                                    .frame(width: 200, height: 200)
-                                                    .cornerRadius(12)
-                                            @unknown default:
-                                                EmptyView()
-                                            }
-                                        }
-                                    }
-                                    .buttonStyle(.plain)
-                                }
+                            ForEach(Array(paired.enumerated()), id: \.offset) { _, _ in
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                    .fill(Color(.systemGray4))
+                                    .frame(width: 96, height: 96)
+                                    .overlay(Text("IMG").font(.caption2).foregroundStyle(.secondary))
                             }
                         } else {
                             // Fallback: use thumbUrls if available
-                            ForEach(Array(item.thumbUrls.enumerated()), id: \.offset) { index, thumb in
-                                if let thumbURL = URL(string: thumb) {
-                                    Button {
-                                        if let url = resolvedURL(for: item, at: index) {
-                                            onImageTap?(url)
-                                        }
-                                    } label: {
-                                        AsyncImage(url: thumbURL) { phase in
-                                            switch phase {
-                                            case .empty:
-                                                ProgressView().frame(width: 200, height: 200)
-                                            case .success(let image):
-                                                image
-                                                    .resizable()
-                                                    .scaledToFill()
-                                                    .frame(width: 200, height: 200)
-                                                    .clipped()
-                                                    .cornerRadius(12)
-                                            case .failure:
-                                                Color.gray
-                                                    .frame(width: 200, height: 200)
-                                                    .cornerRadius(12)
-                                            @unknown default:
-                                                EmptyView()
-                                            }
-                                        }
-                                    }
-                                    .buttonStyle(.plain)
-                                }
+                            ForEach(Array(item.thumbUrls.enumerated()), id: \.offset) { _, _ in
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                    .fill(Color(.systemGray4))
+                                    .frame(width: 96, height: 96)
+                                    .overlay(Text("IMG").font(.caption2).foregroundStyle(.secondary))
                             }
                         }
                     }
                     .padding(.horizontal, 4)
+                } else {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            // Use paired thumb/full URLs, fallback to individual arrays
+                            let paired = Array(zip(item.thumbUrls, item.imageUrls))
+                            if !paired.isEmpty {
+                                ForEach(Array(paired.enumerated()), id: \.offset) { index, pair in
+                                    let (thumb, _) = pair
+                                    if let thumbURL = URL(string: thumb) {
+                                        Button {
+                                            if let url = resolvedURL(for: item, at: index) {
+                                                onImageTap?(url)
+                                            } else {
+                                                print("❌ No resolvable URL for item \(item.id) at index \(index)")
+                                            }
+                                        } label: {
+                                            AsyncImage(url: thumbURL) { phase in
+                                                switch phase {
+                                                case .empty:
+                                                    ProgressView().frame(width: 96, height: 96)
+                                                case .success(let image):
+                                                    image
+                                                        .resizable()
+                                                        .scaledToFill()
+                                                        .frame(width: 96, height: 96)
+                                                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                                                case .failure:
+                                                    Color.gray
+                                                        .frame(width: 96, height: 96)
+                                                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                                                @unknown default:
+                                                    EmptyView()
+                                                }
+                                            }
+                                        }
+                                        .buttonStyle(.plain)
+                                    }
+                                }
+                            } else {
+                                // Fallback: use thumbUrls if available
+                                ForEach(Array(item.thumbUrls.enumerated()), id: \.offset) { index, thumb in
+                                    if let thumbURL = URL(string: thumb) {
+                                        Button {
+                                            if let url = resolvedURL(for: item, at: index) {
+                                                onImageTap?(url)
+                                            }
+                                        } label: {
+                                            AsyncImage(url: thumbURL) { phase in
+                                                switch phase {
+                                                case .empty:
+                                                    ProgressView().frame(width: 96, height: 96)
+                                                case .success(let image):
+                                                    image
+                                                        .resizable()
+                                                        .scaledToFill()
+                                                        .frame(width: 96, height: 96)
+                                                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                                                case .failure:
+                                                    Color.gray
+                                                        .frame(width: 96, height: 96)
+                                                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                                                @unknown default:
+                                                    EmptyView()
+                                                }
+                                            }
+                                        }
+                                        .buttonStyle(.plain)
+                                    }
+                                }
+                            }
+                        }
+                        .padding(.horizontal, 4)
+                    }
                 }
             } else {
-                // No images placeholder
-                Rectangle()
-                    .fill(Color(.systemGray5))
-                    .frame(width: 200, height: 200)
-                    .cornerRadius(12)
-                    .overlay(
-                        Image(systemName: "photo")
-                            .font(.largeTitle)
-                            .foregroundColor(.gray)
-                    )
+                // No images: show a few placeholders if in Selectable debug, else the single block
+                if debugSelectable {
+                    HStack(spacing: 8) {
+                        ForEach(0..<3) { _ in
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .fill(Color(.systemGray4))
+                                .frame(width: 96, height: 96)
+                                .overlay(Text("IMG").font(.caption2).foregroundStyle(.secondary))
+                        }
+                    }
+                    .padding(.horizontal, 4)
+                } else {
+                    Rectangle()
+                        .fill(Color(.systemGray5))
+                        .frame(width: 200, height: 200)
+                        .cornerRadius(12)
+                        .overlay(
+                            Image(systemName: "photo")
+                                .font(.largeTitle)
+                                .foregroundColor(.gray)
+                        )
+                }
             }
             // END Images
+            
+            // Debug-only Notes & Status block for styling in Selectable
+            if debugSelectable {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Notes & Status")
+                        .font(.subheadline).bold()
+                    Text("• 08/28/2025 2:14 PM — ‘Repack seals; rod pitted’ — Maria")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                    HStack(spacing: 6) {
+                        ForEach(["Checked In", "Disassembly", "In Progress"], id: \.self) { s in
+                            Text(s)
+                                .font(.caption2).bold()
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(Color(.systemGray5))
+                                .clipShape(Capsule())
+                        }
+                    }
+                }
+                .padding(.top, 4)
+            }
 
             // ───── Status Change Picker ─────
             if let onChangeStatus = onChangeStatus {
@@ -372,11 +440,35 @@ struct ItemCard: View {
             }
 
             // END Add Note/Image Button
+            
+            // Debug-only New Note/Image button placeholder (non-interactive)
+            if debugSelectable {
+                HStack(spacing: 8) {
+                    Image(systemName: "plus.bubble")
+                    Text("New Note/Image")
+                        .font(.subheadline)
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(Color(.systemGray6))
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            }
 
         } // END VStack
         .padding()
-        .background(Color(.secondarySystemBackground))
-        .cornerRadius(12)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color(.secondarySystemBackground))
+        )
+        .overlay(
+            Group {
+                if !debugSelectable {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .stroke(Color(.separator).opacity(0.15), lineWidth: 1)
+                        .allowsHitTesting(false)
+                }
+            }
+        )
     } // END body
 } // END ItemCard
 
@@ -446,6 +538,7 @@ private struct NoteCameraCaptureView: UIViewControllerRepresentable {
 }
 
 // ───── PREVIEW TEMPLATE ─────
+// Preview with default interactions
 #Preview {
     let statusHistory: [WO_Status] = [
         WO_Status(status: "Checked In", user: "Maria", timestamp: Date(), notes: nil)
@@ -455,8 +548,8 @@ private struct NoteCameraCaptureView: UIViewControllerRepresentable {
         id: UUID(),
         woItemId: "250826-001-WOI-001",
         tagId: "ABC123",
-        imageUrls: ["https://example.com/full.jpg"],
-        thumbUrls: ["https://example.com/thumb.jpg"],
+        imageUrls: ["https://picsum.photos/800"],
+        thumbUrls: ["https://picsum.photos/200"],
         type: "Cylinder",
         dropdowns: [:],
         dropdownSchemaVersion: 1,
@@ -475,15 +568,61 @@ private struct NoteCameraCaptureView: UIViewControllerRepresentable {
 
     ItemCard(
         item: sampleItem,
-        imageURLs: .constant(["https://example.com/full.jpg"]),
-        thumbURLs: .constant(["https://example.com/thumb.jpg"]),
+        imageURLs: .constant(["https://picsum.photos/800"]),
+        thumbURLs: .constant(["https://picsum.photos/200"]),
         woId: "WO_PREVIEW",
         onImageTap: { url in
             print("TAPPED IMAGE URL: \(url)")
         },
         onAddNote: { _, _ in },
-        onChangeStatus: { _, _ in }
+        onChangeStatus: { _, _ in },
+        debugSelectable: false
+    )
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .padding(.horizontal, 16)
+    .padding(.vertical, 12)
+    .background(Color(.systemBackground))
+}
+
+// Preview for Selectable: disables all interactions, enables debugSelectable for Xcode selection
+#Preview("Selectable – Disabled Interactions") {
+    let statusHistory: [WO_Status] = [
+        WO_Status(status: "Checked In", user: "Maria", timestamp: Date(), notes: nil)
+    ]
+    let sampleItem = WO_Item(
+        id: UUID(),
+        woItemId: "250826-001-WOI-001",
+        tagId: "ABC123",
+        imageUrls: ["https://picsum.photos/800"],
+        thumbUrls: ["https://picsum.photos/200"],
+        type: "Cylinder",
+        dropdowns: [:],
+        dropdownSchemaVersion: 1,
+        reasonsForService: [],
+        reasonNotes: nil,
+        completedReasons: [],
+        statusHistory: statusHistory,
+        testResult: nil,
+        partsUsed: nil,
+        hoursWorked: nil,
+        cost: nil,
+        assignedTo: "Tech",
+        isFlagged: false,
+        tagReplacementHistory: nil
     )
 
-
+    ItemCard(
+        item: sampleItem,
+        imageURLs: .constant(["https://picsum.photos/800"]),
+        thumbURLs: .constant(["https://picsum.photos/200"]),
+        woId: "WO_PREVIEW",
+        onImageTap: nil,
+        onAddNote: nil,
+        onChangeStatus: nil,
+        debugSelectable: true
+    )
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .padding(.horizontal, 16)
+    .padding(.vertical, 12)
+    .background(Color(.systemBackground))
 }

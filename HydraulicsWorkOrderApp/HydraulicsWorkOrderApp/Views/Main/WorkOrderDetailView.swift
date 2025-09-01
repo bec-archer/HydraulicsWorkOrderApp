@@ -15,6 +15,37 @@ import FirebaseStorage
 import UIKit
 import Combine
 
+extension View {
+    /// Applies a transform only on iOS 17+, returns the original view otherwise.
+    @ViewBuilder
+    func ifAvailableiOS17<Content: View>(_ transform: (Self) -> Content) -> some View {
+        if #available(iOS 17, *) {
+            transform(self)
+        } else {
+            self
+        }
+    }
+}
+// END
+struct CardStyle: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .padding(.horizontal, 20)
+            .padding(.vertical, 16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color(.systemGray6))
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .strokeBorder(Color.primary.opacity(0.06), lineWidth: 1)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous)) // taps stay inside
+    }
+}
+
+extension View {
+    func card() -> some View { modifier(CardStyle()) }
+}
 // MARK: - ViewModel (Temporarily included for testing)
 @MainActor
 class WorkOrderDetailViewModel: ObservableObject {
@@ -324,6 +355,7 @@ struct WorkOrderDetailView: View {
     @State private var showImageViewer = false
     @State private var selectedImageURL: URL? = nil
     @State private var showingPhoneActions = false
+    @State private var showAllThumbs = false
     
     // MARK: - Dependencies
     @Environment(\.dismiss) private var dismiss
@@ -468,6 +500,19 @@ struct WorkOrderDetailView: View {
                 }
             }
         }
+        .sheet(isPresented: $showAllThumbs) {
+            if let selectedIndex = viewModel.selectedItemIndex {
+                let allThumbs = Array(viewModel.workOrder.items[selectedIndex].imageUrls.dropFirst())
+                AllThumbnailsSheet(
+                    imageURLs: allThumbs,
+                    isPresented: $showAllThumbs,
+                    onThumbTapped: { url in
+                        selectedImageURL = url
+                        showImageViewer = true
+                    }
+                )
+            }
+        }
     }
     
     // MARK: - Header Section
@@ -583,6 +628,9 @@ struct WorkOrderDetailView: View {
             } else {
                 ForEach(Array(viewModel.workOrder.items.enumerated()), id: \.element.id) { idx, item in
                     combinedItemCard(item: item, itemIndex: idx)
+                        .listRowInsets(.init(top: 0, leading: 0, bottom: 12, trailing: 0))
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
                 }
             }
         }
@@ -663,14 +711,15 @@ struct WorkOrderDetailView: View {
                 }
                 .buttonStyle(.plain)
             }
+            .padding(.horizontal, 20)
             
-            // Main content area with flexible layout
-            GeometryReader { geometry in
-                HStack(alignment: .top, spacing: 16) {
-                // Images section - 45% width
+            // Main content area with flexible layout (containerRelativeFrame 45/55)
+            HStack(alignment: .top, spacing: 16) {
+
+                // ── Images section (40% of card width)
                 if !item.imageUrls.isEmpty {
-                    VStack(alignment: .leading, spacing: 12) {
-                        // Main image
+                    VStack(alignment: .leading, spacing: 8) {
+                        // ── Primary Image (larger, takes up more space)
                         if let firstUrl = URL(string: item.imageUrls[0]) {
                             Button {
                                 selectedImageURL = firstUrl
@@ -680,77 +729,172 @@ struct WorkOrderDetailView: View {
                                     switch phase {
                                     case .empty:
                                         ProgressView()
-                                            .frame(width: geometry.size.width * 0.45 - 32, height: 200)
-                                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                                            .frame(maxWidth: .infinity)
+                                            .aspectRatio(1, contentMode: .fit)
                                     case .success(let image):
                                         image
                                             .resizable()
                                             .scaledToFill()
-                                            .frame(width: geometry.size.width * 0.45 - 32, height: 200)
+                                            .frame(maxWidth: .infinity)
+                                            .aspectRatio(1, contentMode: .fit)
                                             .clipped()
-                                            .clipShape(RoundedRectangle(cornerRadius: 12))
                                     case .failure:
                                         Color.gray
-                                            .frame(width: geometry.size.width * 0.45 - 32, height: 200)
-                                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                                            .frame(maxWidth: .infinity)
+                                            .aspectRatio(1, contentMode: .fit)
                                     @unknown default:
                                         Color.gray
-                                            .frame(width: geometry.size.width * 0.45 - 32, height: 200)
-                                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                                            .frame(maxWidth: .infinity)
+                                            .aspectRatio(1, contentMode: .fit)
                                     }
                                 }
+                                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                             }
                             .buttonStyle(.plain)
                         }
-                        
-                        // Thumbnail grid
+
+                        // ── Thumbnail Grid (2x2 grid below primary image)
                         if item.imageUrls.count > 1 {
                             let additionalImages = Array(item.imageUrls.dropFirst())
-                            HStack(spacing: 8) {
-                                ForEach(Array(additionalImages.enumerated()), id: \.offset) { _, urlString in
-                                    if let url = URL(string: urlString) {
-                                        Button {
-                                            selectedImageURL = url
-                                            showImageViewer = true
-                                        } label: {
-                                            AsyncImage(url: url) { phase in
-                                                switch phase {
-                                                case .empty:
-                                                    ProgressView()
-                                                        .frame(width: (geometry.size.width * 0.45 - 32 - 8) / 2, height: (geometry.size.width * 0.45 - 32 - 8) / 2)
-                                                        .clipShape(RoundedRectangle(cornerRadius: 8))
-                                                case .success(let image):
-                                                    image
-                                                        .resizable()
-                                                        .scaledToFill()
-                                                        .frame(width: (geometry.size.width * 0.45 - 32 - 8) / 2, height: (geometry.size.width * 0.45 - 32 - 8) / 2)
-                                                        .clipped()
-                                                        .clipShape(RoundedRectangle(cornerRadius: 8))
-                                                case .failure:
-                                                    Color.gray
-                                                        .frame(width: (geometry.size.width * 0.45 - 32 - 8) / 2, height: (geometry.size.width * 0.45 - 32 - 8) / 2)
-                                                        .clipShape(RoundedRectangle(cornerRadius: 8))
-                                                @unknown default:
-                                                    Color.gray
-                                                        .frame(width: (geometry.size.width * 0.45 - 32 - 8) / 2, height: (geometry.size.width * 0.45 - 32 - 8) / 2)
-                                                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                            let displayImages = Array(additionalImages.prefix(4)) // Show up to 4 thumbnails
+                            let extraCount = max(0, additionalImages.count - displayImages.count)
+
+                            GeometryReader { g in
+                                let spacing: CGFloat = 6
+                                let thumbSize = (g.size.width - spacing) / 2
+
+                                VStack(spacing: spacing) {
+                                    // First row of thumbnails
+                                    HStack(spacing: spacing) {
+                                        ForEach(0..<min(2, displayImages.count), id: \.self) { idx in
+                                            if let url = URL(string: displayImages[idx]) {
+                                                Button {
+                                                    if extraCount > 0 && idx == displayImages.count - 1 {
+                                                        viewModel.selectedItemIndex = itemIndex
+                                                        showAllThumbs = true
+                                                    } else {
+                                                        selectedImageURL = url
+                                                        showImageViewer = true
+                                                    }
+                                                } label: {
+                                                    ZStack {
+                                                        AsyncImage(url: url) { phase in
+                                                            switch phase {
+                                                            case .empty:
+                                                                ProgressView()
+                                                                    .frame(width: thumbSize, height: thumbSize)
+                                                            case .success(let img):
+                                                                img.resizable()
+                                                                    .scaledToFill()
+                                                                    .frame(width: thumbSize, height: thumbSize)
+                                                                    .clipped()
+                                                            case .failure:
+                                                                Color.gray
+                                                                    .frame(width: thumbSize, height: thumbSize)
+                                                            @unknown default:
+                                                                Color.gray
+                                                                    .frame(width: thumbSize, height: thumbSize)
+                                                            }
+                                                        }
+                                                        if extraCount > 0 && idx == displayImages.count - 1 {
+                                                            Rectangle()
+                                                                .fill(Color.black.opacity(0.35))
+                                                                .frame(width: thumbSize, height: thumbSize)
+                                                                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                                                            Text("+\(extraCount)")
+                                                                .font(.caption.weight(.semibold))
+                                                                .foregroundColor(.white)
+                                                        }
+                                                    }
+                                                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                                                }
+                                                .buttonStyle(.plain)
+                                            }
+                                        }
+                                        // Fill empty spaces to maintain grid
+                                        if displayImages.count < 2 {
+                                            ForEach(0..<(2 - displayImages.count), id: \.self) { _ in
+                                                Color.clear
+                                                    .frame(width: thumbSize, height: thumbSize)
+                                            }
+                                        }
+                                    }
+                                    
+                                    // Second row of thumbnails (if we have more than 2 images)
+                                    if displayImages.count > 2 {
+                                        HStack(spacing: spacing) {
+                                            ForEach(2..<min(4, displayImages.count), id: \.self) { idx in
+                                                if let url = URL(string: displayImages[idx]) {
+                                                    Button {
+                                                        if extraCount > 0 && idx == displayImages.count - 1 {
+                                                            viewModel.selectedItemIndex = itemIndex
+                                                            showAllThumbs = true
+                                                        } else {
+                                                            selectedImageURL = url
+                                                            showImageViewer = true
+                                                        }
+                                                    } label: {
+                                                        ZStack {
+                                                            AsyncImage(url: url) { phase in
+                                                                switch phase {
+                                                                case .empty:
+                                                                    ProgressView()
+                                                                        .frame(width: thumbSize, height: thumbSize)
+                                                                case .success(let img):
+                                                                    img.resizable()
+                                                                        .scaledToFill()
+                                                                        .frame(width: thumbSize, height: thumbSize)
+                                                                        .clipped()
+                                                                case .failure:
+                                                                    Color.gray
+                                                                        .frame(width: thumbSize, height: thumbSize)
+                                                                @unknown default:
+                                                                    Color.gray
+                                                                        .frame(width: thumbSize, height: thumbSize)
+                                                                }
+                                                            }
+                                                            if extraCount > 0 && idx == displayImages.count - 1 {
+                                                                Rectangle()
+                                                                    .fill(Color.black.opacity(0.35))
+                                                                    .frame(width: thumbSize, height: thumbSize)
+                                                                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                                                                Text("+\(extraCount)")
+                                                                    .font(.caption.weight(.semibold))
+                                                                    .foregroundColor(.white)
+                                                            }
+                                                        }
+                                                        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                                                    }
+                                                    .buttonStyle(.plain)
+                                                }
+                                            }
+                                            // Fill empty spaces to maintain grid
+                                            if displayImages.count < 4 {
+                                                ForEach(0..<(4 - displayImages.count), id: \.self) { _ in
+                                                    Color.clear
+                                                        .frame(width: thumbSize, height: thumbSize)
                                                 }
                                             }
                                         }
-                                        .buttonStyle(.plain)
                                     }
                                 }
+                                .frame(height: displayImages.count > 2 ? thumbSize * 2 + spacing : thumbSize)
                             }
                         }
                     }
-                    .frame(width: geometry.size.width * 0.45)
+                    .padding(.horizontal, 8)
+                    .ifAvailableiOS17 {
+                        $0.containerRelativeFrame([.horizontal], alignment: .leading) { available, _ in
+                            (available - 16) * 0.40   // 40% of the HStack width minus spacing
+                        }
+                    }
                 }
-                
-                // Notes & Status section - 55% width
+
+                // ── Notes & Status section (60%)
                 VStack(alignment: .leading, spacing: 16) {
                     Text("Notes & Status")
                         .font(.headline)
-                    
+
                     // Status history
                     if !item.statusHistory.isEmpty {
                         VStack(alignment: .leading, spacing: 8) {
@@ -760,7 +904,6 @@ struct WorkOrderDetailView: View {
                                         .font(.system(size: 8))
                                         .foregroundStyle(viewModel.getStatusColor(status.status))
                                         .padding(.top, 6)
-                                    
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text(status.status)
                                             .font(.subheadline.weight(.semibold))
@@ -773,19 +916,40 @@ struct WorkOrderDetailView: View {
                             }
                         }
                     }
-                    
+
                     // Notes
                     if !item.notes.isEmpty {
                         VStack(alignment: .leading, spacing: 10) {
                             ForEach(Array(item.notes.enumerated()), id: \.offset) { _, note in
                                 VStack(alignment: .leading, spacing: 4) {
-                                    Text(note.text)
-                                        .font(.subheadline)
-                                    Text("\(note.user) • \(note.timestamp.formatted(date: .abbreviated, time: .shortened))")
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                    
-                                    // Note-attached images
+                                    // Special formatting for "Updated reasons for service completion" notes
+                                    if note.text == "Updated reasons for service completion" {
+                                        let completedReasons = item.completedReasons
+                                        if !completedReasons.isEmpty {
+                                            Text("✅ \(completedReasons.joined(separator: ", ")) • by \(note.user)")
+                                                .font(.subheadline)
+                                                .fontWeight(.bold)
+                                                .foregroundColor(.primary)
+                                            Text("\(note.timestamp.formatted(date: .abbreviated, time: .shortened))")
+                                                .font(.caption)
+                                                .foregroundStyle(.secondary)
+                                        } else {
+                                            Text("✅ [No reasons completed] • by \(note.user)")
+                                                .font(.subheadline)
+                                                .fontWeight(.bold)
+                                                .foregroundColor(.primary)
+                                            Text("\(note.timestamp.formatted(date: .abbreviated, time: .shortened))")
+                                                .font(.caption)
+                                                .foregroundStyle(.secondary)
+                                        }
+                                    } else {
+                                        Text(note.text)
+                                            .font(.subheadline)
+                                        Text("\(note.user) • \(note.timestamp.formatted(date: .abbreviated, time: .shortened))")
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+
                                     if !note.imageURLs.isEmpty {
                                         ScrollView(.horizontal, showsIndicators: false) {
                                             HStack(spacing: 8) {
@@ -797,21 +961,15 @@ struct WorkOrderDetailView: View {
                                                         } label: {
                                                             AsyncImage(url: url) { phase in
                                                                 switch phase {
-                                                                case .empty:
-                                                                    ProgressView()
-                                                                        .frame(width: 72, height: 72)
+                                                                case .empty: ProgressView()
                                                                 case .success(let img):
                                                                     img.resizable().scaledToFill()
-                                                                        .frame(width: 72, height: 72)
-                                                                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                                                                case .failure:
-                                                                    Color.gray.frame(width: 72, height: 72)
-                                                                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                                                                @unknown default:
-                                                                    Color.gray.frame(width: 72, height: 72)
-                                                                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                                                                case .failure: Color.gray
+                                                                @unknown default: Color.gray
                                                                 }
                                                             }
+                                                            .frame(width: 72, height: 72)
+                                                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                                                         }
                                                         .buttonStyle(.plain)
                                                     }
@@ -823,7 +981,7 @@ struct WorkOrderDetailView: View {
                             }
                         }
                     }
-                    
+
                     // Add Note/Image button at the bottom
                     Button {
                         viewModel.selectedItemIndex = itemIndex
@@ -835,14 +993,19 @@ struct WorkOrderDetailView: View {
                     .buttonStyle(.plain)
                     .padding(.top, 12)
                 }
-                .frame(width: geometry.size.width * 0.55)
-                }
+                .padding(.horizontal, 8)
+                                    .ifAvailableiOS17 {
+                        $0.containerRelativeFrame([.horizontal], alignment: .trailing) { available, _ in
+                            (available - 16) * 0.60   // 60% of the HStack width minus spacing
+                        }
+                    }
             }
-            .frame(minHeight: 200) // Minimum height to prevent cutoff
+            .padding(.horizontal, 20)
+            .frame(height: 400) // keep your fixed overall height
+            .clipped() // ensure internal content cannot spill horizontally/vertically
+            // END
         }
-        .padding(16)
-        .background(Color(.systemGray6))
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .card()
     }
 }
 
@@ -1001,7 +1164,7 @@ struct StatusPickerSheet: View {
     
     private let statusOptions = [
         "Checked In",
-        "Disassembly", 
+        "Disassembly",
         "In Progress",
         "Test Failed",
         "Completed",
@@ -1435,3 +1598,61 @@ struct ImagePicker: UIViewControllerRepresentable {
 }
 
 
+
+// MARK: - AllThumbnailsSheet
+struct AllThumbnailsSheet: View {
+    let imageURLs: [String]
+    @Binding var isPresented: Bool
+    let onThumbTapped: (URL) -> Void
+
+    var body: some View {
+        NavigationView {
+            ScrollView {
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
+                    ForEach(imageURLs, id: \.self) { urlString in
+                        if let url = URL(string: urlString) {
+                            Button {
+                                onThumbTapped(url)
+                            } label: {
+                                AsyncImage(url: url) { phase in
+                                    switch phase {
+                                    case .empty:
+                                        ProgressView()
+                                            .frame(maxWidth: .infinity)
+                                            .aspectRatio(1, contentMode: .fit)
+                                    case .success(let img):
+                                        img.resizable()
+                                            .scaledToFill()
+                                            .frame(maxWidth: .infinity)
+                                            .aspectRatio(1, contentMode: .fit)
+                                            .clipped()
+                                    case .failure:
+                                        Color.gray
+                                            .frame(maxWidth: .infinity)
+                                            .aspectRatio(1, contentMode: .fit)
+                                    @unknown default:
+                                        Color.gray
+                                            .frame(maxWidth: .infinity)
+                                            .aspectRatio(1, contentMode: .fit)
+                                    }
+                                }
+                                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+                .padding(12)
+            }
+            .navigationTitle("All Photos")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Done") { isPresented = false }
+                }
+            }
+        }
+        .presentationDetents([.large])
+        .presentationDragIndicator(.visible)
+    }
+}
