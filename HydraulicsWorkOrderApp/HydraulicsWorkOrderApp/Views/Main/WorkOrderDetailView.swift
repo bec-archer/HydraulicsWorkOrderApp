@@ -603,6 +603,7 @@ struct WorkOrderDetailView: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Work Order Items")
                 .font(.title3.weight(.semibold))
+                .padding(.horizontal, 20)
             
             if viewModel.workOrder.items.isEmpty {
                 // Empty state
@@ -846,8 +847,7 @@ struct WorkOrderDetailView: View {
                     }
                 }
             }
-            .padding(.horizontal, 20)
-            .clipped() // ensure internal content cannot spill horizontally/vertically
+            .frame(maxWidth: .infinity)
             // END
         }
         .card()
@@ -1453,7 +1453,7 @@ struct AllThumbnailsSheet: View {
     var body: some View {
         NavigationView {
             ScrollView {
-                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
                     ForEach(imageURLs, id: \.self) { urlString in
                         if let url = URL(string: urlString) {
                             Button {
@@ -1463,21 +1463,21 @@ struct AllThumbnailsSheet: View {
                                     switch phase {
                                     case .empty:
                                         ProgressView()
-                                            .frame(maxWidth: .infinity)
+                                            .frame(width: 100, height: 100)
                                             .aspectRatio(1, contentMode: .fit)
                                     case .success(let img):
                                         img.resizable()
                                             .scaledToFill()
-                                            .frame(maxWidth: .infinity)
+                                            .frame(width: 100, height: 100)
                                             .aspectRatio(1, contentMode: .fit)
                                             .clipped()
                                     case .failure:
                                         Color.gray
-                                            .frame(maxWidth: .infinity)
+                                            .frame(width: 100, height: 100)
                                             .aspectRatio(1, contentMode: .fit)
                                     @unknown default:
                                         Color.gray
-                                            .frame(maxWidth: .infinity)
+                                            .frame(width: 100, height: 100)
                                             .aspectRatio(1, contentMode: .fit)
                                     }
                                 }
@@ -1487,7 +1487,7 @@ struct AllThumbnailsSheet: View {
                         }
                     }
                 }
-                .padding(12)
+                .padding(16)
             }
             .navigationTitle("All Photos")
             .navigationBarTitleDisplayMode(.inline)

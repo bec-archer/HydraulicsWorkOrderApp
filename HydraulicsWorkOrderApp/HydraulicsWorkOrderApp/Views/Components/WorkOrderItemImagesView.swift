@@ -118,6 +118,7 @@ struct WorkOrderItemImagesView: View {
                 }
             }
         }
+        .frame(maxWidth: .infinity)
         .padding(8)
         .fullScreenCover(isPresented: $showImageViewer) {
             if let selectedImageURL = selectedImageURL {
