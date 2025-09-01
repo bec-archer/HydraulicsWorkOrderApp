@@ -90,7 +90,7 @@ struct WorkOrderItemImagesView: View {
                 .frame(width: 300)
             }
         }
-        .padding(.horizontal, 0)
+        .padding(.horizontal, 16)
     }
     
 

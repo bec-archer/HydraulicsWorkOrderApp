@@ -30,15 +30,14 @@ extension View {
 struct CardStyle: ViewModifier {
     func body(content: Content) -> some View {
         content
-            .padding(.horizontal, 20)
+            .padding(.horizontal, 16)
             .padding(.vertical, 16)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color(.systemGray6))
-            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .overlay(
+            .background(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .strokeBorder(Color.primary.opacity(0.06), lineWidth: 1)
+                    .fill(Color(.systemGray6))
             )
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous)) // taps stay inside
     }
 }
@@ -464,21 +463,16 @@ struct WorkOrderDetailView: View {
     
     // MARK: - Body
     var body: some View {
-        List {
-            Section {
+        ScrollView {
+            LazyVStack(spacing: 16) {
                 // Header Section
                 headerSection
-                    .listRowSeparator(.hidden)
                 
                 // Work Order Items Section
                 itemsSection()
             }
-            .listSectionSeparator(.hidden)
         }
-        .listSectionSeparator(.hidden)
-        .listRowSeparator(.hidden)
-        .listStyle(PlainListStyle())
-        .padding(.horizontal, 20)
+        .padding(.horizontal, 12)
         .padding(.vertical, 16)
         .navigationTitle("Work Order Details")
         .navigationBarTitleDisplayMode(.inline)
@@ -493,19 +487,7 @@ struct WorkOrderDetailView: View {
                 }
             }
             
-            // Debug button (temporary)
-            ToolbarItem(placement: .topBarLeading) {
-                Button("Debug") {
-                    print("🔍 WO DETAILS: \(viewModel.workOrder.WO_Number)")
-                    print("  ID: \(viewModel.workOrder.id ?? "nil")")
-                    print("  Status: \(viewModel.workOrder.status)")
-                    print("  Items: \(viewModel.workOrder.items.count)")
-                    
-                    for (i, item) in viewModel.workOrder.items.enumerated() {
-                        print("    Item \(i): type='\(item.type)', images=\(item.imageUrls.count), reasons=\(item.reasonsForService.count)")
-                    }
-                }
-            }
+
         }
         .alert("Delete this Work Order?", isPresented: $showDeleteConfirm) {
             Button("Delete", role: .destructive) {
@@ -686,7 +668,7 @@ struct WorkOrderDetailView: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Work Order Items")
                 .font(.title3.weight(.semibold))
-                .padding(.horizontal, 20)
+                .padding(.horizontal, 0)
             
             if viewModel.workOrder.items.isEmpty {
                 // Empty state
@@ -794,7 +776,6 @@ struct WorkOrderDetailView: View {
                 }
                 .buttonStyle(.plain)
             }
-            .padding(.horizontal, 20)
             
             // Main content area with flexible layout (containerRelativeFrame 45/55)
             HStack(alignment: .top, spacing: 16) {
@@ -810,11 +791,7 @@ struct WorkOrderDetailView: View {
                             showAllThumbs = true
                         }
                     )
-                    .ifAvailableiOS17 {
-                        $0.containerRelativeFrame([.horizontal], alignment: .leading) { available, _ in
-                            (available - 16) * 0.40   // 40% of the HStack width minus spacing
-                        }
-                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .onAppear {
                         #if DEBUG
                         print("🔍 WO DETAILS: Item \(itemIndex) - \(item.type)")
@@ -961,14 +938,8 @@ struct WorkOrderDetailView: View {
                     .buttonStyle(.plain)
                     .padding(.top, 12)
                 }
-                .padding(.horizontal, 8)
-                .ifAvailableiOS17 {
-                    $0.containerRelativeFrame([.horizontal], alignment: .trailing) { available, _ in
-                        (available - 16) * 0.60   // 60% of the HStack width minus spacing
-                    }
-                }
+                .frame(maxWidth: .infinity, alignment: .trailing)
             }
-            .frame(maxWidth: .infinity)
             // END
         }
         .card()
@@ -1104,7 +1075,6 @@ struct PhoneActionSheet: View {
                         .cornerRadius(12)
                     }
                 }
-                .padding(.horizontal, 20)
                 
                 Spacer()
             }
