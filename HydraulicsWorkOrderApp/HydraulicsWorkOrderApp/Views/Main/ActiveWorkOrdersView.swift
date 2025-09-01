@@ -219,31 +219,25 @@ struct ActiveWorkOrdersView: View {
                         .padding(.top, 32)
                     } else {
                         // Work Order Grid
-                        GeometryReader { geometry in
-                            let spacing: CGFloat = 16
-                            let availableWidth = geometry.size.width - 32 // Account for horizontal padding
-                            let cardWidth = (availableWidth - spacing * 2) / 3 // 3 cards with 2 spaces between
-                            
-                            LazyVGrid(columns: [
-                                GridItem(.fixed(cardWidth), spacing: spacing),
-                                GridItem(.fixed(cardWidth), spacing: spacing),
-                                GridItem(.fixed(cardWidth), spacing: spacing)
-                            ], spacing: spacing) {
-                                ForEach(viewModel.activeWorkOrders, id: \.WO_Number) { workOrder in
-                                    NavigationLink(destination: WorkOrderDetailView(
-                                        workOrder: workOrder,
-                                        onDelete: { deletedWorkOrder in
-                                            viewModel.deleteWorkOrder(deletedWorkOrder)
-                                        }
-                                    )) {
-                                        WorkOrderCardView(workOrder: workOrder)
-                                            .id(workOrder.WO_Number) // Add stable ID to prevent recreation
+                        LazyVGrid(columns: [
+                            GridItem(.flexible(), spacing: 16),
+                            GridItem(.flexible(), spacing: 16),
+                            GridItem(.flexible(), spacing: 16)
+                        ], spacing: 16) {
+                            ForEach(viewModel.activeWorkOrders, id: \.WO_Number) { workOrder in
+                                NavigationLink(destination: WorkOrderDetailView(
+                                    workOrder: workOrder,
+                                    onDelete: { deletedWorkOrder in
+                                        viewModel.deleteWorkOrder(deletedWorkOrder)
                                     }
-                                    .buttonStyle(PlainButtonStyle())
+                                )) {
+                                    WorkOrderCardView(workOrder: workOrder)
+                                        .id(workOrder.WO_Number) // Add stable ID to prevent recreation
                                 }
+                                .buttonStyle(PlainButtonStyle())
                             }
-                            .padding(.horizontal, 16)
                         }
+                        .padding(.horizontal, 16)
                     }
                 }
             }
