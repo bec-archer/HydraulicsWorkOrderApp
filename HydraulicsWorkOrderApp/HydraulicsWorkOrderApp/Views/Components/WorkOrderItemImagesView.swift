@@ -1,5 +1,32 @@
 import SwiftUI
 
+// ⚠️  CRITICAL: DO NOT MODIFY IMAGE SIZES OR SPACING WITHOUT TESTING! ⚠️
+// 
+// This file contains carefully calibrated image dimensions and spacing that took
+// significant time to perfect. The current layout provides:
+//
+// PRIMARY IMAGE:
+// - Size: 300x300px (perfect for visibility without overwhelming the card)
+// - Rounded corners: 8px radius for consistent styling
+//
+// THUMBNAIL GRID:
+// - Container width: 300px (inherits primary image width for perfect alignment)
+// - Thumbnail size: 142x142px each (large enough to be useful, small enough to fit)
+// - Grid spacing: 8px between thumbnails (matches VStack spacing above)
+// - Columns: 2 fixed-width columns (GridItem.fixed(142)) for predictable layout
+//
+// SPACING SYSTEM:
+// - VStack spacing: 8px (between primary image and thumbnail grid)
+// - LazyVGrid spacing: 8px (between thumbnail rows - MUST match VStack spacing)
+// - Result: Perfect visual rhythm and alignment
+//
+// 🚨  WARNING: Changing any of these values will break the carefully balanced layout!
+// 🚨  If you must modify, test thoroughly and update this comment with new values!
+// 🚨  The 300px container width MUST match the primary image width for alignment!
+//
+// Last calibrated: [Current Date] - Primary: 300x300, Thumbnails: 142x142, Spacing: 8px
+// ================================================================================
+
 struct WorkOrderItemImagesView: View {
     let item: WO_Item
     @Binding var selectedImageURL: URL?
