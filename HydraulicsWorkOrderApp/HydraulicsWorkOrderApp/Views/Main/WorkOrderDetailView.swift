@@ -922,14 +922,21 @@ struct WorkOrderDetailView: View {
                                                         } label: {
                                                             AsyncImage(url: url) { phase in
                                                                 switch phase {
-                                                                case .empty: ProgressView()
+                                                                case .empty: 
+                                                                    ProgressView()
+                                                                        .frame(width: 72, height: 72)
                                                                 case .success(let img):
                                                                     img.resizable().scaledToFill()
-                                                                case .failure: Color.gray
-                                                                @unknown default: Color.gray
+                                                                case .failure: 
+                                                                    Color.gray
+                                                                        .frame(width: 72, height: 72)
+                                                                @unknown default: 
+                                                                    Color.gray
+                                                                        .frame(width: 72, height: 72)
                                                                 }
                                                             }
                                                             .frame(width: 72, height: 72)
+                                                            .clipped()
                                                             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                                                         }
                                                         .buttonStyle(.plain)
@@ -1576,21 +1583,17 @@ struct AllThumbnailsSheet: View {
                                     case .empty:
                                         ProgressView()
                                             .frame(width: 150, height: 150)
-                                            .aspectRatio(1, contentMode: .fit)
                                     case .success(let img):
                                         img.resizable()
                                             .scaledToFill()
                                             .frame(width: 150, height: 150)
-                                            .aspectRatio(1, contentMode: .fit)
                                             .clipped()
                                     case .failure:
                                         Color.gray
                                             .frame(width: 150, height: 150)
-                                            .aspectRatio(1, contentMode: .fit)
                                     @unknown default:
                                         Color.gray
                                             .frame(width: 150, height: 150)
-                                            .aspectRatio(1, contentMode: .fit)
                                     }
                                 }
                                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))

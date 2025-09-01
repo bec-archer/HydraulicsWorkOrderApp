@@ -131,7 +131,7 @@ struct DataMigrationView: View {
                 }
             }
         }
-        .onChange(of: migrationService.migrationProgress) { progress in
+        .onChange(of: migrationService.migrationProgress) { _, progress in
             if progress >= 1.0 {
                 // Migration completed, dismiss after a delay
                 DispatchQueue.main.asyncAfter(deadline: .now() + 2) {

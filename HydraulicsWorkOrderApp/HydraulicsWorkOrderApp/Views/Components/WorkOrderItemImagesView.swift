@@ -14,17 +14,17 @@ struct WorkOrderItemImagesView: View {
                     selectedImageURL = firstUrl
                     showImageViewer = true
                 } label: {
-                    StableImageLoader(url: firstUrl)
-                        .aspectRatio(1, contentMode: .fit)
-                        .frame(maxWidth: .infinity)
+                    StableImageLoader(url: firstUrl, showOverlay: false)
+                        .frame(width: 300, height: 300)
+                        .clipped()
+                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 }
                 .buttonStyle(.plain)
             } else {
                 Rectangle()
                     .fill(Color(.systemGray5))
-                    .aspectRatio(1, contentMode: .fit)
-                    .frame(maxWidth: .infinity)
-                    .mask { RoundedRectangle(cornerRadius: 8, style: .continuous) }
+                    .frame(width: 300, height: 300)
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                     .overlay(
                         Image(systemName: "photo")
                             .font(.largeTitle)
@@ -40,9 +40,9 @@ struct WorkOrderItemImagesView: View {
                 let hasMoreImages = displayImages.count > maxThumbnails
                 
                 LazyVGrid(columns: [
-                    GridItem(.flexible()),
-                    GridItem(.flexible())
-                ], spacing: 8) {
+                    GridItem(.fixed(142)),
+                    GridItem(.fixed(142))
+                ], spacing: 16) {
                     ForEach(Array(thumbnailsToShow.enumerated()), id: \.offset) { idx, urlString in
                         Button {
                             if idx == 3 && hasMoreImages {
@@ -52,28 +52,18 @@ struct WorkOrderItemImagesView: View {
                                 showImageViewer = true
                             }
                         } label: {
-                            ZStack {
-                                StableImageLoader(url: URL(string: urlString)!)
-                                    .aspectRatio(1, contentMode: .fit)
-                                
-                                if idx == 3 && hasMoreImages {
-                                    Color.black.opacity(0.5)
-                                        .aspectRatio(1, contentMode: .fit)
-                                        .mask { RoundedRectangle(cornerRadius: 8, style: .continuous) }
-                                    
-                                    Text("+\(displayImages.count - maxThumbnails)")
-                                        .font(.headline)
-                                        .fontWeight(.bold)
-                                        .foregroundColor(.white)
-                                }
-                            }
+                            StableImageLoader(url: URL(string: urlString)!, showOverlay: idx == 3 && hasMoreImages, overlayText: "+\(displayImages.count - maxThumbnails)")
+                                .frame(width: 142, height: 142)
+                                .clipped()
+                                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                         }
                         .buttonStyle(.plain)
                     }
                 }
+                .frame(width: 300)
             }
         }
-        .padding(.horizontal, 12)
+        .padding(.horizontal, 0)
     }
     
 
@@ -81,31 +71,46 @@ struct WorkOrderItemImagesView: View {
 
 struct StableImageLoader: View {
     let url: URL
+    let showOverlay: Bool
+    let overlayText: String
     @State private var image: UIImage?
     @State private var isLoading = true
     
+    init(url: URL, showOverlay: Bool = false, overlayText: String = "") {
+        self.url = url
+        self.showOverlay = showOverlay
+        self.overlayText = overlayText
+    }
+    
     var body: some View {
-        Group {
+        ZStack {
+            // Background image or placeholder
             if let image = image {
                 Image(uiImage: image)
                     .renderingMode(.original)
                     .resizable()
                     .aspectRatio(contentMode: .fill)
                     .clipped()
-                    .mask { RoundedRectangle(cornerRadius: 8, style: .continuous) }
             } else if isLoading {
                 ProgressView()
             } else {
                 Color.gray
-                    .mask { RoundedRectangle(cornerRadius: 8, style: .continuous) }
                     .overlay(
                         Image(systemName: "photo")
                             .font(.largeTitle)
                             .foregroundColor(.white)
                     )
             }
+            
+            // Overlay
+            if showOverlay {
+                Color.black.opacity(0.5)
+                Text(overlayText)
+                    .font(.headline)
+                    .fontWeight(.bold)
+                    .foregroundColor(.white)
+            }
         }
-        .aspectRatio(1, contentMode: .fit)
         .onAppear {
             loadImage()
         }
