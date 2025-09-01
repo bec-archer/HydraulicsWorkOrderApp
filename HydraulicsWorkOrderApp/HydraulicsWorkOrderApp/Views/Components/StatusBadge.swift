@@ -22,7 +22,7 @@ struct StatusBadge: View {
         case "disassembly":  return UIConstants.StatusColors.disassembly
         case "in progress":  return UIConstants.StatusColors.inProgress
         case "test failed":  return UIConstants.StatusColors.testFailed
-        case "completed":    return UIConstants.StatusColors.completed
+        case "complete", "completed":    return UIConstants.StatusColors.completed
         case "closed":       return UIConstants.StatusColors.closed
         default:             return UIConstants.StatusColors.fallback
         }

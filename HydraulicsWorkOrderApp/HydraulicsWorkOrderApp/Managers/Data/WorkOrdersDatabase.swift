@@ -652,7 +652,7 @@ final class WorkOrdersDatabase: ObservableObject {
             // Break up the large initializer into simple locals to help the type checker
             let safeItemId             = it.id ?? UUID()
             let safeTagId              = it.tagId
-            let safeType               = it.type ?? "Unknown"
+            let safeType               = it.type ?? ""
             let safeDropdowns          = it.dropdowns ?? [:]
             let safeReasons            = it.reasonsForService ?? []
             let safeReasonNotes        = it.reasonNotes
@@ -807,7 +807,7 @@ final class WorkOrdersDatabase: ObservableObject {
                              ?? anyItem["imageURLs"] as? [String]
                              ?? []
                 let thumbUrls = anyItem["thumbUrls"] as? [String] ?? []
-                let type   = anyItem["type"] as? String ?? "Unknown"
+                let type   = anyItem["type"] as? String ?? ""
                 let dd     = anyItem["dropdowns"] as? [String: String] ?? [:]
                 let ddv    = anyItem["dropdownSchemaVersion"] as? Int ?? schemaVer
                 let reasons = anyItem["reasonsForService"] as? [String] ?? []
@@ -884,7 +884,7 @@ final class WorkOrdersDatabase: ObservableObject {
                              ?? anyItem["imageURLs"] as? [String]
                              ?? []
                 let thumbUrls = anyItem["thumbUrls"] as? [String] ?? []
-                let type   = anyItem["type"] as? String ?? "Unknown"
+                let type   = anyItem["type"] as? String ?? ""
                 let dd     = anyItem["dropdowns"] as? [String: String] ?? [:]
                 let ddv    = anyItem["dropdownSchemaVersion"] as? Int ?? schemaVer
                 let reasons = anyItem["reasonsForService"] as? [String] ?? []
@@ -1244,74 +1244,112 @@ final class WorkOrdersDatabase: ObservableObject {
                                  completion: @escaping (Result<Void, Error>) -> Void) {
         let docRef = db.collection(collectionName).document(woId)
 
+        // Use targeted Firestore updates instead of full document fetch/save to avoid race conditions
+        let itemIndex = workOrders.firstIndex { $0.id == woId } ?? workOrders.firstIndex { $0.WO_Number == woId }
+        
+        #if DEBUG
+        print("🔍 STATUS UPDATE: Looking for work order in cache")
+        print("   - woId: \(woId)")
+        print("   - Cache size: \(workOrders.count)")
+        print("   - Cache WO Numbers: \(workOrders.map { $0.WO_Number })")
+        print("   - Found by ID: \(workOrders.firstIndex { $0.id == woId } != nil)")
+        print("   - Found by WO_Number: \(workOrders.firstIndex { $0.WO_Number == woId } != nil)")
+        #endif
+        
+        guard let cacheIdx = itemIndex else {
+            print("❌ STATUS UPDATE: Work order not found in cache")
+            print("   - woId: \(woId)")
+            print("   - Available WO Numbers: \(workOrders.map { $0.WO_Number })")
+            completion(.failure(NSError(domain: "WorkOrdersDatabase",
+                                       code: 404,
+                                       userInfo: [NSLocalizedDescriptionKey: "WorkOrder \(woId) not found in cache"])))
+            return
+        }
+        
+        // We need to use a different approach since Firestore doesn't support
+        // updating specific array elements by ID. Let's revert to the safer approach.
+        // First, let's get the current work order from Firestore to ensure we have the latest data
         docRef.getDocument { [weak self] snap, err in
             guard let self else { return }
-            if let err = err { completion(.failure(err)); return }
-            guard let snap, snap.exists else {
-                return completion(.failure(NSError(domain: "WorkOrdersDatabase",
-                                                   code: 404,
-                                                   userInfo: [NSLocalizedDescriptionKey: "WorkOrder \(woId) not found"])))
+            if let err = err {
+                print("❌ STATUS UPDATE: Failed to fetch work order: \(err)")
+                completion(.failure(err))
+                return
             }
-
+            
+            guard let snap, snap.exists else {
+                print("❌ STATUS UPDATE: Work order not found in Firestore")
+                completion(.failure(NSError(domain: "WorkOrdersDatabase",
+                                           code: 404,
+                                           userInfo: [NSLocalizedDescriptionKey: "WorkOrder \(woId) not found"])))
+                return
+            }
+            
             do {
-                var wo = try snap.data(as: WorkOrder.self)
-                // Don't manually set @DocumentID - let Firestore handle it
-
-                guard let idx = wo.items.firstIndex(where: { $0.id == itemId }) else {
-                    return completion(.failure(NSError(domain: "WorkOrdersDatabase",
-                                                       code: 404,
-                                                       userInfo: [NSLocalizedDescriptionKey: "WO_Item \(itemId) not found in WorkOrder \(woId)"])))
+                var workOrderFromFirestore = try snap.data(as: WorkOrder.self)
+                
+                #if DEBUG
+                print("🔍 STATUS UPDATE: Fetched work order from Firestore")
+                print("   - WO Number: \(workOrderFromFirestore.WO_Number)")
+                print("   - Items count: \(workOrderFromFirestore.items.count)")
+                print("   - Looking for item ID: \(itemId)")
+                print("   - Available item IDs: \(workOrderFromFirestore.items.map { $0.id })")
+                #endif
+                
+                // Find the item by ID (not index) and update it
+                guard let itemIdx = workOrderFromFirestore.items.firstIndex(where: { $0.id == itemId }) else {
+                    print("❌ STATUS UPDATE: Item not found in work order")
+                    print("   - Item ID: \(itemId)")
+                    print("   - Available item IDs: \(workOrderFromFirestore.items.map { $0.id })")
+                    completion(.failure(NSError(domain: "WorkOrdersDatabase",
+                                               code: 404,
+                                               userInfo: [NSLocalizedDescriptionKey: "WO_Item \(itemId) not found in WorkOrder \(woId)"])))
+                    return
                 }
-
-                // Append status + mirrored system note
-                wo.items[idx].statusHistory.append(status)
-                wo.items[idx].notes.append(mirroredNote)
-                wo.lastModified = Date()
-                wo.lastModifiedBy = status.user
-
-                try docRef.setData(from: wo, merge: true) { err in
-                    if let err = err { completion(.failure(err)); return }
-
-                    // Update local cache
+                
+                // Update the item's status and notes
+                workOrderFromFirestore.items[itemIdx].statusHistory.append(status)
+                workOrderFromFirestore.items[itemIdx].notes.append(mirroredNote)
+                workOrderFromFirestore.lastModified = Date()
+                workOrderFromFirestore.lastModifiedBy = status.user
+                
+                // Save the entire updated work order
+                try docRef.setData(from: workOrderFromFirestore, merge: true) { err in
+                    if let err = err {
+                        print("❌ STATUS UPDATE: Firestore save failed: \(err)")
+                        completion(.failure(err))
+                        return
+                    }
+                    
+                    // Update local cache with the new data
                     DispatchQueue.main.async {
+                        if let cacheIdx = self.workOrders.firstIndex(where: { $0.WO_Number == workOrderFromFirestore.WO_Number }) {
+                            self.workOrders[cacheIdx] = workOrderFromFirestore
+                        }
+                        
                         #if DEBUG
-                        print("🔄 WorkOrdersDatabase: Updating cache for WO \(wo.WO_Number)")
-                        print("   - Firestore ID: \(wo.id ?? "nil")")
+                        print("🔄 WorkOrdersDatabase: Updated cache for WO \(workOrderFromFirestore.WO_Number)")
+                        print("   - Item \(itemIdx) status updated to: \(status.status)")
                         print("   - Current cache size: \(self.workOrders.count)")
                         #endif
-                        
-                        // Try to find by WO_Number first (more reliable), then by ID as fallback
-                        if let cacheIdx = self.workOrders.firstIndex(where: { $0.WO_Number == wo.WO_Number }) {
-                            self.workOrders[cacheIdx] = wo
-                            #if DEBUG
-                            print("   ✅ Updated by WO_Number at index \(cacheIdx)")
-                            #endif
-                        } else if let woId = wo.id, !woId.isEmpty, let cacheIdx = self.workOrders.firstIndex(where: { $0.id == woId }) {
-                            self.workOrders[cacheIdx] = wo
-                            #if DEBUG
-                            print("   ✅ Updated by ID at index \(cacheIdx)")
-                            #endif
-                        } else {
-                            #if DEBUG
-                            print("   ⚠️ Work order not found in cache - adding to cache")
-                            #endif
-                            // If not found, add it to the cache
-                            self.workOrders.append(wo)
-                        }
                         
                         // Post notification to trigger UI updates
                         NotificationCenter.default.post(
                             name: .WorkOrderSaved,
-                            object: wo.id,
-                            userInfo: ["WO_Number": wo.WO_Number]
+                            object: workOrderFromFirestore.id,
+                            userInfo: ["WO_Number": workOrderFromFirestore.WO_Number]
                         )
                     }
+                    
                     completion(.success(()))
                 }
             } catch {
+                print("❌ STATUS UPDATE: Failed to decode work order: \(error)")
                 completion(.failure(error))
             }
         }
+        
+
     }
     // END updateItemStatusAndNote
 
@@ -1513,11 +1551,34 @@ final class WorkOrdersDatabase: ObservableObject {
                 return
             }
             
+            #if DEBUG
+            print("🔍 DEBUG: Fetched work order from Firestore")
+            print("  - Document ID: \(woId)")
+            print("  - Raw data keys: \(snapshot.data()?.keys.sorted() ?? [])")
+            if let itemsData = snapshot.data()?["items"] as? [[String: Any]] {
+                print("  - Items array count: \(itemsData.count)")
+                for (i, itemData) in itemsData.enumerated() {
+                    print("    Item \(i) keys: \(itemData.keys.sorted())")
+                    print("    Item \(i) type: \(itemData["type"] ?? "nil")")
+                    print("    Item \(i) id: \(itemData["id"] ?? "nil")")
+                }
+            }
+            #endif
+            
             do {
                 var workOrder = try snapshot.data(as: WorkOrder.self)
                 if workOrder.id == nil {
                     workOrder.id = woId
                 }
+                
+                #if DEBUG
+                print("🔍 DEBUG: Successfully decoded work order")
+                print("  - WO Number: \(workOrder.WO_Number)")
+                print("  - Items count: \(workOrder.items.count)")
+                for (i, item) in workOrder.items.enumerated() {
+                    print("    Item \(i): type='\(item.type)', id=\(item.id)")
+                }
+                #endif
                 
                 // Update cache
                 DispatchQueue.main.async {
@@ -1532,11 +1593,93 @@ final class WorkOrdersDatabase: ObservableObject {
                 
                 completion(.success(workOrder))
             } catch {
+                #if DEBUG
+                print("❌ DEBUG: Failed to decode work order: \(error)")
+                print("  - Error details: \(error.localizedDescription)")
+                #endif
                 completion(.failure(error))
             }
         }
     }
     // END fetchWorkOrder
+
+    // ───── FETCH WORK ORDER BY WO NUMBER ─────
+    /// Fetches a work order by its WO_Number (useful for debugging)
+    func fetchWorkOrderByNumber(woNumber: String, completion: @escaping (Result<WorkOrder, Error>) -> Void) {
+        // First try to get from cache
+        if let cachedWorkOrder = workOrders.first(where: { $0.WO_Number == woNumber }) {
+            completion(.success(cachedWorkOrder))
+            return
+        }
+        
+        // If not in cache, query Firestore by WO_Number
+        db.collection(collectionName)
+            .whereField("WO_Number", isEqualTo: woNumber)
+            .limit(to: 1)
+            .getDocuments { [weak self] snapshot, error in
+                if let error = error {
+                    completion(.failure(error))
+                    return
+                }
+                
+                guard let document = snapshot?.documents.first else {
+                    completion(.failure(NSError(domain: "WorkOrdersDatabase",
+                                              code: 404,
+                                              userInfo: [NSLocalizedDescriptionKey: "WorkOrder with number \(woNumber) not found"])))
+                    return
+                }
+                
+                #if DEBUG
+                print("🔍 DEBUG: Found work order by WO_Number: \(woNumber)")
+                print("  - Document ID: \(document.documentID)")
+                print("  - Raw data keys: \(document.data().keys.sorted())")
+                if let itemsData = document.data()["items"] as? [[String: Any]] {
+                    print("  - Items array count: \(itemsData.count)")
+                    for (i, itemData) in itemsData.enumerated() {
+                        print("    Item \(i) keys: \(itemData.keys.sorted())")
+                        print("    Item \(i) type: \(itemData["type"] ?? "nil")")
+                        print("    Item \(i) id: \(itemData["id"] ?? "nil")")
+                    }
+                }
+                #endif
+                
+                do {
+                    var workOrder = try document.data(as: WorkOrder.self)
+                    if workOrder.id == nil {
+                        workOrder.id = document.documentID
+                    }
+                    
+                    #if DEBUG
+                    print("🔍 DEBUG: Successfully decoded work order by WO_Number")
+                    print("  - WO Number: \(workOrder.WO_Number)")
+                    print("  - Items count: \(workOrder.items.count)")
+                    for (i, item) in workOrder.items.enumerated() {
+                        print("    Item \(i): type='\(item.type)', id=\(item.id)")
+                    }
+                    #endif
+                    
+                    // Update cache
+                    DispatchQueue.main.async {
+                        if let self = self {
+                            if let existingIndex = self.workOrders.firstIndex(where: { $0.WO_Number == woNumber }) {
+                                self.workOrders[existingIndex] = workOrder
+                            } else {
+                                self.workOrders.append(workOrder)
+                            }
+                        }
+                    }
+                    
+                    completion(.success(workOrder))
+                } catch {
+                    #if DEBUG
+                    print("❌ DEBUG: Failed to decode work order by WO_Number: \(error)")
+                    print("  - Error details: \(error.localizedDescription)")
+                    #endif
+                    completion(.failure(error))
+                }
+            }
+    }
+    // END fetchWorkOrderByNumber
 
 
 }

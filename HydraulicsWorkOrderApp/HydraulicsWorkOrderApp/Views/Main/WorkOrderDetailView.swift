@@ -12,6 +12,7 @@
 import SwiftUI
 import Foundation
 import FirebaseStorage
+import FirebaseFirestore
 import UIKit
 import Combine
 
@@ -111,6 +112,8 @@ class WorkOrderDetailViewModel: ObservableObject {
                       woNumber == self.workOrder.WO_Number else { return }
                 
                 print("🔄 WorkOrderDetailViewModel: Received notification for WO \(woNumber)")
+                print("  - Current local status: \(self.workOrder.items.first?.statusHistory.last?.status ?? "none")")
+                print("  - Notification userInfo: \(notification.userInfo ?? [:])")
                 
                 // Update the work order from the database
                 Task { @MainActor in
@@ -129,6 +132,11 @@ class WorkOrderDetailViewModel: ObservableObject {
             return
         }
         
+        print("🔄 STATUS UPDATE: Starting status update for item \(itemIndex)")
+        print("  - Current status: \(workOrder.items[itemIndex].statusHistory.last?.status ?? "none")")
+        print("  - New status: \(status)")
+        print("  - Work Order: \(workOrder.WO_Number)")
+        
         isLoading = true
         errorMessage = nil
         
@@ -146,14 +154,19 @@ class WorkOrderDetailViewModel: ObservableObject {
             workOrder.lastModified = Date()
             workOrder.lastModifiedBy = "Tech"
             
+            print("✅ STATUS UPDATE: Local work order updated")
+            print("  - New status history count: \(workOrder.items[itemIndex].statusHistory.count)")
+            print("  - Latest status: \(workOrder.items[itemIndex].statusHistory.last?.status ?? "none")")
+            
             // Save to Firebase using the specific update method
             try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
                 let mirroredNote = WO_Note(
                     user: "Tech",
                     text: "Status changed to: \(status)",
-                    timestamp: Date(),
-                    imageURLs: []
+                    timestamp: Date()
                 )
+                
+                print("💾 STATUS UPDATE: Saving to Firebase...")
                 workOrdersDB.updateItemStatusAndNote(
                     woId: workOrder.id ?? "",
                     itemId: workOrder.items[itemIndex].id,
@@ -162,12 +175,17 @@ class WorkOrderDetailViewModel: ObservableObject {
                 ) { result in
                     switch result {
                     case .success:
+                        print("✅ STATUS UPDATE: Firebase save successful")
                         continuation.resume()
                     case .failure(let error):
+                        print("❌ STATUS UPDATE: Firebase save failed: \(error)")
                         continuation.resume(throwing: error)
                     }
                 }
             }
+            
+            print("✅ STATUS UPDATE: Status update completed successfully")
+            print("  - Final local status: \(workOrder.items[itemIndex].statusHistory.last?.status ?? "none")")
             
         } catch {
             setError("Failed to update status: \(error.localizedDescription)")
@@ -344,11 +362,21 @@ class WorkOrderDetailViewModel: ObservableObject {
                 let oldImageCount = self.workOrder.items.first?.imageUrls.count ?? 0
                 let newImageCount = updatedWorkOrder.items.first?.imageUrls.count ?? 0
                 
-                self.workOrder = updatedWorkOrder
-                print("🔄 WorkOrderDetailViewModel: Refreshed work order \(workOrder.WO_Number)")
+                // Debug status before refresh
+                let oldStatus = self.workOrder.items.first?.statusHistory.last?.status ?? "none"
+                let newStatus = updatedWorkOrder.items.first?.statusHistory.last?.status ?? "none"
+                
+                print("🔄 WorkOrderDetailViewModel: About to refresh work order \(workOrder.WO_Number)")
+                print("  - Old status: \(oldStatus)")
+                print("  - New status: \(newStatus)")
                 print("  - Old image count: \(oldImageCount)")
                 print("  - New image count: \(newImageCount)")
                 print("  - Items updated: \(updatedWorkOrder.items.count)")
+                
+                self.workOrder = updatedWorkOrder
+                
+                print("🔄 WorkOrderDetailViewModel: Refresh completed")
+                print("  - Final status: \(self.workOrder.items.first?.statusHistory.last?.status ?? "none")")
             }
         } catch {
             print("❌ WorkOrderDetailViewModel: Failed to refresh work order: \(error)")
@@ -380,37 +408,37 @@ class WorkOrderDetailViewModel: ObservableObject {
 // MARK: - Helper Extensions
 extension WorkOrderDetailViewModel {
     func getStatusColor(_ status: String) -> Color {
-        switch status {
-        case "Checked In":
-            return .blue
-        case "Disassembly":
-            return .teal
-        case "In Progress":
-            return .yellow
-        case "Test Failed":
-            return .red
-        case "Complete":
-            return .green
-        case "Closed":
-            return .gray
+        switch status.lowercased() {
+        case "checked in":
+            return UIConstants.StatusColors.checkedIn
+        case "disassembly":
+            return UIConstants.StatusColors.disassembly
+        case "in progress":
+            return UIConstants.StatusColors.inProgress
+        case "test failed":
+            return UIConstants.StatusColors.testFailed
+        case "complete", "completed":
+            return UIConstants.StatusColors.completed
+        case "closed":
+            return UIConstants.StatusColors.closed
         default:
-            return .primary
+            return UIConstants.StatusColors.fallback
         }
     }
     
     func getStatusDisplayName(_ status: String) -> String {
-        switch status {
-        case "Checked In":
+        switch status.lowercased() {
+        case "checked in":
             return "Checked In"
-        case "Disassembly":
+        case "disassembly":
             return "Disassembly"
-        case "In Progress":
+        case "in progress":
             return "In Progress"
-        case "Test Failed":
+        case "test failed":
             return "Test Failed"
-        case "Complete":
+        case "complete", "completed":
             return "Complete"
-        case "Closed":
+        case "closed":
             return "Closed"
         default:
             return status
@@ -487,7 +515,76 @@ struct WorkOrderDetailView: View {
                 }
             }
             
-
+            // Temporary debug button for investigating missing data
+            ToolbarItem(placement: .topBarLeading) {
+                Button("Debug WO") {
+                    print("🔍 DEBUG: Investigating work order \(viewModel.workOrder.WO_Number)")
+                    print("  - ID: \(viewModel.workOrder.id ?? "nil")")
+                    print("  - Items count: \(viewModel.workOrder.items.count)")
+                    for (i, item) in viewModel.workOrder.items.enumerated() {
+                        print("    Item \(i): type='\(item.type)', id=\(item.id)")
+                        print("      - statusHistory count: \(item.statusHistory.count)")
+                        print("      - notes count: \(item.notes.count)")
+                        print("      - imageUrls count: \(item.imageUrls.count)")
+                        print("      - reasonsForService: \(item.reasonsForService)")
+                    }
+                    
+                    // Try to fetch fresh data from Firestore
+                    if let woId = viewModel.workOrder.id, !woId.isEmpty {
+                        print("🔄 Attempting to fetch fresh data from Firestore...")
+                        
+                        // First, let's see the raw Firestore data
+                        let docRef = Firestore.firestore().collection("workOrders").document(woId)
+                        docRef.getDocument { snapshot, error in
+                            if let error = error {
+                                print("❌ Failed to fetch raw data: \(error)")
+                                return
+                            }
+                            
+                            guard let snapshot = snapshot, snapshot.exists else {
+                                print("❌ Work order not found in Firestore")
+                                return
+                            }
+                            
+                            print("🔍 RAW FIRESTORE DATA:")
+                            print("  - Document ID: \(woId)")
+                            print("  - All fields: \(snapshot.data()?.keys.sorted() ?? [])")
+                            
+                            if let itemsData = snapshot.data()?["items"] as? [[String: Any]] {
+                                print("  - Items array count: \(itemsData.count)")
+                                for (i, itemData) in itemsData.enumerated() {
+                                    print("    Item \(i) raw data:")
+                                    print("      - All keys: \(itemData.keys.sorted())")
+                                    print("      - type: \(itemData["type"] ?? "nil")")
+                                    print("      - id: \(itemData["id"] ?? "nil")")
+                                    print("      - statusHistory: \(itemData["statusHistory"] ?? "nil")")
+                                    print("      - notes: \(itemData["notes"] ?? "nil")")
+                                    print("      - imageUrls: \(itemData["imageUrls"] ?? "nil")")
+                                    print("      - reasonsForService: \(itemData["reasonsForService"] ?? "nil")")
+                                }
+                            } else {
+                                print("  - Items field is not an array or missing")
+                            }
+                            
+                            // Now try the normal fetch
+                            WorkOrdersDatabase.shared.fetchWorkOrder(woId: woId) { result in
+                                switch result {
+                                case .success(let freshWorkOrder):
+                                    print("✅ Fresh data fetched successfully")
+                                    print("  - WO Number: \(freshWorkOrder.WO_Number)")
+                                    print("  - Items count: \(freshWorkOrder.items.count)")
+                                    for (i, item) in freshWorkOrder.items.enumerated() {
+                                        print("    Item \(i): type='\(item.type)', id=\(item.id)")
+                                    }
+                                case .failure(let error):
+                                    print("❌ Failed to fetch fresh data: \(error)")
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            
         }
         .alert("Delete this Work Order?", isPresented: $showDeleteConfirm) {
             Button("Delete", role: .destructive) {
@@ -1103,7 +1200,7 @@ struct StatusPickerSheet: View {
         "Disassembly",
         "In Progress",
         "Test Failed",
-        "Completed",
+        "Complete",
         "Closed"
     ]
     
