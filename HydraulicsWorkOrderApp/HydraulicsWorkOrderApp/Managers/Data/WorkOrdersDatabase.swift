@@ -99,6 +99,8 @@ final class WorkOrdersDatabase: ObservableObject {
                 print("    imageUrls=\(item.imageUrls), thumbUrls=\(item.thumbUrls)")
                 print("    reasonsForService=\(item.reasonsForService)")
             }
+            
+            // Debug logging for items encoding
             #endif
             
             // ───── Ensure each WO_Item has baseline "Checked In" status ─────
@@ -165,6 +167,9 @@ final class WorkOrdersDatabase: ObservableObject {
 
     // ───── FETCH ALL WORK ORDERS FROM FIRESTORE (lenient decode) ─────
     func fetchAllWorkOrders(completion: @escaping (Result<[WorkOrder], Error>) -> Void) {
+        #if DEBUG
+        print("🔍 DEBUG: fetchAllWorkOrders called")
+        #endif
         // If offline, return cached work orders
         if !NetworkMonitor.shared.isConnected {
             #if DEBUG
@@ -203,6 +208,9 @@ final class WorkOrdersDatabase: ObservableObject {
                             wo.id = doc.documentID
                         }
                         decoded.append(wo)
+                        #if DEBUG
+                        print("✅ Successfully decoded WorkOrder: \(wo.WO_Number) with \(wo.items.count) items")
+                        #endif
                     } catch let DecodingError.keyNotFound(key, context) {
                         // ───── Lossy fallback for legacy docs (try once) ─────
                         if let safe = try? self.decodeLossyWorkOrder(from: doc) {
@@ -266,15 +274,49 @@ final class WorkOrdersDatabase: ObservableObject {
                             print("⚠️ WorkOrder decode skipped:", msg)
                             failures.append((doc.documentID, msg))
                         }
-                    } catch {
+                    } catch let DecodingError.typeMismatch(type, context) {
+                        #if DEBUG
+                        print("❌ WorkOrder decode failed on '\(context.codingPath.first?.stringValue ?? "unknown")': typeMismatch(\(type), \(context.debugDescription))")
+                        if context.codingPath.first?.stringValue == "items" {
+                            print("🔍 Items field type mismatch - this is the root cause of the issue!")
+                            let raw = doc.data()
+                            if let itemsData = raw["items"] {
+                                if let itemsDict = itemsData as? [String: Any] {
+                                    print("🔍 Items is stored as dictionary with \(itemsDict.count) keys")
+                                    for (key, _) in itemsDict {
+                                        print("  Key: \(key)")
+                                    }
+                                } else if let itemsArray = itemsData as? [Any] {
+                                    print("🔍 Items is stored as array with \(itemsArray.count) elements")
+                                } else {
+                                    print("🔍 Items data is neither dictionary nor array")
+                                }
+                            }
+                        }
+                        #endif
                         let raw = doc.data()
                         if let built = self.buildWorkOrderFromRaw(raw, id: doc.documentID) {
                             decoded.append(built)
                             #if DEBUG
-                            print("ℹ️ Lossy‑built WorkOrder \(doc.documentID) from raw after decode error: \(error.localizedDescription)")
+                            print("ℹ️ Lossy‑built WorkOrder \(doc.documentID) from raw after decode error: \(error)")
                             #endif
                         } else {
-                            let msg = "Unknown decode error in \(doc.documentID): \(error.localizedDescription)"
+                            let msg = "Unknown decode error in \(doc.documentID): \(error)"
+                            print("⚠️ WorkOrder decode skipped:", msg)
+                            failures.append((doc.documentID, msg))
+                        }
+                    } catch {
+                        #if DEBUG
+                        print("❌ WorkOrder decode failed with unknown error: \(error)")
+                        #endif
+                        let raw = doc.data()
+                        if let built = self.buildWorkOrderFromRaw(raw, id: doc.documentID) {
+                            decoded.append(built)
+                            #if DEBUG
+                            print("ℹ️ Lossy‑built WorkOrder \(doc.documentID) from raw after unknown decode error")
+                            #endif
+                        } else {
+                            let msg = "Unknown decode error in \(doc.documentID): \(error)"
                             print("⚠️ WorkOrder decode skipped:", msg)
                             failures.append((doc.documentID, msg))
                         }
@@ -452,7 +494,7 @@ final class WorkOrdersDatabase: ObservableObject {
                     // even if the Firestore write is delayed or retried.
                     self.replaceInCache(wo)
 
-                    try docRef.setData(from: wo, merge: false) { err in
+                    try docRef.setData(from: wo, merge: true) { err in
                         if let err = err {
                             // Even if the write errored, keep the UI responsive with the resolved preview.
                             self.replaceInCache(wo)
@@ -477,6 +519,71 @@ final class WorkOrdersDatabase: ObservableObject {
         attempt(3)
     }
     // END image URL merge (robust)
+
+    // ───── ADD IMAGES FROM NOTES TO ITEM COLLECTION ─────
+    /// Adds images from notes to the end of the item's imageUrls array (doesn't replace primary image)
+    func appendItemImagesFromNote(woId: String,
+                                  itemId: UUID,
+                                  imageURLs: [String],
+                                  uploadedBy user: String = "system",
+                                  completion: @escaping (Result<Void, Error>) -> Void) {
+        
+        let docRef = db.collection(collectionName).document(woId)
+        
+        docRef.getDocument { [weak self] snap, err in
+            guard let self else { return }
+            if let err = err { completion(.failure(err)); return }
+            guard let snap, snap.exists else {
+                return completion(.failure(NSError(domain: "WorkOrdersDatabase",
+                                                   code: 404,
+                                                   userInfo: [NSLocalizedDescriptionKey: "WorkOrder \(woId) not found"])))
+            }
+            
+            do {
+                var wo = try snap.data(as: WorkOrder.self)
+                
+                guard let idx = wo.items.firstIndex(where: { $0.id == itemId }) else {
+                    return completion(.failure(NSError(domain: "WorkOrdersDatabase",
+                                                        code: 404,
+                                                        userInfo: [NSLocalizedDescriptionKey: "WO_Item \(itemId) not found in WorkOrder \(woId)"])))
+                }
+                
+                // Add images to the end of the array (not beginning)
+                for imageURL in imageURLs {
+                    if !wo.items[idx].imageUrls.contains(imageURL) {
+                        wo.items[idx].imageUrls.append(imageURL)
+                    }
+                }
+                
+                wo.lastModified = Date()
+                wo.lastModifiedBy = user
+                
+                try docRef.setData(from: wo, merge: true) { err in
+                    if let err = err { completion(.failure(err)); return }
+                    
+                    // Update local cache
+                    DispatchQueue.main.async {
+                        if let cacheIdx = self.workOrders.firstIndex(where: { $0.WO_Number == wo.WO_Number }) {
+                            self.workOrders[cacheIdx] = wo
+                        } else if let woId = wo.id, !woId.isEmpty, let cacheIdx = self.workOrders.firstIndex(where: { $0.id == woId }) {
+                            self.workOrders[cacheIdx] = wo
+                        }
+                        
+                        // Post notification to trigger UI updates
+                        NotificationCenter.default.post(
+                            name: .WorkOrderSaved,
+                            object: wo.id,
+                            userInfo: ["WO_Number": wo.WO_Number]
+                        )
+                    }
+                    completion(.success(()))
+                }
+            } catch {
+                completion(.failure(error))
+            }
+        }
+    }
+    // END append images from notes
 
     // ───── Lossy decode shim for legacy docs ─────
     /// Attempts to decode a WorkOrder while tolerating missing optional fields like imageUrls.
@@ -686,11 +793,91 @@ final class WorkOrdersDatabase: ObservableObject {
         let schemaVer  = i("dropdownSchemaVersion") ?? 1
 
         var items: [WO_Item] = []
+        
+        // Handle both array format (new) and dictionary format (legacy)
         if let arr = raw["items"] as? [[String: Any]] {
+            // New format: items is an array of dictionaries
             #if DEBUG
-            print("🔍 DEBUG: buildWorkOrderFromRaw - Found \(arr.count) items in raw data")
+            print("🔍 DEBUG: buildWorkOrderFromRaw - Found \(arr.count) items in array format")
             #endif
             for anyItem in arr {
+                let itemId = (anyItem["id"] as? String).flatMap(UUID.init(uuidString:)) ?? UUID()
+                let tagId  = anyItem["tagId"] as? String
+                let urls   = anyItem["imageUrls"] as? [String]
+                             ?? anyItem["imageURLs"] as? [String]
+                             ?? []
+                let thumbUrls = anyItem["thumbUrls"] as? [String] ?? []
+                let type   = anyItem["type"] as? String ?? "Unknown"
+                let dd     = anyItem["dropdowns"] as? [String: String] ?? [:]
+                let ddv    = anyItem["dropdownSchemaVersion"] as? Int ?? schemaVer
+                let reasons = anyItem["reasonsForService"] as? [String] ?? []
+                let reasonNotes = anyItem["reasonNotes"] as? String
+                let completedReasons = anyItem["completedReasons"] as? [String] ?? []
+                let assigned = anyItem["assignedTo"] as? String ?? ""
+                let isFlagged = anyItem["isFlagged"] as? Bool ?? false
+                let notes = anyItem["notes"] as? [WO_Note] ?? []
+                let lastModified = {
+                    if let timestamp = anyItem["lastModified"] as? Timestamp {
+                        return timestamp.dateValue()
+                    } else if let date = anyItem["lastModified"] as? Date {
+                        return date
+                    } else {
+                        return Date()
+                    }
+                }()
+                let lastModifiedBy = anyItem["lastModifiedBy"] as? String
+
+                let item = WO_Item(
+                    id: itemId,
+                    woItemId: nil,  // Will be set when needed
+                    tagId: tagId,
+                    imageUrls: urls,
+                    thumbUrls: thumbUrls,
+                    type: type,
+                    dropdowns: dd,
+                    dropdownSchemaVersion: ddv,
+                    reasonsForService: reasons,
+                    reasonNotes: reasonNotes,
+                    completedReasons: completedReasons,
+                    statusHistory: [],
+                    testResult: nil,
+                    partsUsed: nil,
+                    hoursWorked: nil,
+                    cost: nil,
+                    assignedTo: assigned,
+                    isFlagged: isFlagged,
+                    tagReplacementHistory: nil
+                )
+                
+                // Set additional fields that aren't in the initializer
+                var mutableItem = item
+                mutableItem.notes = notes
+                mutableItem.lastModified = lastModified
+                mutableItem.lastModifiedBy = lastModifiedBy
+                items.append(mutableItem)
+            }
+        } else if let itemsDict = raw["items"] as? [String: Any] {
+            // Legacy format: items is a dictionary with integer-string keys
+            #if DEBUG
+            print("🔍 DEBUG: buildWorkOrderFromRaw - Found \(itemsDict.count) items in dictionary format")
+            #endif
+            
+            // Sort keys to maintain order (0, 1, 2, etc.)
+            let sortedKeys = itemsDict.keys.sorted { key1, key2 in
+                if let int1 = Int(key1), let int2 = Int(key2) {
+                    return int1 < int2
+                }
+                return key1 < key2
+            }
+            
+            for key in sortedKeys {
+                guard let anyItem = itemsDict[key] as? [String: Any] else {
+                    #if DEBUG
+                    print("⚠️ DEBUG: buildWorkOrderFromRaw - Skipping invalid item at key \(key)")
+                    #endif
+                    continue
+                }
+                
                 let itemId = (anyItem["id"] as? String).flatMap(UUID.init(uuidString:)) ?? UUID()
                 let tagId  = anyItem["tagId"] as? String
                 let urls   = anyItem["imageUrls"] as? [String]
@@ -1002,7 +1189,7 @@ final class WorkOrdersDatabase: ObservableObject {
                 wo.lastModified = Date()
                 wo.lastModifiedBy = note.user
 
-                try docRef.setData(from: wo, merge: false) { err in
+                try docRef.setData(from: wo, merge: true) { err in
                     if let err = err { completion(.failure(err)); return }
 
                     // Update local cache so UI lists refresh
@@ -1082,7 +1269,7 @@ final class WorkOrdersDatabase: ObservableObject {
                 wo.lastModified = Date()
                 wo.lastModifiedBy = status.user
 
-                try docRef.setData(from: wo, merge: false) { err in
+                try docRef.setData(from: wo, merge: true) { err in
                     if let err = err { completion(.failure(err)); return }
 
                     // Update local cache
@@ -1161,7 +1348,7 @@ final class WorkOrdersDatabase: ObservableObject {
                 wo.lastModified = Date()
                 wo.lastModifiedBy = note.user
 
-                try docRef.setData(from: wo, merge: false) { err in
+                try docRef.setData(from: wo, merge: true) { err in
                     if let err = err { completion(.failure(err)); return }
 
                     // Update local cache
@@ -1263,7 +1450,7 @@ final class WorkOrdersDatabase: ObservableObject {
             }
             
             let docRef = db.collection(collectionName).document(woId)
-            try? docRef.setData(from: updatedWorkOrder, merge: false) { error in
+            try? docRef.setData(from: updatedWorkOrder, merge: true) { error in
                 if let error = error {
                     #if DEBUG
                     print("   ❌ Failed to migrate \(workOrder.WO_Number): \(error.localizedDescription)")
@@ -1301,5 +1488,5 @@ final class WorkOrdersDatabase: ObservableObject {
     }
     // END migrateExistingWorkOrdersToHaveWOItemIds
 
-    // END
+
 }

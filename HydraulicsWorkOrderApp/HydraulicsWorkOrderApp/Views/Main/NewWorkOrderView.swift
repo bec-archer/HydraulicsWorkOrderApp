@@ -171,9 +171,14 @@ class NewWorkOrderViewModel: ObservableObject {
         errorMessage = nil
         
         do {
-            print("📝 DEBUG Save Attempt")
-            print("Customer: \(customer.name) – \(customer.phone)")
-            print("WO_Items count: \(items.count)")
+            print("🔍 SAVING WORK ORDER: \(workOrderNumber)")
+            print("  Customer: \(customer.name)")
+            print("  Items to save: \(nonBlankItems.count)")
+            
+            // Debug each item being saved
+            for (i, item) in nonBlankItems.enumerated() {
+                print("  Item \(i): type='\(item.type)', images=\(item.imageUrls.count), reasons=\(item.reasonsForService.count)")
+            }
             
             let itemsSnapshot = nonBlankItems
             let builtItems: [WO_Item] = itemsSnapshot.map { $0 }
@@ -207,20 +212,22 @@ class NewWorkOrderViewModel: ObservableObject {
                 items: builtItems
             )
             
-            print("🚀 Attempting to save WorkOrder: \(workOrder.WO_Number)")
+            print("🚀 Saving to Firebase...")
             try await withCheckedThrowingContinuation { continuation in
                 workOrdersDB.addWorkOrder(workOrder) { result in
                     switch result {
                     case .success(let docId):
-                        print("✅ WorkOrder saved successfully: \(workOrder.WO_Number) with ID: \(docId)")
+                        print("✅ SAVED SUCCESSFULLY: \(workOrder.WO_Number) -> ID: \(docId)")
                         continuation.resume()
                     case .failure(let error):
+                        print("❌ SAVE FAILED: \(error.localizedDescription)")
                         continuation.resume(throwing: error)
                     }
                 }
             }
             
         } catch {
+            print("❌ SAVE ERROR: \(error.localizedDescription)")
             setError("Failed to save work order: \(error.localizedDescription)")
         }
         
@@ -555,24 +562,16 @@ struct NewWorkOrderView: View {
     }
 
     private func addNewItem() {
-        print("🔍 Add Item button pressed. items count: \(viewModel.items.count)")
-        
-        // Debug: Check the state of each item
-        for (index, item) in viewModel.items.enumerated() {
-            let hasType = !item.type.isEmpty
-            let hasPhoto = !item.imageUrls.isEmpty || !item.thumbUrls.isEmpty
-            print("🔍 Item \(index): type='\(item.type)', hasType=\(hasType), imageUrls.count=\(item.imageUrls.count), thumbUrls.count=\(item.thumbUrls.count), hasPhoto=\(hasPhoto)")
-        }
+        print("➕ ITEM: Adding new item (current: \(viewModel.items.count))")
         
         showValidationNudge = false
-        print("🔄 Adding new item. Current count: \(viewModel.items.count)")
         
         withAnimation {
             viewModel.addItem()
             expandedIndices.insert(viewModel.items.indices.last!)
         }
         
-        print("✅ Added new item. New count: \(viewModel.items.count), expandedIndices: \(expandedIndices)")
+        print("✅ ITEM: Added new item (total: \(viewModel.items.count))")
     }
     
     private func saveWorkOrder(onSuccess: (() -> Void)? = nil) {

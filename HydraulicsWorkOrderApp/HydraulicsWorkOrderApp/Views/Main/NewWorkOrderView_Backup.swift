@@ -474,7 +474,7 @@ struct NewWorkOrderView: View {
         }
 
         // ───── DEBUG LOG ─────
-        print("📝 DEBUG Save Attempt")
+                    print("🔍 SAVING: Starting work order save")
         print("Customer: \(customer.name) – \(customer.phone)")
         print("WO_Items count: \(items.count)")
         for (i, item) in items.enumerated() {

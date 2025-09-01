@@ -43,21 +43,21 @@ class ImageResolverViewModel: ObservableObject {
     func resolveImageURLs() {
         // Prevent multiple simultaneous resolutions
         if isResolving {
-            print("⚠️ ImageResolverViewModel: Already resolving for WO \(workOrderNumber), skipping")
+            print("⚠️ IMAGE: Already resolving for WO \(workOrderNumber)")
             return
         }
         
         isResolving = true
-        print("🔄 ImageResolverViewModel: Starting image resolution for WO \(workOrderNumber)")
+        print("🔄 IMAGE: Resolving images for WO \(workOrderNumber)")
         
         // Get the work order from cache
         guard let workOrder = WorkOrdersDatabase.shared.workOrders.first(where: { $0.WO_Number == workOrderNumber }) else {
-            print("❌ ImageResolverViewModel: WorkOrder not found in cache for WO \(workOrderNumber)")
+            print("❌ IMAGE: WorkOrder not found for WO \(workOrderNumber)")
             isResolving = false
             return
         }
         
-        print("✅ ImageResolverViewModel: Found work order with \(workOrder.items.count) items")
+        print("✅ IMAGE: Found WO with \(workOrder.items.count) items")
         
         var candidateURLs: [URL] = []
         var currentRawPathsForWO: [String] = []

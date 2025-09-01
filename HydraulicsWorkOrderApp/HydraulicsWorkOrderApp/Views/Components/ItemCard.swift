@@ -92,7 +92,7 @@ struct ItemCard: View {
             
             // Debug-only subtitle for easy styling in Selectable
             if debugSelectable {
-                Text("WO Item #: \(item.woItemId)")
+                Text("WO Item #: \(item.woItemId ?? "nil")")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
@@ -114,10 +114,8 @@ struct ItemCard: View {
                 } else {
                     WorkOrderItemImagesView(
                         item: item,
-                        itemIndex: 0, // ItemCard doesn't have itemIndex context
-                        onImageSelected: { url in
-                            onImageTap?(url)
-                        },
+                        selectedImageURL: .constant(nil),
+                        showImageViewer: .constant(false),
                         onShowAllThumbs: {
                             // For ItemCard, we can just open the first image in full screen
                             if let firstUrl = URL(string: item.imageUrls[0]) {

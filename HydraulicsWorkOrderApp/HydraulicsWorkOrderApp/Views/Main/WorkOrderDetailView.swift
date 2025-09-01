@@ -173,47 +173,73 @@ class WorkOrderDetailViewModel: ObservableObject {
         isLoading = true
         errorMessage = nil
         
+        // Ensure we have valid note text
+        let finalNoteText = noteText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 
+            (imageURLs.isEmpty ? "Note added" : "Image added") : noteText
+        
         do {
             let newNote = WO_Note(
                 user: "Tech",
-                text: noteText,
+                text: finalNoteText,
                 timestamp: Date(),
                 imageURLs: imageURLs
             )
             
-            print("📝 WorkOrderDetailView: Creating note with \(imageURLs.count) images")
-            for (i, url) in imageURLs.enumerated() {
-                print("  Image URL \(i): \(url)")
-            }
+            print("📝 NOTE: Creating note with \(imageURLs.count) images")
             
             // Add note to the item
             workOrder.items[itemIndex].notes.append(newNote)
-            
-            // Add images to item if provided
-            if !imageURLs.isEmpty {
-                workOrder.items[itemIndex].imageUrls.append(contentsOf: imageURLs)
-            }
             
             workOrder.lastModified = Date()
             workOrder.lastModifiedBy = "Tech"
             
             // Save to Firebase using addItemNote method
+            let workOrderId = workOrder.id ?? ""
+            guard !workOrderId.isEmpty else {
+                setError("Work order ID is missing")
+                return
+            }
+            
+            print("💾 SAVING: Note for WO \(workOrderId)")
+            
             try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
                 workOrdersDB.addItemNote(
-                    woId: workOrder.id ?? "",
+                    woId: workOrderId,
                     itemId: workOrder.items[itemIndex].id,
                     note: newNote
                 ) { result in
                     switch result {
                     case .success:
+                        print("✅ NOTE: Saved successfully")
+                        
+                        // After successfully saving the note, also add images to the item's main collection
+                        if !imageURLs.isEmpty {
+                            self.workOrdersDB.appendItemImagesFromNote(
+                                woId: workOrderId,
+                                itemId: self.workOrder.items[itemIndex].id,
+                                imageURLs: imageURLs,
+                                uploadedBy: "Tech"
+                            ) { result in
+                                switch result {
+                                case .success:
+                                    print("📸 IMAGES: Added \(imageURLs.count) images to item collection")
+                                case .failure(let error):
+                                    print("⚠️ IMAGES: Failed to add to item collection: \(error)")
+                                    // Don't fail the note save if image persistence fails
+                                }
+                            }
+                        }
+                        
                         continuation.resume()
                     case .failure(let error):
+                        print("❌ NOTE: Failed to save: \(error.localizedDescription)")
                         continuation.resume(throwing: error)
                     }
                 }
             }
             
         } catch {
+            print("❌ NOTE: Error adding note: \(error.localizedDescription)")
             setError("Failed to add note: \(error.localizedDescription)")
         }
         
@@ -418,6 +444,20 @@ struct WorkOrderDetailView: View {
                     }
                 }
             }
+            
+            // Debug button (temporary)
+            ToolbarItem(placement: .topBarLeading) {
+                Button("Debug") {
+                    print("🔍 WO DETAILS: \(viewModel.workOrder.WO_Number)")
+                    print("  ID: \(viewModel.workOrder.id ?? "nil")")
+                    print("  Status: \(viewModel.workOrder.status)")
+                    print("  Items: \(viewModel.workOrder.items.count)")
+                    
+                    for (i, item) in viewModel.workOrder.items.enumerated() {
+                        print("    Item \(i): type='\(item.type)', images=\(item.imageUrls.count), reasons=\(item.reasonsForService.count)")
+                    }
+                }
+            }
         }
         .alert("Delete this Work Order?", isPresented: $showDeleteConfirm) {
             Button("Delete", role: .destructive) {
@@ -449,9 +489,7 @@ struct WorkOrderDetailView: View {
             }
         }
         .onAppear {
-            #if DEBUG
-            print("🔍 WorkOrderDetailView: WorkOrder \(viewModel.workOrder.WO_Number) has \(viewModel.workOrder.items.count) items")
-            #endif
+            print("🔍 DETAIL: WO \(viewModel.workOrder.WO_Number) has \(viewModel.workOrder.items.count) items")
         }
         .sheet(isPresented: $showingPhoneActions) {
             PhoneActionSheet(
@@ -492,10 +530,7 @@ struct WorkOrderDetailView: View {
                     isPresented: $viewModel.showAddNoteSheet
                 )
                 .onAppear {
-                    print("🔍 WorkOrderDetailView: Opening AddNoteSheet")
-                    print("  Work Order ID: '\(workOrderId)'")
-                    print("  Work Order Number: \(viewModel.workOrder.WO_Number)")
-                    print("  Item ID: \(item.id)")
+                    print("📝 NOTE: Opening AddNoteSheet for WO \(viewModel.workOrder.WO_Number)")
                 }
             }
         }
@@ -720,11 +755,8 @@ struct WorkOrderDetailView: View {
                 if !item.imageUrls.isEmpty {
                     WorkOrderItemImagesView(
                         item: item,
-                        itemIndex: itemIndex,
-                        onImageSelected: { url in
-                            selectedImageURL = url
-                            showImageViewer = true
-                        },
+                        selectedImageURL: $selectedImageURL,
+                        showImageViewer: $showImageViewer,
                         onShowAllThumbs: {
                             viewModel.selectedItemIndex = itemIndex
                             showAllThumbs = true
@@ -1186,7 +1218,10 @@ struct AddNoteSheet: View {
                             isPresented = false
                         } else {
                             // Upload images first, then add note
-                            uploadImagesAndAddNote(noteText: noteText, images: selectedImages)
+                            // If no note text but there are images, add a default note
+                            let finalNoteText = noteText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 
+                                "Image added" : noteText
+                            uploadImagesAndAddNote(noteText: finalNoteText, images: selectedImages)
                         }
                     }
                     .buttonStyle(.borderedProminent)
@@ -1227,13 +1262,11 @@ struct AddNoteSheet: View {
         let woId = workOrderId
         let itemId = item.id.uuidString
         
-        print("📸 AddNoteSheet: Starting upload for \(images.count) images")
-        print("  Work Order ID: \(woId)")
-        print("  Item ID: \(itemId)")
+        print("📸 UPLOAD: Starting upload for \(images.count) images")
         
         // Check if we have valid IDs
         guard !woId.isEmpty && woId != "placeholder" else {
-            print("❌ AddNoteSheet: Invalid work order ID: '\(woId)'")
+            print("❌ UPLOAD: Invalid work order ID: '\(woId)'")
             self.isUploading = false
             self.onNoteAdded(noteText, [])
             self.isPresented = false
@@ -1256,11 +1289,11 @@ struct AddNoteSheet: View {
             let filename = "\(timestamp)_\(randomSuffix)_\(index).jpg"
             let imageRef = storageRef.child("intake/\(woId)/\(itemId)/\(filename)")
             
-            print("📸 AddNoteSheet: Uploading image \(index) to path: \(imageRef.fullPath)")
+            print("📸 UPLOAD: Image \(index) -> \(imageRef.fullPath)")
             
             // Convert image to data
             guard let imageData = image.jpegData(compressionQuality: 0.8) else {
-                print("❌ AddNoteSheet: Failed to convert image \(index) to JPEG data")
+                print("❌ UPLOAD: Failed to convert image \(index) to JPEG")
                 group.leave()
                 continue
             }
@@ -1271,27 +1304,27 @@ struct AddNoteSheet: View {
             
             imageRef.putData(imageData, metadata: metadata) { metadata, error in
                 if let error = error {
-                    print("❌ AddNoteSheet: Image upload failed for image \(index): \(error.localizedDescription)")
+                    print("❌ UPLOAD: Image \(index) failed: \(error.localizedDescription)")
                     group.leave()
                     return
                 }
                 
-                print("✅ AddNoteSheet: Image \(index) uploaded successfully")
+                print("✅ UPLOAD: Image \(index) uploaded successfully")
                 
                 // Get download URL
                 imageRef.downloadURL { url, error in
                     defer { group.leave() }
                     
                     if let error = error {
-                        print("❌ AddNoteSheet: Failed to get download URL for image \(index): \(error.localizedDescription)")
+                        print("❌ UPLOAD: Failed to get download URL for image \(index): \(error.localizedDescription)")
                         return
                     }
                     
                     if let downloadURL = url {
-                        print("✅ AddNoteSheet: Got download URL for image \(index): \(downloadURL.absoluteString)")
+                        print("✅ UPLOAD: Got download URL for image \(index)")
                         uploadedURLs.append(downloadURL.absoluteString)
                     } else {
-                        print("❌ AddNoteSheet: Download URL is nil for image \(index)")
+                        print("❌ UPLOAD: Download URL is nil for image \(index)")
                     }
                 }
             }
@@ -1300,10 +1333,7 @@ struct AddNoteSheet: View {
         // When all uploads are complete, add the note
         group.notify(queue: .main) {
             self.isUploading = false
-            print("📸 AddNoteSheet: Uploaded \(uploadedURLs.count) images")
-            for (i, url) in uploadedURLs.enumerated() {
-                print("  Image \(i): \(url)")
-            }
+            print("📸 UPLOAD: Completed \(uploadedURLs.count) images")
             self.onNoteAdded(noteText, uploadedURLs)
             self.isPresented = false
         }
@@ -1463,21 +1493,21 @@ struct AllThumbnailsSheet: View {
                                     switch phase {
                                     case .empty:
                                         ProgressView()
-                                            .frame(width: 100, height: 100)
+                                            .frame(width: 150, height: 150)
                                             .aspectRatio(1, contentMode: .fit)
                                     case .success(let img):
                                         img.resizable()
                                             .scaledToFill()
-                                            .frame(width: 100, height: 100)
+                                            .frame(width: 150, height: 150)
                                             .aspectRatio(1, contentMode: .fit)
                                             .clipped()
                                     case .failure:
                                         Color.gray
-                                            .frame(width: 100, height: 100)
+                                            .frame(width: 150, height: 150)
                                             .aspectRatio(1, contentMode: .fit)
                                     @unknown default:
                                         Color.gray
-                                            .frame(width: 100, height: 100)
+                                            .frame(width: 150, height: 150)
                                             .aspectRatio(1, contentMode: .fit)
                                     }
                                 }

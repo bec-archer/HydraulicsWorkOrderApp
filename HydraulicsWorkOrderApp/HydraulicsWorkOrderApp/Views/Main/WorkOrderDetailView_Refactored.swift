@@ -741,13 +741,7 @@ struct WorkOrderDetailView_Refactored: View {
     
     private func setupDebugLogging() {
         #if DEBUG
-        print("🔍 WorkOrderDetailView: WorkOrder \(viewModel.workOrder.WO_Number) has \(viewModel.workOrder.items.count) items")
-        for (i, item) in viewModel.workOrder.items.enumerated() {
-            print("  Item \(i): type='\(item.type)', images=\(item.imageUrls.count), thumbs=\(item.thumbUrls.count)")
-        }
-        if viewModel.workOrder.items.isEmpty {
-            print("⚠️ WorkOrderDetailView: No items found for work order \(viewModel.workOrder.WO_Number)")
-        }
+        print("🔍 DETAIL: WO \(viewModel.workOrder.WO_Number) has \(viewModel.workOrder.items.count) items")
         #endif
     }
 }

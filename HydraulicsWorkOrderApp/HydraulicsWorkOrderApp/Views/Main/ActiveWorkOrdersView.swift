@@ -61,9 +61,7 @@ class ActiveWorkOrdersViewModel: ObservableObject {
                 return $0.timestamp < $1.timestamp
             }
         
-        #if DEBUG
-        print("📋 ActiveWorkOrdersView: Found \(active.count) active work orders out of \(workOrders.count) total")
-        #endif
+        print("📋 ACTIVE: \(active.count) active work orders (total: \(workOrders.count))")
         
         return active
     }
@@ -278,6 +276,8 @@ struct ActiveWorkOrdersView: View {
                 }
                 .accessibilityLabel("Add Work Order")
             }
+            
+
         }
     }
 }

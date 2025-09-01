@@ -2,112 +2,67 @@ import SwiftUI
 
 struct WorkOrderItemImagesView: View {
     let item: WO_Item
-    let itemIndex: Int
-    let onImageSelected: (URL) -> Void
-    let onShowAllThumbs: () -> Void
-    
-    @State private var selectedImageURL: URL?
-    @State private var showImageViewer = false
+    @Binding var selectedImageURL: URL?
+    @Binding var showImageViewer: Bool
+    var onShowAllThumbs: (() -> Void)? = nil
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            // ── Primary Image
-            if let firstUrl = URL(string: item.imageUrls[0]) {
-                Button {
-                    selectedImageURL = firstUrl
-                    showImageViewer = true
-                } label: {
-                    AsyncImage(url: firstUrl) { phase in
-                        switch phase {
-                        case .empty:
-                            ProgressView()
-                                .frame(maxWidth: .infinity)
-                                .aspectRatio(1, contentMode: .fit)
-                        case .success(let image):
-                            image
-                                .renderingMode(.original)
-                                .resizable()
-                                .aspectRatio(contentMode: .fill)
-                                .mask {
-                                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                }
-                                .frame(maxWidth: .infinity)
-                                .aspectRatio(1, contentMode: .fit)
-                                .clipped()
-                                .mask { RoundedRectangle(cornerRadius: 8, style: .continuous) }
-                        case .failure:
-                            Color.gray
-                                .frame(maxWidth: .infinity)
-                                .aspectRatio(1, contentMode: .fit)
-                                .mask { RoundedRectangle(cornerRadius: 8, style: .continuous) }
-                        @unknown default:
-                            Color.gray
-                                .frame(maxWidth: .infinity)
-                                .aspectRatio(1, contentMode: .fit)
-                                .mask { RoundedRectangle(cornerRadius: 8, style: .continuous) }
-                        }
+        GeometryReader { geometry in
+            let availableWidth = max(geometry.size.width, 200) // Ensure minimum width
+            let primaryImageSize = availableWidth
+            let thumbnailSize = (availableWidth - 6) / 2 // Account for 6pt spacing between thumbnails
+            
+            VStack(alignment: .leading, spacing: 6) {
+                // Primary Image
+                if !item.imageUrls.isEmpty, let firstUrl = URL(string: item.imageUrls[0]) {
+                    Button {
+                        selectedImageURL = firstUrl
+                        showImageViewer = true
+                    } label: {
+                        StableImageLoader(url: firstUrl, fixedWidth: primaryImageSize)
                     }
+                    .buttonStyle(.plain)
+                } else {
+                    Rectangle()
+                        .fill(Color(.systemGray5))
+                        .frame(width: primaryImageSize, height: primaryImageSize)
+                        .mask { RoundedRectangle(cornerRadius: 8, style: .continuous) }
+                        .overlay(
+                            Image(systemName: "photo")
+                                .font(.largeTitle)
+                                .foregroundColor(.gray)
+                        )
                 }
-                .buttonStyle(.plain)
-            }
-
-            // ── Thumbnail Grid using LazyVGrid
-            if item.imageUrls.count > 1 {
-                let additionalImages = Array(item.imageUrls.dropFirst())
-                let displayImages = Array(additionalImages.prefix(4)) // Show up to 4 thumbnails
-                let extraCount = max(0, additionalImages.count - displayImages.count)
                 
-                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 6) {
-                    ForEach(Array(displayImages.enumerated()), id: \.offset) { idx, urlString in
-                        if let url = URL(string: urlString) {
+                // Thumbnail Grid
+                if item.imageUrls.count > 1 {
+                    let displayImages = Array(item.imageUrls.dropFirst())
+                    
+                    LazyVGrid(columns: [
+                        GridItem(.fixed(thumbnailSize)),
+                        GridItem(.fixed(thumbnailSize))
+                    ], spacing: 6) {
+                        ForEach(Array(displayImages.enumerated()), id: \.offset) { idx, urlString in
                             Button {
-                                if extraCount > 0 && idx == displayImages.count - 1 {
-                                    onShowAllThumbs()
-                                } else {
+                                if idx == 3 && displayImages.count > 4 {
+                                    onShowAllThumbs?()
+                                } else if let url = URL(string: urlString) {
                                     selectedImageURL = url
                                     showImageViewer = true
                                 }
                             } label: {
                                 ZStack {
-                                    AsyncImage(url: url) { phase in
-                                        switch phase {
-                                        case .empty:
-                                            ProgressView()
-                                                .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity, alignment: .center)
-                                                .aspectRatio(1, contentMode: .fit)
-                                        case .success(let img):
-                                            img.renderingMode(.original)
-                                                .resizable()
-                                                .aspectRatio(contentMode: .fill)
-                                                .mask {
-                                                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                                }
-                                                .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity, alignment: .center)
-                                                .aspectRatio(1, contentMode: .fit)
-                                                .clipped()
-                                                .mask { RoundedRectangle(cornerRadius: 8, style: .continuous) }
-                                        case .failure:
-                                            Color.gray
-                                                .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity, alignment: .center)
-                                                .aspectRatio(1, contentMode: .fit)
-                                                .mask { RoundedRectangle(cornerRadius: 8, style: .continuous) }
-                                        @unknown default:
-                                            Color.gray
-                                                .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity, alignment: .center)
-                                                .aspectRatio(1, contentMode: .fit)
-                                                .mask { RoundedRectangle(cornerRadius: 8, style: .continuous) }
-                                        }
-                                    }
+                                    StableImageLoader(url: URL(string: urlString)!, fixedWidth: thumbnailSize)
+                                        .frame(width: thumbnailSize, height: thumbnailSize)
                                     
-                                    // Overlay for additional images indicator
-                                    if extraCount > 0 && idx == displayImages.count - 1 {
-                                        Rectangle()
-                                            .fill(Color.black.opacity(0.35))
-                                            .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity, alignment: .center)
-                                            .aspectRatio(1, contentMode: .fit)
+                                    if idx == 3 && displayImages.count > 4 {
+                                        Color.black.opacity(0.5)
+                                            .frame(width: thumbnailSize, height: thumbnailSize)
                                             .mask { RoundedRectangle(cornerRadius: 8, style: .continuous) }
-                                        Text("+\(extraCount)")
-                                            .font(.caption.weight(.semibold))
+                                        
+                                        Text("+\(displayImages.count - 4)")
+                                            .font(.headline)
+                                            .fontWeight(.bold)
                                             .foregroundColor(.white)
                                     }
                                 }
@@ -117,39 +72,96 @@ struct WorkOrderItemImagesView: View {
                     }
                 }
             }
+            .frame(width: availableWidth, height: calculateTotalHeight(primaryImageSize: primaryImageSize, thumbnailSize: thumbnailSize, hasThumbnails: item.imageUrls.count > 1))
         }
-        .frame(maxWidth: .infinity)
-        .padding(8)
-        .fullScreenCover(isPresented: $showImageViewer) {
-            if let selectedImageURL = selectedImageURL {
-                FullScreenImageViewer(imageURL: selectedImageURL, isPresented: $showImageViewer)
+        .frame(height: calculateEstimatedHeight(hasThumbnails: item.imageUrls.count > 1))
+    }
+    
+    private func calculateTotalHeight(primaryImageSize: CGFloat, thumbnailSize: CGFloat, hasThumbnails: Bool) -> CGFloat {
+        var height = primaryImageSize
+        if hasThumbnails {
+            height += 6 + thumbnailSize // spacing + thumbnail row height
+        }
+        return height
+    }
+    
+    private func calculateEstimatedHeight(hasThumbnails: Bool) -> CGFloat {
+        let estimatedPrimarySize: CGFloat = 280 // Increased to prevent cutoff
+        let estimatedThumbnailSize: CGFloat = (estimatedPrimarySize - 6) / 2
+        
+        var height = estimatedPrimarySize
+        if hasThumbnails {
+            height += 6 + estimatedThumbnailSize
+        }
+        return height
+    }
+}
+
+struct StableImageLoader: View {
+    let url: URL
+    let fixedWidth: CGFloat
+    @State private var image: UIImage?
+    @State private var isLoading = true
+    
+    var body: some View {
+        Group {
+            if let image = image {
+                Image(uiImage: image)
+                    .renderingMode(.original)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(width: fixedWidth, height: fixedWidth)
+                    .clipped()
+                    .mask { RoundedRectangle(cornerRadius: 8, style: .continuous) }
+            } else if isLoading {
+                ProgressView()
+                    .frame(width: fixedWidth, height: fixedWidth)
+            } else {
+                Color.gray
+                    .frame(width: fixedWidth, height: fixedWidth)
+                    .mask { RoundedRectangle(cornerRadius: 8, style: .continuous) }
+                    .overlay(
+                        Image(systemName: "photo")
+                            .font(.largeTitle)
+                            .foregroundColor(.white)
+                    )
             }
         }
-        .onChange(of: selectedImageURL) { newValue in
-            if let url = newValue {
-                onImageSelected(url)
-            }
+        .onAppear {
+            loadImage()
         }
+    }
+    
+    private func loadImage() {
+        isLoading = true
+        URLSession.shared.dataTask(with: url) { data, response, error in
+            DispatchQueue.main.async {
+                isLoading = false
+                if let data = data, let loadedImage = UIImage(data: data) {
+                    self.image = loadedImage
+                }
+            }
+        }.resume()
     }
 }
 
 #Preview {
-    let sampleItem: WO_Item = {
-        var item = WO_Item.sample
-        item.imageUrls = [
-            "https://example.com/image1.jpg",
-            "https://example.com/image2.jpg",
-            "https://example.com/image3.jpg"
-        ]
-        return item
-    }()
-    
-    return WorkOrderItemImagesView(
-        item: sampleItem,
-        itemIndex: 0,
-        onImageSelected: { _ in },
-        onShowAllThumbs: { }
+    WorkOrderItemImagesView(
+        item: {
+            var item = WO_Item.create()
+            item.type = "Sample Item"
+            item.imageUrls = [
+                "https://example.com/image1.jpg",
+                "https://example.com/image2.jpg",
+                "https://example.com/image3.jpg",
+                "https://example.com/image4.jpg",
+                "https://example.com/image5.jpg"
+            ]
+            return item
+        }(),
+        selectedImageURL: .constant(nil),
+        showImageViewer: .constant(false),
+        onShowAllThumbs: {}
     )
-    .frame(width: 200, height: 300)
-    .background(Color.gray.opacity(0.1))
+    .padding()
 }

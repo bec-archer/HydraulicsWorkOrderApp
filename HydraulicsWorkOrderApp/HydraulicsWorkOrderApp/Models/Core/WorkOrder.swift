@@ -128,57 +128,259 @@ struct WorkOrder: Identifiable, Codable, Equatable {
 
     // ───── Backward-Compatible Decoder ─────
     init(from decoder: Decoder) throws {
+        #if DEBUG
+        print("🔍 DEBUG: WorkOrder decoding started")
+        #endif
+        
         let c = try decoder.container(keyedBy: CodingKeys.self)
 
-        self.createdBy  = try c.decode(String.self, forKey: .createdBy)
-
-        // Customer fields — tolerate legacy shapes
-        self.customerId    = try c.decodeIfPresent(String.self, forKey: .customerId) ?? ""
-                        self.customerName  = try c.decodeIfPresent(String.self, forKey: .customerName) ?? ""
-                self.customerCompany = try c.decodeIfPresent(String.self, forKey: .customerCompany)
-                self.customerEmail = try c.decodeIfPresent(String.self, forKey: .customerEmail)
-                self.customerTaxExempt = try c.decodeIfPresent(Bool.self, forKey: .customerTaxExempt) ?? false
-        if let phone = try c.decodeIfPresent(String.self, forKey: .customerPhone) {
-            self.customerPhone = phone
-        } else {
-            // legacy key
-            self.customerPhone = try c.decodeIfPresent(String.self, forKey: .phoneNumber) ?? ""
+        do {
+            self.createdBy = try c.decode(String.self, forKey: .createdBy)
+        } catch {
+            #if DEBUG
+            print("❌ WorkOrder decode failed on 'createdBy': \(error)")
+            #endif
+            throw error
         }
 
-        self.WO_Type    = try c.decodeIfPresent(String.self, forKey: .WO_Type) ?? ""
+        // Customer fields — tolerate legacy shapes
+        do {
+            self.customerId = try c.decodeIfPresent(String.self, forKey: .customerId) ?? ""
+        } catch {
+            #if DEBUG
+            print("❌ WorkOrder decode failed on 'customerId': \(error)")
+            #endif
+            throw error
+        }
+        
+        do {
+            self.customerName = try c.decodeIfPresent(String.self, forKey: .customerName) ?? ""
+        } catch {
+            #if DEBUG
+            print("❌ WorkOrder decode failed on 'customerName': \(error)")
+            #endif
+            throw error
+        }
+        
+        do {
+            self.customerCompany = try c.decodeIfPresent(String.self, forKey: .customerCompany)
+        } catch {
+            #if DEBUG
+            print("❌ WorkOrder decode failed on 'customerCompany': \(error)")
+            #endif
+            throw error
+        }
+        
+        do {
+            self.customerEmail = try c.decodeIfPresent(String.self, forKey: .customerEmail)
+        } catch {
+            #if DEBUG
+            print("❌ WorkOrder decode failed on 'customerEmail': \(error)")
+            #endif
+            throw error
+        }
+        
+        do {
+            self.customerTaxExempt = try c.decodeIfPresent(Bool.self, forKey: .customerTaxExempt) ?? false
+        } catch {
+            #if DEBUG
+            print("❌ WorkOrder decode failed on 'customerTaxExempt': \(error)")
+            #endif
+            throw error
+        }
+        
+        do {
+            if let phone = try c.decodeIfPresent(String.self, forKey: .customerPhone) {
+                self.customerPhone = phone
+            } else {
+                // legacy key
+                self.customerPhone = try c.decodeIfPresent(String.self, forKey: .phoneNumber) ?? ""
+            }
+        } catch {
+            #if DEBUG
+            print("❌ WorkOrder decode failed on 'customerPhone': \(error)")
+            #endif
+            throw error
+        }
+
+        do {
+            self.WO_Type = try c.decodeIfPresent(String.self, forKey: .WO_Type) ?? ""
+        } catch {
+            #if DEBUG
+            print("❌ WorkOrder decode failed on 'WO_Type': \(error)")
+            #endif
+            throw error
+        }
 
         // ───── Image URL – Backward compatible only ─────
-        self.imageURL  = try c.decodeIfPresent(String.self, forKey: .imageURL)
-        self.imageURLs = try c.decodeIfPresent([String].self, forKey: .imageURLs)
+        do {
+            self.imageURL = try c.decodeIfPresent(String.self, forKey: .imageURL)
+        } catch {
+            #if DEBUG
+            print("❌ WorkOrder decode failed on 'imageURL': \(error)")
+            #endif
+            throw error
+        }
+        
+        do {
+            self.imageURLs = try c.decodeIfPresent([String].self, forKey: .imageURLs)
+        } catch {
+            #if DEBUG
+            print("❌ WorkOrder decode failed on 'imageURLs': \(error)")
+            #endif
+            throw error
+        }
         // ───── END image URL decode ─────
 
-        self.timestamp  = try c.decodeIfPresent(Date.self,   forKey: .timestamp) ?? Date()
-        self.status     = try c.decodeIfPresent(String.self, forKey: .status) ?? "Checked In"
-        self.WO_Number  = try c.decodeIfPresent(String.self, forKey: .WO_Number) ?? ""
-        self.flagged    = try c.decodeIfPresent(Bool.self,   forKey: .flagged) ?? false
+        do {
+            self.timestamp = try c.decodeIfPresent(Date.self, forKey: .timestamp) ?? Date()
+        } catch {
+            #if DEBUG
+            print("❌ WorkOrder decode failed on 'timestamp': \(error)")
+            #endif
+            throw error
+        }
+        
+        do {
+            self.status = try c.decodeIfPresent(String.self, forKey: .status) ?? "Checked In"
+        } catch {
+            #if DEBUG
+            print("❌ WorkOrder decode failed on 'status': \(error)")
+            #endif
+            throw error
+        }
+        
+        do {
+            self.WO_Number = try c.decodeIfPresent(String.self, forKey: .WO_Number) ?? ""
+        } catch {
+            #if DEBUG
+            print("❌ WorkOrder decode failed on 'WO_Number': \(error)")
+            #endif
+            throw error
+        }
+        
+        do {
+            self.flagged = try c.decodeIfPresent(Bool.self, forKey: .flagged) ?? false
+        } catch {
+            #if DEBUG
+            print("❌ WorkOrder decode failed on 'flagged': \(error)")
+            #endif
+            throw error
+        }
 
-        self.tagId         = try c.decodeIfPresent(String.self, forKey: .tagId)
-        self.estimatedCost = try c.decodeIfPresent(String.self, forKey: .estimatedCost)
-        self.finalCost     = try c.decodeIfPresent(String.self, forKey: .finalCost)
+        do {
+            self.tagId = try c.decodeIfPresent(String.self, forKey: .tagId)
+        } catch {
+            #if DEBUG
+            print("❌ WorkOrder decode failed on 'tagId': \(error)")
+            #endif
+            throw error
+        }
+        
+        do {
+            self.estimatedCost = try c.decodeIfPresent(String.self, forKey: .estimatedCost)
+        } catch {
+            #if DEBUG
+            print("❌ WorkOrder decode failed on 'estimatedCost': \(error)")
+            #endif
+            throw error
+        }
+        
+        do {
+            self.finalCost = try c.decodeIfPresent(String.self, forKey: .finalCost)
+        } catch {
+            #if DEBUG
+            print("❌ WorkOrder decode failed on 'finalCost': \(error)")
+            #endif
+            throw error
+        }
 
-        self.dropdowns             = try c.decodeIfPresent([String:String].self, forKey: .dropdowns) ?? [:]
-        self.dropdownSchemaVersion = try c.decodeIfPresent(Int.self, forKey: .dropdownSchemaVersion) ?? 1
+        do {
+            self.dropdowns = try c.decodeIfPresent([String:String].self, forKey: .dropdowns) ?? [:]
+        } catch {
+            #if DEBUG
+            print("❌ WorkOrder decode failed on 'dropdowns': \(error)")
+            #endif
+            throw error
+        }
+        
+        do {
+            self.dropdownSchemaVersion = try c.decodeIfPresent(Int.self, forKey: .dropdownSchemaVersion) ?? 1
+        } catch {
+            #if DEBUG
+            print("❌ WorkOrder decode failed on 'dropdownSchemaVersion': \(error)")
+            #endif
+            throw error
+        }
 
-        // If legacy docs don’t have lastModified, fall back to timestamp
-        self.lastModified   = try c.decodeIfPresent(Date.self, forKey: .lastModified) ?? self.timestamp
-        self.lastModifiedBy = try c.decodeIfPresent(String.self, forKey: .lastModifiedBy) ?? self.createdBy
+        // If legacy docs don't have lastModified, fall back to timestamp
+        do {
+            self.lastModified = try c.decodeIfPresent(Date.self, forKey: .lastModified) ?? self.timestamp
+        } catch {
+            #if DEBUG
+            print("❌ WorkOrder decode failed on 'lastModified': \(error)")
+            #endif
+            throw error
+        }
+        
+        do {
+            self.lastModifiedBy = try c.decodeIfPresent(String.self, forKey: .lastModifiedBy) ?? self.createdBy
+        } catch {
+            #if DEBUG
+            print("❌ WorkOrder decode failed on 'lastModifiedBy': \(error)")
+            #endif
+            throw error
+        }
 
-        self.tagBypassReason = try c.decodeIfPresent(String.self, forKey: .tagBypassReason)
-        self.isDeleted       = try c.decodeIfPresent(Bool.self,   forKey: .isDeleted) ?? false
+        do {
+            self.tagBypassReason = try c.decodeIfPresent(String.self, forKey: .tagBypassReason)
+        } catch {
+            #if DEBUG
+            print("❌ WorkOrder decode failed on 'tagBypassReason': \(error)")
+            #endif
+            throw error
+        }
+        
+        do {
+            self.isDeleted = try c.decodeIfPresent(Bool.self, forKey: .isDeleted) ?? false
+        } catch {
+            #if DEBUG
+            print("❌ WorkOrder decode failed on 'isDeleted': \(error)")
+            #endif
+            throw error
+        }
 
-        self.notes = try c.decodeIfPresent([WO_Note].self, forKey: .notes) ?? []
-        self.items = try c.decodeIfPresent([WO_Item].self, forKey: .items) ?? []
+        do {
+            self.notes = try c.decodeIfPresent([WO_Note].self, forKey: .notes) ?? []
+        } catch {
+            #if DEBUG
+            print("❌ WorkOrder decode failed on 'notes': \(error)")
+            #endif
+            throw error
+        }
+        
+        do {
+            self.items = try c.decodeIfPresent([WO_Item].self, forKey: .items) ?? []
+        } catch {
+            #if DEBUG
+            print("❌ WorkOrder decode failed on 'items': \(error)")
+            #endif
+            throw error
+        }
+        
+        #if DEBUG
+        print("✅ WorkOrder decode successful: \(self.WO_Number) with \(self.items.count) items")
+        #endif
     }
     // END
 
     // ───── Encodable (manual) ─────
     func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
+
+        #if DEBUG
+        print("🔧 WorkOrder encoding: \(WO_Number) with \(items.count) items")
+        #endif
 
         // Do NOT encode `id` — Firestore manages @DocumentID on write
         try c.encode(createdBy, forKey: .createdBy)
@@ -212,7 +414,20 @@ struct WorkOrder: Identifiable, Codable, Equatable {
         try c.encode(isDeleted, forKey: .isDeleted)
 
         try c.encode(notes, forKey: .notes)
+        
+        // Ensure items is encoded as an array
+        #if DEBUG
+        print("🔧 Encoding items array with \(items.count) items")
+        for (i, item) in items.enumerated() {
+            print("  Item \(i): type='\(item.type)', id=\(item.id)")
+        }
+        #endif
+        
         try c.encode(items, forKey: .items)
+        
+        #if DEBUG
+        print("✅ WorkOrder encoding completed: \(WO_Number)")
+        #endif
     }
 
     // ───── Memberwise init (used by previews & manual construction) ─────
