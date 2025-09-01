@@ -20,78 +20,75 @@ struct FullScreenImageViewer: View {
     @State private var loadFailed = false
 
     var body: some View {
-        GeometryReader { geometry in
-            ZStack(alignment: .topTrailing) {
-                // Blurred background overlay
-                Rectangle()
-                    .fill(.ultraThinMaterial)
-                    .ignoresSafeArea()
-                    .onTapGesture {
-                        closeViewer()
-                    }
-
-                if let image = loadedUIImage {
-                    Image(uiImage: image)
-                        .resizable()
-                        .scaledToFit()
-                        .scaleEffect(pinchScale * scale)
-                        .offset(y: offset.height + dragOffset.height)
-                        .shadow(color: .black.opacity(0.3), radius: 20, x: 0, y: 10)
-                        .gesture(
-                            DragGesture()
-                                .updating($dragOffset) { value, state, _ in
-                                    state = value.translation
-                                }
-                                .onEnded { value in
-                                    if abs(value.translation.height) > 100 {
-                                        closeViewer()
-                                    }
-                                }
-                        )
-                        .gesture(
-                            MagnificationGesture()
-                                .updating($pinchScale) { current, state, _ in
-                                    state = current
-                                }
-                        )
-                        .position(x: geometry.size.width / 2, y: geometry.size.height / 2)
-                        .onTapGesture {
-                            // Prevent tap from closing when tapping on the image
-                        }
-                } else if loadFailed {
-                    VStack {
-                        Text("❌ Failed to load image")
-                            .foregroundColor(.white)
-                            .font(.headline)
-                        Text(imageURL.absoluteString)
-                            .foregroundColor(.gray)
-                            .font(.footnote)
-                            .multilineTextAlignment(.center)
-                            .padding()
-                    }
-                } else {
-                    ProgressView()
-                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                        .scaleEffect(1.5)
-                }
-
-                // ✖️ Close Button (top-right)
-                Button {
+        ZStack(alignment: .topTrailing) {
+            // Black background
+            Color.black
+                .ignoresSafeArea()
+                .onTapGesture {
                     closeViewer()
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 30, weight: .bold))
-                        .foregroundColor(.white)
-                        .shadow(radius: 5)
-                        .padding(16)
                 }
-                .accessibilityLabel("Close Image Viewer")
+
+            if let image = loadedUIImage {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFit()
+                    .scaleEffect(pinchScale * scale)
+                    .offset(y: offset.height + dragOffset.height)
+                    .shadow(color: .black.opacity(0.3), radius: 20, x: 0, y: 10)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .gesture(
+                        DragGesture()
+                            .updating($dragOffset) { value, state, _ in
+                                state = value.translation
+                            }
+                            .onEnded { value in
+                                if abs(value.translation.height) > 100 {
+                                    closeViewer()
+                                }
+                            }
+                    )
+                    .gesture(
+                        MagnificationGesture()
+                            .updating($pinchScale) { current, state, _ in
+                                state = current
+                            }
+                    )
+                    .onTapGesture {
+                        // Prevent tap from closing when tapping on the image
+                    }
+            } else if loadFailed {
+                VStack {
+                    Text("❌ Failed to load image")
+                        .foregroundColor(.white)
+                        .font(.headline)
+                    Text(imageURL.absoluteString)
+                        .foregroundColor(.gray)
+                        .font(.footnote)
+                        .multilineTextAlignment(.center)
+                        .padding()
+                }
+            } else {
+                ProgressView()
+                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                    .scaleEffect(1.5)
             }
-            .transition(.asymmetric(
-                insertion: .opacity.combined(with: .scale(scale: 0.8)).animation(.easeOut(duration: 0.3)),
-                removal: .opacity.combined(with: .scale(scale: 1.1)).animation(.easeIn(duration: 0.2))
-            ))
+
+            // ✖️ Close Button (top-right)
+            Button {
+                closeViewer()
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: 30, weight: .bold))
+                    .foregroundColor(.white)
+                    .shadow(radius: 5)
+                    .padding(16)
+            }
+            .accessibilityLabel("Close Image Viewer")
         }
+        .transition(.asymmetric(
+            insertion: .opacity.combined(with: .scale(scale: 0.8)).animation(.easeOut(duration: 0.3)),
+            removal: .opacity.combined(with: .scale(scale: 1.1)).animation(.easeIn(duration: 0.2))
+        ))
         .onAppear {
             print("🧩 FullScreenImageViewer launched with imageURL: \(imageURL.absoluteString)")
             

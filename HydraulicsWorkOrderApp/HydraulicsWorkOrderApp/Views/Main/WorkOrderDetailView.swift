@@ -600,16 +600,11 @@ struct WorkOrderDetailView: View {
         } message: {
             Text(viewModel.errorMessage ?? "An error occurred")
         }
-        .overlay {
-            if showImageViewer, let url = selectedImageURL {
+        .fullScreenCover(isPresented: $showImageViewer) {
+            if let url = selectedImageURL {
                 FullScreenImageViewer(imageURL: url, isPresented: $showImageViewer)
-                    .transition(.asymmetric(
-                        insertion: .opacity.combined(with: .scale(scale: 0.8)).animation(.easeOut(duration: 0.3)),
-                        removal: .opacity.combined(with: .scale(scale: 1.1)).animation(.easeIn(duration: 0.2))
-                    ))
             }
         }
-        .animation(.easeInOut(duration: 0.3), value: showImageViewer)
         .onChange(of: showImageViewer) { _, isShowing in
             if !isShowing {
                 selectedImageURL = nil
@@ -1652,7 +1647,7 @@ struct AllThumbnailsSheet: View {
                                             .frame(width: 150, height: 150)
                                     case .success(let img):
                                         img.resizable()
-                                            .scaledToFill()
+                                            .scaledToFit()
                                             .frame(width: 150, height: 150)
                                             .clipped()
                                     case .failure:
