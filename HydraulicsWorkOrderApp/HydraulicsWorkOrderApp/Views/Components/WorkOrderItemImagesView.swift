@@ -42,7 +42,7 @@ struct WorkOrderItemImagesView: View {
                 LazyVGrid(columns: [
                     GridItem(.fixed(142)),
                     GridItem(.fixed(142))
-                ], spacing: 16) {
+                ], spacing: 8) {
                     ForEach(Array(thumbnailsToShow.enumerated()), id: \.offset) { idx, urlString in
                         Button {
                             if idx == 3 && hasMoreImages {
