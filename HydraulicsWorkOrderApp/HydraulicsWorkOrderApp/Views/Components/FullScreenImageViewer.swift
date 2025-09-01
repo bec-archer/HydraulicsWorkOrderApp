@@ -21,41 +21,49 @@ struct FullScreenImageViewer: View {
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
-            // Black background
-            Color.black
+            // Dimming overlay background (ensures viewer sits above other overlays/sheets)
+            Color.black.opacity(0.55)
                 .ignoresSafeArea()
-                .onTapGesture {
-                    closeViewer()
-                }
+                .contentShape(Rectangle()) // make entire dim area tappable
+                .onTapGesture { closeViewer() }
+                .zIndex(0)
 
             if let image = loadedUIImage {
-                Image(uiImage: image)
-                    .resizable()
-                    .scaledToFit()
-                    .scaleEffect(pinchScale * scale)
-                    .offset(y: offset.height + dragOffset.height)
-                    .shadow(color: .black.opacity(0.3), radius: 20, x: 0, y: 10)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .gesture(
-                        DragGesture()
-                            .updating($dragOffset) { value, state, _ in
-                                state = value.translation
+                ZStack {
+                    // Subtle background that covers the image area
+                    Color.black.opacity(0.2)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFit()
+                        .scaleEffect(pinchScale * scale)
+                        .offset(y: offset.height + dragOffset.height)
+                        .shadow(color: .black.opacity(0.3), radius: 20, x: 0, y: 10)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .zIndex(1) // keep the image above the dim background and other overlays
+                } // end inner image ZStack
+                .gesture(
+                    DragGesture()
+                        .updating($dragOffset) { value, state, _ in
+                            state = value.translation
+                        }
+                        .onEnded { value in
+                            if abs(value.translation.height) > 100 {
+                                closeViewer()
                             }
-                            .onEnded { value in
-                                if abs(value.translation.height) > 100 {
-                                    closeViewer()
-                                }
-                            }
-                    )
-                    .gesture(
-                        MagnificationGesture()
-                            .updating($pinchScale) { current, state, _ in
-                                state = current
-                            }
-                    )
-                    .onTapGesture {
-                        // Prevent tap from closing when tapping on the image
-                    }
+                        }
+                )
+                .gesture(
+                    MagnificationGesture()
+                        .updating($pinchScale) { current, state, _ in
+                            state = current
+                        }
+                )
+                .onTapGesture {
+                    // Prevent tap from closing when tapping on the image
+                }
+                .zIndex(1)
             } else if loadFailed {
                 VStack {
                     Text("❌ Failed to load image")
@@ -84,19 +92,21 @@ struct FullScreenImageViewer: View {
                     .padding(16)
             }
             .accessibilityLabel("Close Image Viewer")
+            .zIndex(2)
         }
+        .zIndex(9999)
         .transition(.asymmetric(
             insertion: .opacity.combined(with: .scale(scale: 0.8)).animation(.easeOut(duration: 0.3)),
             removal: .opacity.combined(with: .scale(scale: 1.1)).animation(.easeIn(duration: 0.2))
         ))
         .onAppear {
             print("🧩 FullScreenImageViewer launched with imageURL: \(imageURL.absoluteString)")
-            
+
 #if DEBUG
-    // Show a quick placeholder, but still fetch the real image
-    if loadedUIImage == nil {
-        self.loadedUIImage = UIImage(systemName: "photo")
-    }
+            // Show a quick placeholder, but still fetch the real image
+            if loadedUIImage == nil {
+                self.loadedUIImage = UIImage(systemName: "photo")
+            }
 #endif
 
             var request = URLRequest(url: imageURL)

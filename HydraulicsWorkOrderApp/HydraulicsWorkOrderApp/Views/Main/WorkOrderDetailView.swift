@@ -663,12 +663,18 @@ struct WorkOrderDetailView: View {
                     imageURLs: allThumbs,
                     isPresented: $showAllThumbs,
                     onThumbTapped: { url in
+                        // First dismiss the sheet, then show the image viewer
+                        showAllThumbs = false
                         selectedImageURL = url
-                        showImageViewer = true
+                        // Small delay to ensure sheet dismissal completes
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                            showImageViewer = true
+                        }
                     }
                 )
             }
         }
+        .animation(.easeInOut(duration: 0.3), value: showImageViewer)
     }
     
     // MARK: - Header Section
