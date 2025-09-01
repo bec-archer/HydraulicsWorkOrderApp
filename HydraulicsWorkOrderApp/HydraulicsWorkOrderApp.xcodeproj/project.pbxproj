@@ -72,6 +72,7 @@
 				Views/Components/StatusBadge.swift,
 				Views/Components/WOItemAccordionRow.swift,
 				Views/Components/WorkOrderCardView.swift,
+				Views/Components/WorkOrderItemImagesView.swift,
 				Views/Main/ActiveWorkOrdersView.swift,
 				Views/Main/AddWOItemFormView.swift,
 				Views/Main/AddWOItemView.swift,

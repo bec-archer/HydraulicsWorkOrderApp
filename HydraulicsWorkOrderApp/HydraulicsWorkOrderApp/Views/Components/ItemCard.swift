@@ -98,104 +98,33 @@ struct ItemCard: View {
             }
             
             // ───── Images Row ─────
-            // Multiple images in horizontal scroll (or plain row for Selectable)
-            if !item.thumbUrls.isEmpty {
+            // Updated to match WorkOrderDetailView layout with primary image and 2x2 grid
+            if !item.imageUrls.isEmpty {
                 if debugSelectable {
                     // Plain row helps Xcode Selectable pick inner elements
                     HStack(spacing: 8) {
-                        // Use paired thumb/full URLs, fallback to individual arrays
-                        let paired = Array(zip(item.thumbUrls, item.imageUrls))
-                        if !paired.isEmpty {
-                            ForEach(Array(paired.enumerated()), id: \.offset) { _, _ in
-                                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                    .fill(Color(.systemGray4))
-                                    .frame(width: 96, height: 96)
-                                    .overlay(Text("IMG").font(.caption2).foregroundStyle(.secondary))
-                            }
-                        } else {
-                            // Fallback: use thumbUrls if available
-                            ForEach(Array(item.thumbUrls.enumerated()), id: \.offset) { _, _ in
-                                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                    .fill(Color(.systemGray4))
-                                    .frame(width: 96, height: 96)
-                                    .overlay(Text("IMG").font(.caption2).foregroundStyle(.secondary))
-                            }
+                        ForEach(0..<min(3, item.imageUrls.count), id: \.self) { _ in
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .fill(Color(.systemGray4))
+                                .frame(width: 96, height: 96)
+                                .overlay(Text("IMG").font(.caption2).foregroundStyle(.secondary))
                         }
                     }
                     .padding(.horizontal, 4)
                 } else {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 8) {
-                            // Use paired thumb/full URLs, fallback to individual arrays
-                            let paired = Array(zip(item.thumbUrls, item.imageUrls))
-                            if !paired.isEmpty {
-                                ForEach(Array(paired.enumerated()), id: \.offset) { index, pair in
-                                    let (thumb, _) = pair
-                                    if let thumbURL = URL(string: thumb) {
-                                        Button {
-                                            if let url = resolvedURL(for: item, at: index) {
-                                                onImageTap?(url)
-                                            } else {
-                                                print("❌ No resolvable URL for item \(item.id) at index \(index)")
-                                            }
-                                        } label: {
-                                            AsyncImage(url: thumbURL) { phase in
-                                                switch phase {
-                                                case .empty:
-                                                    ProgressView().frame(width: 96, height: 96)
-                                                case .success(let image):
-                                                    image
-                                                        .resizable()
-                                                        .scaledToFill()
-                                                        .frame(width: 96, height: 96)
-                                                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                                                case .failure:
-                                                    Color.gray
-                                                        .frame(width: 96, height: 96)
-                                                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                                                @unknown default:
-                                                    EmptyView()
-                                                }
-                                            }
-                                        }
-                                        .buttonStyle(.plain)
-                                    }
-                                }
-                            } else {
-                                // Fallback: use thumbUrls if available
-                                ForEach(Array(item.thumbUrls.enumerated()), id: \.offset) { index, thumb in
-                                    if let thumbURL = URL(string: thumb) {
-                                        Button {
-                                            if let url = resolvedURL(for: item, at: index) {
-                                                onImageTap?(url)
-                                            }
-                                        } label: {
-                                            AsyncImage(url: thumbURL) { phase in
-                                                switch phase {
-                                                case .empty:
-                                                    ProgressView().frame(width: 96, height: 96)
-                                                case .success(let image):
-                                                    image
-                                                        .resizable()
-                                                        .scaledToFill()
-                                                        .frame(width: 96, height: 96)
-                                                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                                                case .failure:
-                                                    Color.gray
-                                                        .frame(width: 96, height: 96)
-                                                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                                                @unknown default:
-                                                    EmptyView()
-                                                }
-                                            }
-                                        }
-                                        .buttonStyle(.plain)
-                                    }
-                                }
+                    WorkOrderItemImagesView(
+                        item: item,
+                        itemIndex: 0, // ItemCard doesn't have itemIndex context
+                        onImageSelected: { url in
+                            onImageTap?(url)
+                        },
+                        onShowAllThumbs: {
+                            // For ItemCard, we can just open the first image in full screen
+                            if let firstUrl = URL(string: item.imageUrls[0]) {
+                                onImageTap?(firstUrl)
                             }
                         }
-                        .padding(.horizontal, 4)
-                    }
+                    )
                 }
             } else {
                 // No images: show a few placeholders if in Selectable debug, else the single block

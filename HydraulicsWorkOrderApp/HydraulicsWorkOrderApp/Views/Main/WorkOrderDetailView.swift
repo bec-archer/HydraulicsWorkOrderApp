@@ -404,7 +404,6 @@ struct WorkOrderDetailView: View {
         .listSectionSeparator(.hidden)
         .listRowSeparator(.hidden)
         .listStyle(PlainListStyle())
-        .environment(\.defaultMinListRowHeight, 0)
         .padding(.horizontal, 20)
         .padding(.vertical, 16)
         .navigationTitle("Work Order Details")
@@ -718,171 +717,18 @@ struct WorkOrderDetailView: View {
 
                 // ── Images section (40% of card width)
                 if !item.imageUrls.isEmpty {
-                    VStack(alignment: .leading, spacing: 8) {
-                        // ── Primary Image (larger, takes up more space)
-                        if let firstUrl = URL(string: item.imageUrls[0]) {
-                            Button {
-                                selectedImageURL = firstUrl
-                                showImageViewer = true
-                            } label: {
-                                AsyncImage(url: firstUrl) { phase in
-                                    switch phase {
-                                    case .empty:
-                                        ProgressView()
-                                            .frame(maxWidth: .infinity)
-                                            .aspectRatio(1, contentMode: .fit)
-                                    case .success(let image):
-                                        image
-                                            .resizable()
-                                            .scaledToFill()
-                                            .frame(maxWidth: .infinity)
-                                            .aspectRatio(1, contentMode: .fit)
-                                            .clipped()
-                                    case .failure:
-                                        Color.gray
-                                            .frame(maxWidth: .infinity)
-                                            .aspectRatio(1, contentMode: .fit)
-                                    @unknown default:
-                                        Color.gray
-                                            .frame(maxWidth: .infinity)
-                                            .aspectRatio(1, contentMode: .fit)
-                                    }
-                                }
-                                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                            }
-                            .buttonStyle(.plain)
+                    WorkOrderItemImagesView(
+                        item: item,
+                        itemIndex: itemIndex,
+                        onImageSelected: { url in
+                            selectedImageURL = url
+                            showImageViewer = true
+                        },
+                        onShowAllThumbs: {
+                            viewModel.selectedItemIndex = itemIndex
+                            showAllThumbs = true
                         }
-
-                        // ── Thumbnail Grid (2x2 grid below primary image)
-                        if item.imageUrls.count > 1 {
-                            let additionalImages = Array(item.imageUrls.dropFirst())
-                            let displayImages = Array(additionalImages.prefix(4)) // Show up to 4 thumbnails
-                            let extraCount = max(0, additionalImages.count - displayImages.count)
-
-                            GeometryReader { g in
-                                let spacing: CGFloat = 6
-                                let thumbSize = (g.size.width - spacing) / 2
-
-                                VStack(spacing: spacing) {
-                                    // First row of thumbnails
-                                    HStack(spacing: spacing) {
-                                        ForEach(0..<min(2, displayImages.count), id: \.self) { idx in
-                                            if let url = URL(string: displayImages[idx]) {
-                                                Button {
-                                                    if extraCount > 0 && idx == displayImages.count - 1 {
-                                                        viewModel.selectedItemIndex = itemIndex
-                                                        showAllThumbs = true
-                                                    } else {
-                                                        selectedImageURL = url
-                                                        showImageViewer = true
-                                                    }
-                                                } label: {
-                                                    ZStack {
-                                                        AsyncImage(url: url) { phase in
-                                                            switch phase {
-                                                            case .empty:
-                                                                ProgressView()
-                                                                    .frame(width: thumbSize, height: thumbSize)
-                                                            case .success(let img):
-                                                                img.resizable()
-                                                                    .scaledToFill()
-                                                                    .frame(width: thumbSize, height: thumbSize)
-                                                                    .clipped()
-                                                            case .failure:
-                                                                Color.gray
-                                                                    .frame(width: thumbSize, height: thumbSize)
-                                                            @unknown default:
-                                                                Color.gray
-                                                                    .frame(width: thumbSize, height: thumbSize)
-                                                            }
-                                                        }
-                                                        if extraCount > 0 && idx == displayImages.count - 1 {
-                                                            Rectangle()
-                                                                .fill(Color.black.opacity(0.35))
-                                                                .frame(width: thumbSize, height: thumbSize)
-                                                                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-                                                            Text("+\(extraCount)")
-                                                                .font(.caption.weight(.semibold))
-                                                                .foregroundColor(.white)
-                                                        }
-                                                    }
-                                                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-                                                }
-                                                .buttonStyle(.plain)
-                                            }
-                                        }
-                                        // Fill empty spaces to maintain grid
-                                        if displayImages.count < 2 {
-                                            ForEach(0..<(2 - displayImages.count), id: \.self) { _ in
-                                                Color.clear
-                                                    .frame(width: thumbSize, height: thumbSize)
-                                            }
-                                        }
-                                    }
-                                    
-                                    // Second row of thumbnails (if we have more than 2 images)
-                                    if displayImages.count > 2 {
-                                        HStack(spacing: spacing) {
-                                            ForEach(2..<min(4, displayImages.count), id: \.self) { idx in
-                                                if let url = URL(string: displayImages[idx]) {
-                                                    Button {
-                                                        if extraCount > 0 && idx == displayImages.count - 1 {
-                                                            viewModel.selectedItemIndex = itemIndex
-                                                            showAllThumbs = true
-                                                        } else {
-                                                            selectedImageURL = url
-                                                            showImageViewer = true
-                                                        }
-                                                    } label: {
-                                                        ZStack {
-                                                            AsyncImage(url: url) { phase in
-                                                                switch phase {
-                                                                case .empty:
-                                                                    ProgressView()
-                                                                        .frame(width: thumbSize, height: thumbSize)
-                                                                case .success(let img):
-                                                                    img.resizable()
-                                                                        .scaledToFill()
-                                                                        .frame(width: thumbSize, height: thumbSize)
-                                                                        .clipped()
-                                                                case .failure:
-                                                                    Color.gray
-                                                                        .frame(width: thumbSize, height: thumbSize)
-                                                                @unknown default:
-                                                                    Color.gray
-                                                                        .frame(width: thumbSize, height: thumbSize)
-                                                                }
-                                                            }
-                                                            if extraCount > 0 && idx == displayImages.count - 1 {
-                                                                Rectangle()
-                                                                    .fill(Color.black.opacity(0.35))
-                                                                    .frame(width: thumbSize, height: thumbSize)
-                                                                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-                                                                Text("+\(extraCount)")
-                                                                    .font(.caption.weight(.semibold))
-                                                                    .foregroundColor(.white)
-                                                            }
-                                                        }
-                                                        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-                                                    }
-                                                    .buttonStyle(.plain)
-                                                }
-                                            }
-                                            // Fill empty spaces to maintain grid
-                                            if displayImages.count < 4 {
-                                                ForEach(0..<(4 - displayImages.count), id: \.self) { _ in
-                                                    Color.clear
-                                                        .frame(width: thumbSize, height: thumbSize)
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                                .frame(height: displayImages.count > 2 ? thumbSize * 2 + spacing : thumbSize)
-                            }
-                        }
-                    }
-                    .padding(.horizontal, 8)
+                    )
                     .ifAvailableiOS17 {
                         $0.containerRelativeFrame([.horizontal], alignment: .leading) { available, _ in
                             (available - 16) * 0.40   // 40% of the HStack width minus spacing
@@ -994,14 +840,13 @@ struct WorkOrderDetailView: View {
                     .padding(.top, 12)
                 }
                 .padding(.horizontal, 8)
-                                    .ifAvailableiOS17 {
-                        $0.containerRelativeFrame([.horizontal], alignment: .trailing) { available, _ in
-                            (available - 16) * 0.60   // 60% of the HStack width minus spacing
-                        }
+                .ifAvailableiOS17 {
+                    $0.containerRelativeFrame([.horizontal], alignment: .trailing) { available, _ in
+                        (available - 16) * 0.60   // 60% of the HStack width minus spacing
                     }
+                }
             }
             .padding(.horizontal, 20)
-            .frame(height: 400) // keep your fixed overall height
             .clipped() // ensure internal content cannot spill horizontally/vertically
             // END
         }
