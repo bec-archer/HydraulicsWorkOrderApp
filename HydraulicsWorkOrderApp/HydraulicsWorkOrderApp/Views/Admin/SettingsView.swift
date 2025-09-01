@@ -19,6 +19,9 @@ struct SettingsView: View {
     @State private var enteredPin = ""
     @State private var pinError: String?
     @State private var pendingBypassValue: Bool = false
+    
+    // ───── Migration State ─────
+    @State private var showMigrationView = false
 
 
     var body: some View {
@@ -40,6 +43,23 @@ struct SettingsView: View {
                 // 🔐 Enable anonymous Firebase Auth so image uploads work with strict rules
                 Toggle("Enable Anonymous Firebase Auth", isOn: $devSettings.enableAnonAuth)
                     .accessibilityHint("Turn on to sign in anonymously at launch so Firebase Storage uploads are allowed")
+            }
+            
+            // ───── Database Management ─────
+            Section(header: Text("Database Management")) {
+                Button(action: {
+                    showMigrationView = true
+                }) {
+                    HStack {
+                        Image(systemName: "arrow.triangle.2.circlepath")
+                            .foregroundColor(.orange)
+                        Text("Clear All Test Data")
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .foregroundColor(.secondary)
+                    }
+                }
+                .foregroundColor(.primary)
             }
         }
         .navigationTitle("Settings")
@@ -104,6 +124,11 @@ struct SettingsView: View {
             }
         }
         // END sheet
+        
+        // ───── Migration Sheet ─────
+        .sheet(isPresented: $showMigrationView) {
+            DataMigrationView()
+        }
 
     }
 }

@@ -100,7 +100,18 @@ final class WorkOrdersDatabase: ObservableObject {
                 print("    reasonsForService=\(item.reasonsForService)")
             }
             
-            // Debug logging for items encoding
+            // Debug: Check if items will encode properly
+            do {
+                let encoder = Firestore.Encoder()
+                let data = try encoder.encode(workOrder)
+                if let itemsData = data["items"] {
+                    print("✅ Items encoded successfully: \(itemsData)")
+                } else {
+                    print("❌ Items field missing from encoded data!")
+                }
+            } catch {
+                print("❌ Failed to encode work order: \(error)")
+            }
             #endif
             
             // ───── Ensure each WO_Item has baseline "Checked In" status ─────
@@ -210,6 +221,22 @@ final class WorkOrdersDatabase: ObservableObject {
                         decoded.append(wo)
                         #if DEBUG
                         print("✅ Successfully decoded WorkOrder: \(wo.WO_Number) with \(wo.items.count) items")
+                        if wo.items.count == 0 {
+                            print("⚠️ WARNING: WorkOrder \(wo.WO_Number) has 0 items after decoding!")
+                            let raw = doc.data()
+                            if let itemsData = raw["items"] {
+                                print("🔍 Raw items data: \(itemsData)")
+                                if let itemsArray = itemsData as? [Any] {
+                                    print("🔍 Items is array with \(itemsArray.count) elements")
+                                } else if let itemsDict = itemsData as? [String: Any] {
+                                    print("🔍 Items is dictionary with \(itemsDict.count) keys")
+                                } else {
+                                    print("🔍 Items data type: \(type(of: itemsData))")
+                                }
+                            } else {
+                                print("❌ No items field found in raw data!")
+                            }
+                        }
                         #endif
                     } catch let DecodingError.keyNotFound(key, context) {
                         // ───── Lossy fallback for legacy docs (try once) ─────
@@ -298,16 +325,16 @@ final class WorkOrdersDatabase: ObservableObject {
                         if let built = self.buildWorkOrderFromRaw(raw, id: doc.documentID) {
                             decoded.append(built)
                             #if DEBUG
-                            print("ℹ️ Lossy‑built WorkOrder \(doc.documentID) from raw after decode error: \(error)")
+                            print("ℹ️ Lossy‑built WorkOrder \(doc.documentID) from raw after decode error: \(String(describing: error))")
                             #endif
                         } else {
-                            let msg = "Unknown decode error in \(doc.documentID): \(error)"
+                            let msg = "Unknown decode error in \(doc.documentID): \(String(describing: error))"
                             print("⚠️ WorkOrder decode skipped:", msg)
                             failures.append((doc.documentID, msg))
                         }
                     } catch {
                         #if DEBUG
-                        print("❌ WorkOrder decode failed with unknown error: \(error)")
+                        print("❌ WorkOrder decode failed with unknown error: \(String(describing: error))")
                         #endif
                         let raw = doc.data()
                         if let built = self.buildWorkOrderFromRaw(raw, id: doc.documentID) {
@@ -316,7 +343,7 @@ final class WorkOrdersDatabase: ObservableObject {
                             print("ℹ️ Lossy‑built WorkOrder \(doc.documentID) from raw after unknown decode error")
                             #endif
                         } else {
-                            let msg = "Unknown decode error in \(doc.documentID): \(error)"
+                            let msg = "Unknown decode error in \(doc.documentID): \(String(describing: error))"
                             print("⚠️ WorkOrder decode skipped:", msg)
                             failures.append((doc.documentID, msg))
                         }
@@ -800,14 +827,31 @@ final class WorkOrdersDatabase: ObservableObject {
             #if DEBUG
             print("🔍 DEBUG: buildWorkOrderFromRaw - Found \(arr.count) items in array format")
             #endif
-            for anyItem in arr {
+            for (index, anyItem) in arr.enumerated() {
                 let itemId = (anyItem["id"] as? String).flatMap(UUID.init(uuidString:)) ?? UUID()
                 let tagId  = anyItem["tagId"] as? String
-                let urls   = anyItem["imageUrls"] as? [String]
+                var urls   = anyItem["imageUrls"] as? [String]
                              ?? anyItem["imageURLs"] as? [String]
                              ?? []
                 let thumbUrls = anyItem["thumbUrls"] as? [String] ?? []
-                let type   = anyItem["type"] as? String ?? "Unknown"
+                
+                // If imageUrls is empty but thumbUrls has data, use thumbUrls as imageUrls
+                if urls.isEmpty && !thumbUrls.isEmpty {
+                    urls = thumbUrls
+                }
+                let type   = anyItem["type"] as? String ?? "Cylinder"
+                
+                #if DEBUG
+                print("🔍 DEBUG: buildWorkOrderFromRaw - Array Item \(index) - \(type)")
+                print("  - imageUrls.count: \(urls.count)")
+                print("  - thumbUrls.count: \(thumbUrls.count)")
+                if !urls.isEmpty {
+                    print("  - First imageUrl: \(urls[0])")
+                }
+                if !thumbUrls.isEmpty {
+                    print("  - First thumbUrl: \(thumbUrls[0])")
+                }
+                #endif
                 let dd     = anyItem["dropdowns"] as? [String: String] ?? [:]
                 let ddv    = anyItem["dropdownSchemaVersion"] as? Int ?? schemaVer
                 let reasons = anyItem["reasonsForService"] as? [String] ?? []
@@ -880,11 +924,29 @@ final class WorkOrdersDatabase: ObservableObject {
                 
                 let itemId = (anyItem["id"] as? String).flatMap(UUID.init(uuidString:)) ?? UUID()
                 let tagId  = anyItem["tagId"] as? String
-                let urls   = anyItem["imageUrls"] as? [String]
+                var urls   = anyItem["imageUrls"] as? [String]
                              ?? anyItem["imageURLs"] as? [String]
                              ?? []
                 let thumbUrls = anyItem["thumbUrls"] as? [String] ?? []
-                let type   = anyItem["type"] as? String ?? "Unknown"
+                
+                // If imageUrls is empty but thumbUrls has data, use thumbUrls as imageUrls
+                if urls.isEmpty && !thumbUrls.isEmpty {
+                    urls = thumbUrls
+                }
+                let type   = anyItem["type"] as? String ?? "Cylinder"
+                
+                #if DEBUG
+                print("🔍 DEBUG: buildWorkOrderFromRaw - Dict Item \(key) - \(type)")
+                print("  - imageUrls.count: \(urls.count)")
+                print("  - thumbUrls.count: \(thumbUrls.count)")
+                if !urls.isEmpty {
+                    print("  - First imageUrl: \(urls[0])")
+                }
+                if !thumbUrls.isEmpty {
+                    print("  - First thumbUrl: \(thumbUrls[0])")
+                }
+                #endif
+                
                 let dd     = anyItem["dropdowns"] as? [String: String] ?? [:]
                 let ddv    = anyItem["dropdownSchemaVersion"] as? Int ?? schemaVer
                 let reasons = anyItem["reasonsForService"] as? [String] ?? []

@@ -81,6 +81,14 @@ extension WO_Item {
         #endif
         
         let c = try decoder.container(keyedBy: CodingKeys.self)
+        
+        #if DEBUG
+        // Debug: Print all available keys
+        if let container = try? decoder.container(keyedBy: CodingKeys.self) {
+            let allKeys = container.allKeys
+            print("🔍 Available keys in WO_Item: \(allKeys.map { $0.stringValue })")
+        }
+        #endif
 
         do {
             self.id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
@@ -110,7 +118,7 @@ extension WO_Item {
         }
         
         do {
-            self.type = try c.decodeIfPresent(String.self, forKey: .type) ?? ""
+            self.type = try c.decodeIfPresent(String.self, forKey: .type) ?? "Cylinder"
         } catch {
             #if DEBUG
             print("❌ WO_Item decode failed on 'type': \(error)")
@@ -171,6 +179,11 @@ extension WO_Item {
             print("❌ WO_Item decode failed on 'thumbUrls': \(error)")
             #endif
             throw error
+        }
+        
+        // Standardized image handling - ensure imageUrls has data
+        if self.imageUrls.isEmpty && !self.thumbUrls.isEmpty {
+            self.imageUrls = self.thumbUrls
         }
 
         do {

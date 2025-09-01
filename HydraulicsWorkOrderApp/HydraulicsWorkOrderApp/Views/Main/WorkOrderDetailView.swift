@@ -752,7 +752,7 @@ struct WorkOrderDetailView: View {
             HStack(alignment: .top, spacing: 16) {
 
                 // ── Images section (40% of card width)
-                if !item.imageUrls.isEmpty {
+                if !item.imageUrls.isEmpty || !item.thumbUrls.isEmpty {
                     WorkOrderItemImagesView(
                         item: item,
                         selectedImageURL: $selectedImageURL,
@@ -767,6 +767,40 @@ struct WorkOrderDetailView: View {
                             (available - 16) * 0.40   // 40% of the HStack width minus spacing
                         }
                     }
+                    .onAppear {
+                        #if DEBUG
+                        print("🔍 WO DETAILS: Item \(itemIndex) - \(item.type)")
+                        print("  - imageUrls.count: \(item.imageUrls.count)")
+                        print("  - thumbUrls.count: \(item.thumbUrls.count)")
+                        if !item.imageUrls.isEmpty {
+                            print("  - First imageUrl: \(item.imageUrls[0])")
+                        }
+                        if !item.thumbUrls.isEmpty {
+                            print("  - First thumbUrl: \(item.thumbUrls[0])")
+                        }
+                        #endif
+                    }
+                } else {
+                    Rectangle()
+                        .fill(Color(.systemGray6))
+                        .frame(height: 200)
+                        .overlay(
+                            VStack {
+                                Image(systemName: "photo")
+                                    .font(.largeTitle)
+                                    .foregroundColor(.gray)
+                                Text("No Images")
+                                    .font(.caption)
+                                    .foregroundColor(.gray)
+                            }
+                        )
+                        .onAppear {
+                            #if DEBUG
+                            print("⚠️ WO DETAILS: No images to display for item \(itemIndex) - \(item.type)")
+                            print("  - imageUrls.count: \(item.imageUrls.count)")
+                            print("  - thumbUrls.count: \(item.thumbUrls.count)")
+                            #endif
+                        }
                 }
 
                 // ── Notes & Status section (60%)
