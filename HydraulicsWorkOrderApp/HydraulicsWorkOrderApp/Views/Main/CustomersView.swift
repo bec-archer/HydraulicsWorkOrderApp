@@ -20,22 +20,63 @@ struct CustomersView: View {
     @State private var showingPhoneActions = false
     @State private var selectedPhoneNumber = ""
     @State private var selectedCustomerName = ""
+    @State private var showOnlyTaxExempt = false
     
     var filteredCustomers: [Customer] {
-        if searchText.isEmpty {
-            return customerDatabase.customers
-        } else {
-            return customerDatabase.searchCustomers(matching: searchText)
+        var customers = customerDatabase.customers
+        
+        // Apply tax exempt filter
+        if showOnlyTaxExempt {
+            customers = customers.filter { $0.taxExempt }
         }
+        
+        // Apply search filter
+        if !searchText.isEmpty {
+            customers = customerDatabase.searchCustomers(matching: searchText)
+            // Re-apply tax exempt filter after search
+            if showOnlyTaxExempt {
+                customers = customers.filter { $0.taxExempt }
+            }
+        }
+        
+        return customers
     }
     
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
+                // Filter button
+                HStack {
+                    Spacer()
+                    Button(action: {
+                        showOnlyTaxExempt.toggle()
+                    }) {
+                        HStack(spacing: 6) {
+                            Image(systemName: showOnlyTaxExempt ? "checkmark.circle.fill" : "circle")
+                                .foregroundColor(showOnlyTaxExempt ? Color("AppleNotesYellow") : .secondary)
+                            Text("Show Tax Exempt")
+                                .font(.subheadline)
+                                .foregroundColor(showOnlyTaxExempt ? .primary : .secondary)
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(showOnlyTaxExempt ? Color("AppleNotesYellow").opacity(0.2) : Color(.systemGray6))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8)
+                                .stroke(showOnlyTaxExempt ? Color("AppleNotesYellow") : Color(.systemGray4), lineWidth: 1)
+                        )
+                    }
+                }
+                .padding(.horizontal)
+                .padding(.top, 16)
+                .padding(.bottom, 12)
+                
                 // Search bar
                 SearchBar(text: $searchText, placeholder: "Search customers by name, phone, or company")
                     .padding(.horizontal)
-                    .padding(.top)
                 
                 // Customers list
                 List(filteredCustomers, id: \.id) { customer in
