@@ -54,6 +54,20 @@ class ImageResolverViewModel: ObservableObject {
                 }
             }
             .store(in: &cancellables)
+        
+        // Also listen for item updates
+        NotificationCenter.default.publisher(for: .WorkOrderSaved)
+            .sink { [weak self] notification in
+                if let woNumber = notification.userInfo?["WO_Number"] as? String,
+                   woNumber == self?.workOrderNumber {
+                    print("🔄 ImageResolverViewModel: Received WorkOrderSaved notification for WO \(woNumber) - refreshing images")
+                    // Small delay to ensure database is updated
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        self?.resolveImageURLs()
+                    }
+                }
+            }
+            .store(in: &cancellables)
     }
     
     func resolveImageURLs() {
@@ -103,6 +117,14 @@ class ImageResolverViewModel: ObservableObject {
         // Process each item's images
         for (itemIndex, item) in workOrder.items.enumerated() {
             print("📸 ImageResolverViewModel: Processing item \(itemIndex + 1)/\(workOrder.items.count) - \(item.type)")
+            print("  - item.thumbUrls.count: \(item.thumbUrls.count)")
+            print("  - item.imageUrls.count: \(item.imageUrls.count)")
+            if !item.thumbUrls.isEmpty {
+                print("  - First thumbUrl: \(item.thumbUrls[0])")
+            }
+            if !item.imageUrls.isEmpty {
+                print("  - First imageUrl: \(item.imageUrls[0])")
+            }
             
             // Only add the first image from this item (prefer thumbnail, then full image)
             var firstImageAdded = false
@@ -163,24 +185,20 @@ class ImageResolverViewModel: ObservableObject {
         // Clear existing URLs to prevent accumulation (only if paths changed)
         self.resolvedImageURLs = []
         
-        var newURLs: [URL] = []
-        var seenURLs = Set<String>()
+        // Use a thread-safe array to collect resolved URLs
+        let resolvedURLs = NSMutableArray()
         var pendingResolutions = 0
         
         // Process candidate URLs
+        print("🔍 ImageResolverViewModel: Processing \(candidateURLs.count) candidate URLs")
         for (urlIndex, candidateURL) in candidateURLs.enumerated() {
             print("🌐 ImageResolverViewModel: Processing URL \(urlIndex + 1)/\(candidateURLs.count): \(candidateURL.absoluteString)")
             
             if candidateURL.absoluteString.lowercased().hasPrefix("http") {
                 // Direct HTTPS URL - add immediately
                 print("✅ ImageResolverViewModel: Direct HTTPS URL found, adding immediately")
-                if !seenURLs.contains(candidateURL.absoluteString) {
-                    newURLs.append(candidateURL)
-                    seenURLs.insert(candidateURL.absoluteString)
-                    print("✅ ImageResolverViewModel: Added unique URL: \(candidateURL.absoluteString)")
-                } else {
-                    print("⚠️ ImageResolverViewModel: Skipped duplicate URL: \(candidateURL.absoluteString)")
-                }
+                resolvedURLs.add(candidateURL)
+                print("✅ ImageResolverViewModel: Added direct URL: \(candidateURL.absoluteString)")
             } else {
                 // Need to resolve through Firebase Storage
                 print("🔄 ImageResolverViewModel: Resolving through Firebase Storage")
@@ -192,25 +210,20 @@ class ImageResolverViewModel: ObservableObject {
                         
                         if let resolvedURL = resolvedURL {
                             print("✅ ImageResolverViewModel: Successfully resolved to \(resolvedURL.absoluteString)")
-                            if !seenURLs.contains(resolvedURL.absoluteString) {
-                                newURLs.append(resolvedURL)
-                                seenURLs.insert(resolvedURL.absoluteString)
-                                print("✅ ImageResolverViewModel: Added unique resolved URL: \(resolvedURL.absoluteString)")
-                            } else {
-                                print("⚠️ ImageResolverViewModel: Skipped duplicate resolved URL: \(resolvedURL.absoluteString)")
-                            }
+                            resolvedURLs.add(resolvedURL)
                         } else {
                             print("❌ ImageResolverViewModel: Failed to resolve \(candidateURL.absoluteString)")
                         }
                         
                         // If all resolutions are complete, update the published property
                         if pendingResolutions == 0 {
-                            print("🔄 ImageResolverViewModel: All resolutions complete, updating resolvedImageURLs with \(newURLs.count) unique URLs")
+                            let finalURLs = resolvedURLs.compactMap { $0 as? URL }
+                            print("🔄 ImageResolverViewModel: All resolutions complete, updating resolvedImageURLs with \(finalURLs.count) URLs")
                             print("📋 Final URLs for WO \(self.workOrderNumber):")
-                            for (index, url) in newURLs.enumerated() {
+                            for (index, url) in finalURLs.enumerated() {
                                 print("  [\(index)]: \(url.absoluteString)")
                             }
-                            self.resolvedImageURLs = newURLs
+                            self.resolvedImageURLs = finalURLs
                             self.isResolving = false
                         }
                     }
@@ -220,12 +233,13 @@ class ImageResolverViewModel: ObservableObject {
         
         // If no pending resolutions, update immediately
         if pendingResolutions == 0 {
-            print("🔄 ImageResolverViewModel: No pending resolutions, immediate update: resolvedImageURLs = \(newURLs.count) URLs")
+            let finalURLs = resolvedURLs.compactMap { $0 as? URL }
+            print("🔄 ImageResolverViewModel: No pending resolutions, immediate update: resolvedImageURLs = \(finalURLs.count) URLs")
             print("📋 Final URLs for WO \(workOrderNumber) (immediate):")
-            for (index, url) in newURLs.enumerated() {
+            for (index, url) in finalURLs.enumerated() {
                 print("  [\(index)]: \(url.absoluteString)")
             }
-            self.resolvedImageURLs = newURLs
+            self.resolvedImageURLs = finalURLs
             self.isResolving = false
         }
     }
@@ -259,6 +273,11 @@ struct WorkOrderCardView: View {
     private var stableId: String {
         workOrder.WO_Number
     }
+    
+    // Track work order changes to refresh images
+    private var workOrderImageCount: Int {
+        workOrder.items.reduce(0) { $0 + $1.imageUrls.count + $1.thumbUrls.count }
+    }
 
     var body: some View {
         coreContent
@@ -290,8 +309,15 @@ struct WorkOrderCardView: View {
         Color.clear
             .onAppear {
                 // Debug info only when needed
+                print("🔄 WorkOrderCardView: Appeared, refreshing image resolver")
+                imageResolver.resolveImageURLs()
             }
             .onDisappear { isPressed = false }
+            .onChange(of: workOrderImageCount) { _, _ in
+                // Refresh images when work order image count changes
+                print("🔄 WorkOrderCardView: Image count changed, refreshing image resolver")
+                imageResolver.resolveImageURLs()
+            }
     }
     // END
 

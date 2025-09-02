@@ -79,10 +79,22 @@ struct WorkOrderItemImagesView: View {
                                 showImageViewer = true
                             }
                         } label: {
-                            StableImageLoader(url: URL(string: urlString)!, showOverlay: idx == 3 && hasMoreImages, overlayText: "+\(displayImages.count - maxThumbnails)")
-                                .frame(width: 142, height: 142)
-                                .clipped()
-                                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                            if let url = URL(string: urlString) {
+                                StableImageLoader(url: url, showOverlay: idx == 3 && hasMoreImages, overlayText: "+\(displayImages.count - maxThumbnails)")
+                                    .frame(width: 142, height: 142)
+                                    .clipped()
+                                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                            } else {
+                                // Fallback for invalid URLs
+                                Rectangle()
+                                    .fill(Color(.systemGray5))
+                                    .frame(width: 142, height: 142)
+                                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                                    .overlay(
+                                        Image(systemName: "exclamationmark.triangle")
+                                            .foregroundColor(.gray)
+                                    )
+                            }
                         }
                         .buttonStyle(.plain)
                     }
@@ -91,6 +103,15 @@ struct WorkOrderItemImagesView: View {
             }
         }
         .padding(.horizontal, 16)
+        .onAppear {
+            print("🔍 WorkOrderItemImagesView: Item \(item.type) has \(item.imageUrls.count) imageUrls and \(item.thumbUrls.count) thumbUrls")
+            if !item.imageUrls.isEmpty {
+                print("  - First imageUrl: \(item.imageUrls[0])")
+            }
+            if !item.thumbUrls.isEmpty {
+                print("  - First thumbUrl: \(item.thumbUrls[0])")
+            }
+        }
     }
     
 
@@ -150,6 +171,9 @@ struct StableImageLoader: View {
                 isLoading = false
                 if let data = data, let loadedImage = UIImage(data: data) {
                     self.image = loadedImage
+                } else {
+                    // Better error handling - show placeholder for failed loads
+                    print("⚠️ StableImageLoader: Failed to load image from \(self.url.absoluteString)")
                 }
             }
         }.resume()

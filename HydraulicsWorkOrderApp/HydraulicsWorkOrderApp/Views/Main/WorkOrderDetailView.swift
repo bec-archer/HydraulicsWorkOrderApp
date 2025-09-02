@@ -135,6 +135,8 @@ class WorkOrderDetailViewModel: ObservableObject {
                 // Update the work order from the database
                 Task { @MainActor in
                     await self.refreshWorkOrder()
+                    // Force UI refresh after work order update
+                    self.objectWillChange.send()
                 }
             }
             .store(in: &cancellables)
@@ -1054,6 +1056,10 @@ struct WorkOrderDetailView: View {
                     }
                     .buttonStyle(.plain)
                     .padding(.top, 12)
+                    .onAppear {
+                        // Force refresh when this view appears to ensure images are loaded
+                        viewModel.objectWillChange.send()
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .trailing)
             }
