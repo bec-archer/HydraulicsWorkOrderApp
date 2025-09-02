@@ -59,7 +59,7 @@ struct CustomersView: View {
             .sheet(item: $selectedCustomer) { customer in
                 CustomerDetailView(customer: customer)
             }
-            .confirmationDialog("Choose how to contact \(selectedCustomerName.isEmpty ? "Customer" : selectedCustomerName)", isPresented: $showingPhoneActions) {
+            .alert("Choose how to contact \(selectedCustomerName.isEmpty ? "Customer" : selectedCustomerName)", isPresented: $showingPhoneActions) {
                 Button("Call \(selectedPhoneNumber)") {
                     let phoneNumber = digitsOnly(selectedPhoneNumber)
                     let telURL = URL(string: "tel://\(phoneNumber)")
@@ -91,6 +91,17 @@ struct CustomersView: View {
                 Button("Copy Number", role: .none) {
                     let phoneNumber = digitsOnly(selectedPhoneNumber)
                     UIPasteboard.general.string = phoneNumber
+                }
+                
+                Button("Cancel", role: .cancel) { }
+            } message: {
+                Text("Select an action to contact this customer")
+            }
+            .onChange(of: showingPhoneActions) { _, isShowing in
+                if !isShowing {
+                    // Reset the selected customer info when dialog is dismissed
+                    selectedPhoneNumber = ""
+                    selectedCustomerName = ""
                 }
             }
             .onAppear {

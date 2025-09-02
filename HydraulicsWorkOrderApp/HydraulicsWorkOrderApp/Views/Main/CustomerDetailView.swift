@@ -20,6 +20,7 @@ struct CustomerDetailView: View {
     @State private var isLoading = false
     @State private var selectedWorkOrder: WorkOrder?
     @State private var showPhoneAlert = false
+    @State private var showingPhoneActions = false
     @Environment(\.dismiss) private var dismiss
     
     var body: some View {
@@ -27,7 +28,7 @@ struct CustomerDetailView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     // Customer Info Section
-                    CustomerInfoSection(customer: customer, showPhoneAlert: $showPhoneAlert)
+                    CustomerInfoSection(customer: customer, showPhoneAlert: $showPhoneAlert, showingPhoneActions: $showingPhoneActions)
                     
                     // Work Orders Section
                     WorkOrdersSection(
@@ -61,6 +62,53 @@ struct CustomerDetailView: View {
                         }
                 }
             }
+            .alert("Choose how to contact \(customer.name)", isPresented: $showingPhoneActions) {
+                Button("Call \(customer.phone)") {
+                    let cleanedPhone = customer.phone.replacingOccurrences(of: " ", with: "")
+                        .replacingOccurrences(of: "-", with: "")
+                        .replacingOccurrences(of: "(", with: "")
+                        .replacingOccurrences(of: ")", with: "")
+                    
+                    if let url = URL(string: "tel:\(cleanedPhone)") {
+                        UIApplication.shared.open(url) { success in
+                            if !success {
+                                // Fallback: copy to clipboard and show feedback
+                                UIPasteboard.general.string = customer.phone
+                                DispatchQueue.main.async {
+                                    showPhoneAlert = true
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                Button("Text \(customer.phone)") {
+                    let cleanedPhone = customer.phone.replacingOccurrences(of: " ", with: "")
+                        .replacingOccurrences(of: "-", with: "")
+                        .replacingOccurrences(of: "(", with: "")
+                        .replacingOccurrences(of: ")", with: "")
+                    
+                    if let url = URL(string: "sms:\(cleanedPhone)") {
+                        UIApplication.shared.open(url) { success in
+                            if !success {
+                                // Fallback: copy to clipboard and show feedback
+                                UIPasteboard.general.string = customer.phone
+                                DispatchQueue.main.async {
+                                    showPhoneAlert = true
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                Button("Copy Number", role: .none) {
+                    UIPasteboard.general.string = customer.phone
+                }
+                
+                Button("Cancel", role: .cancel) { }
+            } message: {
+                Text("Select an action to contact this customer")
+            }
             .alert("Phone Number Copied", isPresented: $showPhoneAlert) {
                 Button("OK") { }
             } message: {
@@ -93,6 +141,7 @@ struct CustomerDetailView: View {
 struct CustomerInfoSection: View {
     let customer: Customer
     @Binding var showPhoneAlert: Bool
+    @Binding var showingPhoneActions: Bool
     
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -115,22 +164,7 @@ struct CustomerInfoSection: View {
                         .foregroundColor(Color(hex: "#FFC500"))
                         .underline()
                         .onLongPressGesture {
-                            let cleanedPhone = customer.phone.replacingOccurrences(of: " ", with: "")
-                                .replacingOccurrences(of: "-", with: "")
-                                .replacingOccurrences(of: "(", with: "")
-                                .replacingOccurrences(of: ")", with: "")
-                            
-                            if let url = URL(string: "tel:\(cleanedPhone)") {
-                                UIApplication.shared.open(url) { success in
-                                    if !success {
-                                        // Fallback: copy to clipboard and show feedback
-                                        UIPasteboard.general.string = customer.phone
-                                        DispatchQueue.main.async {
-                                            showPhoneAlert = true
-                                        }
-                                    }
-                                }
-                            }
+                            showingPhoneActions = true
                         }
                     
                     Spacer()
