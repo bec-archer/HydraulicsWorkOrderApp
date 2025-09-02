@@ -587,7 +587,7 @@ struct InfoBlockView: View {
                     #endif
                 }
 
-                Text(workOrder.customerPhone.formattedPhoneNumber)
+                Text(workOrder.customerPhone)
                     .font(.subheadline)
                     .fontWeight(.bold)
                     .foregroundColor(Color(hex: "#FFC500"))
@@ -619,7 +619,7 @@ struct InfoBlockView: View {
             }
         }
         .confirmationDialog("Contact \(workOrder.customerName)", isPresented: $showingPhoneActions) {
-            Button("Call \(workOrder.customerPhone.formattedPhoneNumber)") {
+            Button("Call \(workOrder.customerPhone)") {
                 let phoneNumber = digitsOnly(workOrder.customerPhone)
                 let telURL = URL(string: "tel://\(phoneNumber)")
                 
@@ -644,7 +644,7 @@ struct InfoBlockView: View {
                 }
             }
             
-            Button("Text \(workOrder.customerPhone.formattedPhoneNumber)") {
+            Button("Text \(workOrder.customerPhone)") {
                 let phoneNumber = digitsOnly(workOrder.customerPhone)
                 let smsURL = URL(string: "sms://\(phoneNumber)")
                 
