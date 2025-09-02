@@ -1296,9 +1296,7 @@ final class WorkOrdersDatabase: ObservableObject {
                     itemData["completedReasons"] = item.completedReasons
                     itemData["imageUrls"] = item.imageUrls
                     itemData["thumbUrls"] = item.thumbUrls
-                    if let lastModified = item.lastModified {
-                        itemData["lastModified"] = Timestamp(date: lastModified)
-                    }
+                    itemData["lastModified"] = Timestamp(date: item.lastModified)
                     itemData["dropdownSchemaVersion"] = item.dropdownSchemaVersion
                     itemData["lastModifiedBy"] = item.lastModifiedBy ?? "Tech"
                     
@@ -1502,9 +1500,7 @@ final class WorkOrdersDatabase: ObservableObject {
                     itemData["completedReasons"] = item.completedReasons
                     itemData["imageUrls"] = item.imageUrls
                     itemData["thumbUrls"] = item.thumbUrls
-                    if let lastModified = item.lastModified {
-                        itemData["lastModified"] = Timestamp(date: lastModified)
-                    }
+                    itemData["lastModified"] = Timestamp(date: item.lastModified)
                     itemData["dropdownSchemaVersion"] = item.dropdownSchemaVersion
                     itemData["lastModifiedBy"] = item.lastModifiedBy ?? "Tech"
                     
@@ -1650,9 +1646,7 @@ final class WorkOrdersDatabase: ObservableObject {
                     itemData["completedReasons"] = item.completedReasons
                     itemData["imageUrls"] = item.imageUrls
                     itemData["thumbUrls"] = item.thumbUrls
-                    if let lastModified = item.lastModified {
-                        itemData["lastModified"] = Timestamp(date: lastModified)
-                    }
+                    itemData["lastModified"] = Timestamp(date: item.lastModified)
                     itemData["dropdownSchemaVersion"] = item.dropdownSchemaVersion
                     itemData["lastModifiedBy"] = item.lastModifiedBy ?? "Tech"
                     
