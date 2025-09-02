@@ -111,7 +111,7 @@ struct NewWorkOrderView: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(customer.name).font(.headline)
                         HStack(spacing: 4) {
-                            Text(customer.phone).font(.subheadline).foregroundStyle(.secondary)
+                            Text(customer.phone.formattedPhoneNumber).font(.subheadline).foregroundStyle(.secondary)
                             if let company = customer.company, !company.isEmpty {
                                 Text("•").font(.subheadline).foregroundStyle(.secondary)
                                 Text(company).font(.subheadline).foregroundStyle(.secondary)
@@ -152,7 +152,7 @@ struct NewWorkOrderView: View {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(customer.name)
                                     HStack(spacing: 4) {
-                                        Text(customer.phone).font(.caption).foregroundStyle(.secondary)
+                                        Text(customer.phone.formattedPhoneNumber).font(.caption).foregroundStyle(.secondary)
                                         if let company = customer.company, !company.isEmpty {
                                             Text("•").font(.caption).foregroundStyle(.secondary)
                                             Text(company).font(.caption).foregroundStyle(.secondary)

@@ -739,7 +739,7 @@ struct WorkOrderDetailView: View {
                     
                     HStack(spacing: 6) {
                         Image(systemName: "phone.fill")
-                        Text(viewModel.customerPhone)
+                        Text(viewModel.customerPhone.formattedPhoneNumber)
                             .underline()
                             .foregroundColor(Color(hex: "#FFC500"))
                             .onLongPressGesture {

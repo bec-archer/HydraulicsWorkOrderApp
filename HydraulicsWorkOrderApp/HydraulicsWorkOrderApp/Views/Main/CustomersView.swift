@@ -143,7 +143,7 @@ struct CustomersView: View {
                 CustomerDetailView(customer: customer)
             }
             .alert("Choose how to contact \(selectedCustomerName.isEmpty ? "Customer" : selectedCustomerName)", isPresented: $showingPhoneActions) {
-                Button("Call \(selectedPhoneNumber)") {
+                                        Button("Call \(selectedPhoneNumber.formattedPhoneNumber)") {
                     let phoneNumber = digitsOnly(selectedPhoneNumber)
                     let telURL = URL(string: "tel://\(phoneNumber)")
                     
@@ -157,7 +157,7 @@ struct CustomersView: View {
                     }
                 }
                 
-                Button("Text \(selectedPhoneNumber)") {
+                                        Button("Text \(selectedPhoneNumber.formattedPhoneNumber)") {
                     let phoneNumber = digitsOnly(selectedPhoneNumber)
                     let smsURL = URL(string: "sms://\(phoneNumber)")
                     
@@ -247,14 +247,14 @@ struct CustomerRowView: View {
                 Spacer()
                 
                 VStack(alignment: .trailing, spacing: 4) {
-                    Text(customer.phone)
-                        .font(.subheadline)
-                        .fontWeight(.bold)
-                        .foregroundColor(Color(hex: "#FFC500"))
-                        .underline()
-                        .onLongPressGesture {
-                            onPhoneTap(customer.phone, customer.name)
-                        }
+                                                Text(customer.phone.formattedPhoneNumber)
+                                .font(.subheadline)
+                                .fontWeight(.bold)
+                                .foregroundColor(Color(hex: "#FFC500"))
+                                .underline()
+                                .onLongPressGesture {
+                                    onPhoneTap(customer.phone, customer.name)
+                                }
                     
                     if customer.taxExempt {
                         Text("Tax Exempt")

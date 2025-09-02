@@ -53,6 +53,7 @@
 				Utilities/Constants/DropdownSchema.swift,
 				Utilities/Constants/Notifications.swift,
 				Utilities/Constants/UIConstants.swift,
+				"Utilities/Extensions/String+PhoneFormatting.swift",
 				"Utilities/Extensions/Toolbar+SidebarToggle.swift",
 				"Utilities/Extensions/View+Extensions.swift",
 				"Utilities/Extensions/View+If.swift",

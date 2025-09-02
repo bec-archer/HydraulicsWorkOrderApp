@@ -85,7 +85,7 @@ struct CustomerDetailView: View {
                 }
             }
             .alert("Choose how to contact \(customer.name)", isPresented: $showingPhoneActions) {
-                Button("Call \(customer.phone)") {
+                                        Button("Call \(customer.phone.formattedPhoneNumber)") {
                     let cleanedPhone = customer.phone.replacingOccurrences(of: " ", with: "")
                         .replacingOccurrences(of: "-", with: "")
                         .replacingOccurrences(of: "(", with: "")
@@ -104,7 +104,7 @@ struct CustomerDetailView: View {
                     }
                 }
                 
-                Button("Text \(customer.phone)") {
+                                        Button("Text \(customer.phone.formattedPhoneNumber)") {
                     let cleanedPhone = customer.phone.replacingOccurrences(of: " ", with: "")
                         .replacingOccurrences(of: "-", with: "")
                         .replacingOccurrences(of: "(", with: "")
@@ -200,7 +200,7 @@ struct CustomerInfoSection: View {
                         .foregroundColor(.secondary)
                         .frame(width: 80, alignment: .leading)
                     
-                    Text(customer.phone)
+                    Text(customer.phone.formattedPhoneNumber)
                         .font(.subheadline)
                         .fontWeight(.bold)
                         .foregroundColor(Color(hex: "#FFC500"))
