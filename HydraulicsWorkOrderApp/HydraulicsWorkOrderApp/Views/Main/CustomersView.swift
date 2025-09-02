@@ -21,9 +21,15 @@ struct CustomersView: View {
     @State private var selectedPhoneNumber = ""
     @State private var selectedCustomerName = ""
     @State private var showOnlyTaxExempt = false
+    @State private var showMostFrequent = false
     
     var filteredCustomers: [Customer] {
         var customers = customerDatabase.customers
+        
+        // Apply most frequent filter first
+        if showMostFrequent {
+            customers = getMostFrequentCustomers(customers)
+        }
         
         // Apply tax exempt filter
         if showOnlyTaxExempt {
@@ -33,7 +39,10 @@ struct CustomersView: View {
         // Apply search filter
         if !searchText.isEmpty {
             customers = customerDatabase.searchCustomers(matching: searchText)
-            // Re-apply tax exempt filter after search
+            // Re-apply filters after search
+            if showMostFrequent {
+                customers = getMostFrequentCustomers(customers)
+            }
             if showOnlyTaxExempt {
                 customers = customers.filter { $0.taxExempt }
             }
@@ -45,11 +54,44 @@ struct CustomersView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                // Filter button
+                // Filter buttons
                 HStack {
                     Spacer()
+                    
+                    // Most Frequent filter
+                    Button(action: {
+                        showMostFrequent.toggle()
+                        // If turning on most frequent, turn off tax exempt to avoid conflicts
+                        if showMostFrequent {
+                            showOnlyTaxExempt = false
+                        }
+                    }) {
+                        HStack(spacing: 6) {
+                            Image(systemName: showMostFrequent ? "checkmark.circle.fill" : "circle")
+                                .foregroundColor(showMostFrequent ? Color("AppleNotesYellow") : .secondary)
+                            Text("Most Frequent")
+                                .font(.subheadline)
+                                .foregroundColor(showMostFrequent ? .primary : .secondary)
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(showMostFrequent ? Color("AppleNotesYellow").opacity(0.2) : Color(.systemGray6))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8)
+                                .stroke(showMostFrequent ? Color("AppleNotesYellow") : Color(.systemGray4), lineWidth: 1)
+                        )
+                    }
+                    
+                    // Tax Exempt filter
                     Button(action: {
                         showOnlyTaxExempt.toggle()
+                        // If turning on tax exempt, turn off most frequent to avoid conflicts
+                        if showOnlyTaxExempt {
+                            showMostFrequent = false
+                        }
                     }) {
                         HStack(spacing: 6) {
                             Image(systemName: showOnlyTaxExempt ? "checkmark.circle.fill" : "circle")
@@ -154,6 +196,23 @@ struct CustomersView: View {
     // MARK: - Helper Functions
     private func digitsOnly(_ string: String) -> String {
         return string.filter { $0.isNumber }
+    }
+    
+    // Helper function to get most frequent customers
+    private func getMostFrequentCustomers(_ customers: [Customer]) -> [Customer] {
+        // Get work orders for each customer and count them
+        let customersWithCounts = customers.map { customer in
+            let workOrderCount = WorkOrdersDatabase.shared.workOrders.filter { 
+                $0.customerId == customer.id.uuidString && !$0.isDeleted 
+            }.count
+            return (customer: customer, count: workOrderCount)
+        }
+        
+        // Sort by work order count (descending) and take top 20
+        return customersWithCounts
+            .sorted { $0.count > $1.count }
+            .prefix(20)
+            .map { $0.customer }
     }
 }
 
