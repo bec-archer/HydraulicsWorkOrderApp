@@ -36,21 +36,15 @@ struct SidebarMenuContent: View {
                         .padding(.vertical, 4)
                 }
 
-                // Customers placeholder (future CustomersView wiring)
-                HStack(spacing: 12) {
-                    Image(systemName: "person.2")
-                        .font(.title2)
-                        .foregroundStyle(.secondary)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Customers")
-                            .font(.title3.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                        Text("Coming soon")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
+                // Customers
+                Button {
+                    appState.currentView = .customers
+                    dismissAction?()
+                } label: {
+                    Label("Customers", systemImage: "person.2")
+                        .font(.title3.weight(.semibold))
+                        .padding(.vertical, 4)
                 }
-                .padding(.vertical, 4)
 
                 // Settings
                 NavigationLink {

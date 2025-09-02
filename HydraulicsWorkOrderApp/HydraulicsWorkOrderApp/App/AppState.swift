@@ -13,6 +13,7 @@ enum AppScreen {
     case login
     case activeWorkOrders
     case newWorkOrder
+    case customers
     case settings
     // Add more cases as needed (e.g., completedWorkOrders, userManager, etc.)
 }

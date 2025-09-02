@@ -1681,5 +1681,66 @@ final class WorkOrdersDatabase: ObservableObject {
     }
     // END fetchWorkOrderByNumber
 
+    // ───── FETCH WORK ORDERS BY CUSTOMER ID ─────
+    /// Fetches all work orders for a specific customer
+    func fetchWorkOrdersByCustomer(customerId: String, completion: @escaping (Result<[WorkOrder], Error>) -> Void) {
+        // First try to get from cache
+        let cachedWorkOrders = workOrders.filter { $0.customerId == customerId && !$0.isDeleted }
+        if !cachedWorkOrders.isEmpty {
+            completion(.success(cachedWorkOrders))
+            return
+        }
+        
+        // If not in cache or cache is empty, query Firestore
+        db.collection(collectionName)
+            .whereField("customerId", isEqualTo: customerId)
+            .whereField("isDeleted", isEqualTo: false)
+            .order(by: "timestamp", descending: true)
+            .getDocuments { [weak self] snapshot, error in
+                if let error = error {
+                    completion(.failure(error))
+                    return
+                }
+                
+                guard let documents = snapshot?.documents else {
+                    completion(.success([]))
+                    return
+                }
+                
+                var workOrders: [WorkOrder] = []
+                
+                for document in documents {
+                    do {
+                        var workOrder = try document.data(as: WorkOrder.self)
+                        if workOrder.id == nil {
+                            workOrder.id = document.documentID
+                        }
+                        workOrders.append(workOrder)
+                    } catch {
+                        #if DEBUG
+                        print("❌ DEBUG: Failed to decode work order for customer \(customerId): \(error)")
+                        #endif
+                        continue
+                    }
+                }
+                
+                // Update cache
+                DispatchQueue.main.async {
+                    if let self = self {
+                        for workOrder in workOrders {
+                            if let existingIndex = self.workOrders.firstIndex(where: { $0.id == workOrder.id }) {
+                                self.workOrders[existingIndex] = workOrder
+                            } else {
+                                self.workOrders.append(workOrder)
+                            }
+                        }
+                    }
+                }
+                
+                completion(.success(workOrders))
+            }
+    }
+    // END fetchWorkOrdersByCustomer
+
 
 }

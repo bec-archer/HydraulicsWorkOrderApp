@@ -37,6 +37,12 @@ struct RouterView: View {
                     } label: {
                         Label("New Work Order", systemImage: "plus.square.on.square")
                     }
+
+                    Button {
+                        appState.currentView = .customers
+                    } label: {
+                        Label("Customers", systemImage: "person.2")
+                    }
                 }
 
                 // ADMIN / TOOLS
@@ -48,8 +54,7 @@ struct RouterView: View {
                     }
 
                     // Placeholders (keep visible for roadmap; disabled = no compile impact)
-                    Label("Customers (coming soon)", systemImage: "person.2")
-                        .foregroundStyle(.secondary)
+
                     Label("Dropdown Manager (coming soon)", systemImage: "chevron.down.square")
                         .foregroundStyle(.secondary)
                     Label("Deleted WorkOrders (coming soon)", systemImage: "trash")
@@ -71,6 +76,8 @@ struct RouterView: View {
                         NewWorkOrderView()
                     case .settings:
                         SettingsView()
+                    case .customers:
+                        CustomersView()
                     @unknown default:
                         Text("⚠️ Unknown AppScreen state")
                     }
