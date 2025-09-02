@@ -59,9 +59,13 @@ struct UserDetailView: View {
                 // “My Work Items” (stub): WO_Items whose status was changed by this user, excluding "Checked In".
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Work Items by \(user.displayName)").font(.headline)
-                    Text("Shows WO_Items where status changed by this user (≠ Checked In). TODO: wire query to statusHistory.")
+                    Text("Shows WO_Items where status changed by this user (≠ Checked In).")
                         .font(.footnote).foregroundStyle(.secondary)
-                    Button("View Work Items") { /* TODO: navigate when data ready */ }
+                    NavigationLink(destination: MyWorkItemsView(user: user)) {
+                        Text("View Work Items")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
                 }
             }
             .padding(16)

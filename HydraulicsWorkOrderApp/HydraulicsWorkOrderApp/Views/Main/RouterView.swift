@@ -38,9 +38,17 @@ struct RouterView: View {
                         Label("New Work Order", systemImage: "plus.square.on.square")
                     }
 
-                    // TODO: Customers view coming soon
-                    Label("Customers (coming soon)", systemImage: "person.2")
-                        .foregroundStyle(.secondary)
+                    Button {
+                        appState.navigateToView(.myWorkOrderItems)
+                    } label: {
+                        Label("My Work Order Items", systemImage: "doc.text.magnifyingglass")
+                    }
+
+                    Button {
+                        appState.navigateToView(.customers)
+                    } label: {
+                        Label("Customers", systemImage: "person.2")
+                    }
                 }
 
                 // ADMIN / TOOLS
@@ -80,13 +88,16 @@ struct RouterView: View {
                         ActiveWorkOrdersView()
                     case .newWorkOrder:
                         NewWorkOrderView()
+                    case .myWorkOrderItems:
+                        MyWorkOrderItemsView()
+                            .environmentObject(appState)
                     case .settings:
                         SettingsView()
                     case .userManager:
                         UserManagerView()
                             .environmentObject(appState)
                     case .customers:
-                        Text("Customers view coming soon")
+                        CustomersView()
                     @unknown default:
                         Text("⚠️ Unknown AppScreen state")
                     }
