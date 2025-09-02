@@ -234,9 +234,14 @@ class ImageResolverViewModel: ObservableObject {
 // WARNING (GUARDRAIL_TOKEN: DO_NOT_MODIFY_VIEW_LAYOUT):
 // Do not alter layout/UI/behavior. See header block for allowed edits & rationale.
 
-// MARK: - WorkOrderCardView
+// ───── WorkOrderCardView ─────
 struct WorkOrderCardView: View {
     let workOrder: WorkOrder
+    
+    /// Optional internal emoji tag (e.g., "🌟", "🐢", "🧨") shown next to customer name.
+    /// Defaults to `nil` so existing UI remains unchanged unless parent passes a value.
+    var customerTag: String? = nil
+
     @StateObject private var imageResolver: ImageResolverViewModel
     @State private var showingFullScreenImage = false
     @State private var selectedImageIndex = 0
@@ -244,8 +249,9 @@ struct WorkOrderCardView: View {
 
     private let thumbHeight: CGFloat = 200 // Made square by matching width
 
-    init(workOrder: WorkOrder) {
+    init(workOrder: WorkOrder, customerTag: String? = nil) {
         self.workOrder = workOrder
+        self.customerTag = customerTag
         self._imageResolver = StateObject(wrappedValue: ImageResolverViewModel(workOrderNumber: workOrder.WO_Number))
     }
     
@@ -273,7 +279,7 @@ struct WorkOrderCardView: View {
     private var coreContent: some View {
         VStack(alignment: .leading, spacing: 8) {
             cardThumbnail
-            InfoBlockView(workOrder: workOrder)
+            InfoBlockView(workOrder: workOrder, customerTag: customerTag)
         }
         .id(stableId) // Use stable ID instead of lastModified to prevent recreation
     }
@@ -511,11 +517,18 @@ struct GridThumbnailView: View {
     }
 }
 
-// ───── InfoBlockView Subview ─────
+// ───── InfoBlockView ─────
 struct InfoBlockView: View {
     let workOrder: WorkOrder
+    let customerTag: String?
+    
     @Environment(\.openURL) private var openURL
     @State private var showingPhoneActions = false
+    
+    init(workOrder: WorkOrder, customerTag: String? = nil) {
+        self.workOrder = workOrder
+        self.customerTag = customerTag
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -545,11 +558,22 @@ struct InfoBlockView: View {
             }
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(workOrder.customerName)
-                    .font(.subheadline)
-                    .fontWeight(.bold)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
+                // Customer name + optional internal tag (subtle)
+                HStack(spacing: 6) {
+                    Text(workOrder.customerName)
+                        .font(.subheadline)
+                        .fontWeight(.bold)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                    
+                    if let customerTag, !customerTag.isEmpty {
+                        Text(customerTag)
+                            .font(.subheadline)   // match size to blend in
+                            .opacity(0.8)         // keep subtle if a customer is peeking
+                            .accessibilityLabel("Customer Tag")
+                            .accessibilityHint("Internal label visible to staff")
+                    }
+                }
 
                 if let company = workOrder.customerCompany, !company.isEmpty {
                     Text(company)
@@ -563,13 +587,13 @@ struct InfoBlockView: View {
                     #endif
                 }
 
-                    Text(workOrder.customerPhone)
-                        .font(.subheadline)
-                        .fontWeight(.bold)
-                        .foregroundColor(Color(hex: "#FFC500"))
-                        .underline()
-                        .lineLimit(1)
-                        .truncationMode(.middle)
+                Text(workOrder.customerPhone)
+                    .font(.subheadline)
+                    .fontWeight(.bold)
+                    .foregroundColor(Color(hex: "#FFC500"))
+                    .underline()
+                    .lineLimit(1)
+                    .truncationMode(.middle)
                     .onLongPressGesture {
                         showingPhoneActions = true
                 }

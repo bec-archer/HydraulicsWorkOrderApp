@@ -28,6 +28,7 @@ struct Customer: Identifiable, Codable, Equatable {
     var company: String?
     var email: String?
     var taxExempt: Bool
+    var customerTag: String? = nil       // Used for subtle internal labels (e.g., 🌟 / 🐢 / 🧨)
 }
 // END Customer
 
@@ -41,7 +42,24 @@ extension Customer {
         phone: "555-1234",
         company: "Suncoast Hydraulics",
         email: "maria@example.com",
-        taxExempt: false
+        taxExempt: false,
+        customerTag: "🌟"
     )
 
+}
+
+import SwiftUI
+
+struct Customer_Previews: PreviewProvider {
+    static var previews: some View {
+        VStack {
+            if let tag = Customer.sample.customerTag {
+                Text("\(Customer.sample.name) \(tag)")
+            } else {
+                Text(Customer.sample.name)
+            }
+        }
+        .padding()
+        .previewLayout(.sizeThatFits)
+    }
 }

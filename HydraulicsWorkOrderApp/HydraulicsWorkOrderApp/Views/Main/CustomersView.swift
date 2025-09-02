@@ -223,18 +223,26 @@ struct CustomerRowView: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(customer.name)
-                        .font(.headline)
-                        .foregroundColor(.primary)
-                    
-                    if let company = customer.company, !company.isEmpty {
-                        Text(company)
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
-                    }
-                }
+                                HStack {
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack(spacing: 6) {
+                                Text(customer.name)
+                                    .font(.headline)
+                                    .foregroundColor(.primary)
+                                
+                                if let customerTag = customer.customerTag, !customerTag.isEmpty {
+                                    Text(customerTag)
+                                        .font(.title3)
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+
+                            if let company = customer.company, !company.isEmpty {
+                                Text(company)
+                                    .font(.subheadline)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
                 
                 Spacer()
                 

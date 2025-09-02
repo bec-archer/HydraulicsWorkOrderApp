@@ -62,6 +62,7 @@ final class CustomerDatabase: ObservableObject {
                     let company = data["company"] as? String
                     let email = data["email"] as? String
                     let taxExempt = data["taxExempt"] as? Bool ?? false
+                    let customerTag = data["customerTag"] as? String
 
                     // Prefer documentID if it is a UUID string; else try "id" field; else generate UUID
                     let docUUID = UUID(uuidString: doc.documentID)
@@ -74,7 +75,8 @@ final class CustomerDatabase: ObservableObject {
                         phone: phone,
                         company: company,
                         email: email,
-                        taxExempt: taxExempt
+                        taxExempt: taxExempt,
+                        customerTag: customerTag
                     )
                 }
 
@@ -111,6 +113,29 @@ final class CustomerDatabase: ObservableObject {
         }
     }
 
-
+    // ───── UPDATE EXISTING CUSTOMER ─────
+    func updateCustomer(_ customer: Customer, completion: @escaping (Result<Void, Error>) -> Void) {
+        let docId = customer.id.uuidString
+        
+        do {
+            try db.collection(collection)
+                .document(docId)
+                .setData(from: customer) { error in
+                    if let error = error {
+                        completion(.failure(error))
+                    } else {
+                        // Ensure the doc contains its own id field (string) for easy querying
+                        self.db.collection(self.collection)
+                            .document(docId)
+                            .setData(["id": docId], merge: true)
+                        
+                        self.fetchCustomers() // refresh local cache
+                        completion(.success(()))
+                    }
+                }
+        } catch {
+            completion(.failure(error))
+        }
+    }
 
 }

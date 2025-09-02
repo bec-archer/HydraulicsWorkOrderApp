@@ -14,8 +14,12 @@ import UIKit
 // ─────────────────────────────────────────────────────────────
 
 struct CustomerDetailView: View {
-    let customer: Customer
+    @State private var customer: Customer
     @StateObject private var workOrdersDatabase = WorkOrdersDatabase.shared
+
+    init(customer: Customer) {
+        self._customer = State(initialValue: customer)
+    }
     @State private var customerWorkOrders: [WorkOrder] = []
     @State private var isLoading = false
     @State private var selectedWorkOrder: WorkOrder?
@@ -28,7 +32,25 @@ struct CustomerDetailView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     // Customer Info Section
-                    CustomerInfoSection(customer: customer, showPhoneAlert: $showPhoneAlert, showingPhoneActions: $showingPhoneActions)
+                    CustomerInfoSection(
+                        customer: customer,
+                        showPhoneAlert: $showPhoneAlert,
+                        showingPhoneActions: $showingPhoneActions,
+                        onTagChange: { newTag in
+                            customer.customerTag = newTag
+                            // Persist the updated customer to Firebase
+                            CustomerDatabase.shared.updateCustomer(customer) { result in
+                                DispatchQueue.main.async {
+                                    switch result {
+                                    case .success:
+                                        print("✅ Customer tag updated successfully")
+                                    case .failure(let error):
+                                        print("❌ Failed to update customer tag: \(error)")
+                                    }
+                                }
+                            }
+                        }
+                    )
                     
                     // Work Orders Section
                     WorkOrdersSection(
@@ -142,6 +164,7 @@ struct CustomerInfoSection: View {
     let customer: Customer
     @Binding var showPhoneAlert: Bool
     @Binding var showingPhoneActions: Bool
+    var onTagChange: (String?) -> Void
     
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -149,9 +172,28 @@ struct CustomerInfoSection: View {
                 .font(.title2)
                 .fontWeight(.bold)
             
-            VStack(alignment: .leading, spacing: 12) {
-                InfoRow(label: "Name", value: customer.name)
-                // Tappable phone number
+                                VStack(alignment: .leading, spacing: 12) {
+                        HStack(spacing: 6) {
+                            Text("Name")
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                                .frame(width: 80, alignment: .leading)
+
+                            HStack(spacing: 6) {
+                                Text(customer.name)
+                                    .font(.subheadline)
+                                    .foregroundColor(.primary)
+                                
+                                if let customerTag = customer.customerTag, !customerTag.isEmpty {
+                                    Text(customerTag)
+                                        .font(.title3)
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+
+                            Spacer()
+                        }
+                        // Tappable phone number
                 HStack {
                     Text("Phone")
                         .font(.subheadline)
@@ -179,6 +221,44 @@ struct CustomerInfoSection: View {
                 }
                 
                 InfoRow(label: "Tax Status", value: customer.taxExempt ? "Tax Exempt" : "Taxable")
+                
+                Divider().padding(.vertical, 4)
+
+                // ───── Internal Customer Label (Any Role) ─────
+                HStack(spacing: 8) {
+                    Text("Label")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                        .frame(width: 80, alignment: .leading)
+
+                    let choices: [String?] = [nil, "🌟", "🐢", "🧨"]
+
+                    HStack(spacing: 6) {
+                        ForEach(choices, id: \.self) { choice in
+                            Button {
+                                onTagChange(choice)
+                            } label: {
+                                Text(choice ?? "—")
+                                    .font(.title3)
+                                    .frame(width: 36, height: 32)
+                                    .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                            }
+                            .buttonStyle(.plain)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 4)
+                            .background(
+                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .fill((customer.customerTag == choice) ? Color(.systemYellow).opacity(0.25) : Color.clear)
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .stroke((customer.customerTag == choice) ? Color(.systemYellow) : Color(.separator), lineWidth: (customer.customerTag == choice) ? 1.5 : 1)
+                            )
+                            .accessibilityLabel(choice ?? "No label")
+                        }
+                    }
+                }
+                // END
             }
             .padding()
             .background(Color(.systemGray6))
