@@ -28,7 +28,7 @@ struct SidebarMenuContent: View {
 
                 // Active WorkOrders
                 Button {
-                    appState.currentView = .activeWorkOrders
+                    appState.navigateToView(.activeWorkOrders)
                     dismissAction?()
                 } label: {
                     Label("Active WorkOrders", systemImage: "rectangle.grid.2x2")
@@ -38,7 +38,7 @@ struct SidebarMenuContent: View {
 
                 // Customers
                 Button {
-                    appState.currentView = .customers
+                    appState.navigateToView(.customers)
                     dismissAction?()
                 } label: {
                     Label("Customers", systemImage: "person.2")
@@ -60,7 +60,7 @@ struct SidebarMenuContent: View {
             // ───── Section: Account ─────
             Section("Account") {
                 Button {
-                    appState.currentView = .settings
+                    appState.navigateToView(.settings)
                     dismissAction?()
                 } label: {
                     Label("Change PIN", systemImage: "key.horizontal")

@@ -27,19 +27,19 @@ struct RouterView: View {
                 // MAIN
                 Section("Main") {
                     Button {
-                        appState.currentView = .activeWorkOrders
+                        appState.navigateToView(.activeWorkOrders)
                     } label: {
                         Label("Active WorkOrders", systemImage: "square.grid.2x2")
                     }
 
                     Button {
-                        appState.currentView = .newWorkOrder
+                        appState.navigateToView(.newWorkOrder)
                     } label: {
                         Label("New Work Order", systemImage: "plus.square.on.square")
                     }
 
                     Button {
-                        appState.currentView = .customers
+                        appState.navigateToView(.customers)
                     } label: {
                         Label("Customers", systemImage: "person.2")
                     }
@@ -48,7 +48,7 @@ struct RouterView: View {
                 // ADMIN / TOOLS
                 Section("Admin & Tools") {
                     Button {
-                        appState.currentView = .settings
+                        appState.navigateToView(.settings)
                     } label: {
                         Label("Settings", systemImage: "gearshape.fill")
                     }

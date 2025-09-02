@@ -43,6 +43,12 @@ class AppState: ObservableObject {
             splitVisibility = .all            // show
         }
     }
+    
+    // Navigate to a view and automatically collapse sidebar
+    func navigateToView(_ view: AppScreen) {
+        currentView = view
+        splitVisibility = .detailOnly
+    }
 
 
     func canDeleteWorkOrders() -> Bool {
