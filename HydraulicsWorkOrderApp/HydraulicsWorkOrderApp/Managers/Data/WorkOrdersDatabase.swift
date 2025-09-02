@@ -510,6 +510,13 @@ final class WorkOrdersDatabase: ObservableObject {
                         completion(.success(()))
                     }
                 } catch {
+                    #if DEBUG
+                    print("❌ DEBUG: Error in addItemNote: \(error)")
+                    print("   - Error type: \(type(of: error))")
+                    if let decodingError = error as? DecodingError {
+                        print("   - Decoding error details: \(decodingError)")
+                    }
+                    #endif
                     completion(.failure(error))
                 }
             }
@@ -558,10 +565,17 @@ final class WorkOrdersDatabase: ObservableObject {
                 wo.lastModified = Date()
                 wo.lastModifiedBy = user
                 
-                try docRef.setData(from: wo, merge: true) { err in
+                // Use targeted update instead of saving entire document to avoid encoding issues
+                let updateData: [String: Any] = [
+                    "items.\(idx).imageUrls": wo.items[idx].imageUrls,
+                    "lastModified": Timestamp(date: wo.lastModified),
+                    "lastModifiedBy": wo.lastModifiedBy ?? "Tech"
+                ]
+
+                docRef.updateData(updateData) { err in
                     if let err = err { completion(.failure(err)); return }
                     
-                    // Update local cache
+                    // Update local cache and post notification on main thread
                     DispatchQueue.main.async {
                         if let cacheIdx = self.workOrders.firstIndex(where: { $0.WO_Number == wo.WO_Number }) {
                             self.workOrders[cacheIdx] = wo
@@ -579,6 +593,13 @@ final class WorkOrdersDatabase: ObservableObject {
                     completion(.success(()))
                 }
             } catch {
+                #if DEBUG
+                print("❌ DEBUG: Error in appendItemImagesFromNote: \(error)")
+                print("   - Error type: \(type(of: error))")
+                if let decodingError = error as? DecodingError {
+                    print("   - Decoding error details: \(decodingError)")
+                }
+                #endif
                 completion(.failure(error))
             }
         }
@@ -1189,8 +1210,41 @@ final class WorkOrdersDatabase: ObservableObject {
                 wo.lastModified = Date()
                 wo.lastModifiedBy = note.user
 
-                try docRef.setData(from: wo, merge: true) { err in
-                    if let err = err { completion(.failure(err)); return }
+                #if DEBUG
+                print("🔍 DEBUG: About to save WorkOrder to Firebase")
+                print("   - WO Number: \(wo.WO_Number)")
+                print("   - Items count: \(wo.items.count)")
+                print("   - Item \(idx) notes count: \(wo.items[idx].notes.count)")
+                print("   - Latest note text: \(wo.items[idx].notes.last?.text ?? "nil")")
+                print("   - Latest note imageURLs count: \(wo.items[idx].notes.last?.imageURLs.count ?? 0)")
+                if let lastNote = wo.items[idx].notes.last, !lastNote.imageURLs.isEmpty {
+                    print("   - Latest note first imageURL: \(lastNote.imageURLs[0])")
+                }
+                #endif
+
+                // Use targeted update instead of saving entire document to avoid encoding issues
+                let updateData: [String: Any] = [
+                    "items.\(idx).notes": FieldValue.arrayUnion([
+                        [
+                            "id": note.id.uuidString,
+                            "user": note.user,
+                            "text": note.text,
+                            "timestamp": Timestamp(date: note.timestamp),
+                            "imageURLs": note.imageURLs
+                        ]
+                    ]),
+                    "lastModified": Timestamp(date: wo.lastModified),
+                    "lastModifiedBy": wo.lastModifiedBy ?? "Tech"
+                ]
+
+                docRef.updateData(updateData) { err in
+                    if let err = err { 
+                        #if DEBUG
+                        print("❌ DEBUG: Firestore update failed: \(err)")
+                        #endif
+                        completion(.failure(err)); 
+                        return 
+                    }
 
                     // Update local cache so UI lists refresh
                     DispatchQueue.main.async {
@@ -1313,8 +1367,30 @@ final class WorkOrdersDatabase: ObservableObject {
                 workOrderFromFirestore.lastModified = Date()
                 workOrderFromFirestore.lastModifiedBy = status.user
                 
-                // Save the entire updated work order
-                try docRef.setData(from: workOrderFromFirestore, merge: true) { err in
+                // Use targeted updates instead of saving entire document to avoid encoding issues
+                let statusData: [String: Any] = [
+                    "status": status.status,
+                    "user": status.user,
+                    "timestamp": Timestamp(date: status.timestamp),
+                    "notes": status.notes ?? ""
+                ]
+                
+                let noteData: [String: Any] = [
+                    "id": mirroredNote.id.uuidString,
+                    "user": mirroredNote.user,
+                    "text": mirroredNote.text,
+                    "timestamp": Timestamp(date: mirroredNote.timestamp),
+                    "imageURLs": mirroredNote.imageURLs
+                ]
+                
+                let updateData: [String: Any] = [
+                    "items.\(itemIdx).statusHistory": FieldValue.arrayUnion([statusData]),
+                    "items.\(itemIdx).notes": FieldValue.arrayUnion([noteData]),
+                    "lastModified": Timestamp(date: workOrderFromFirestore.lastModified),
+                    "lastModifiedBy": workOrderFromFirestore.lastModifiedBy ?? "Tech"
+                ]
+
+                docRef.updateData(updateData) { err in
                     if let err = err {
                         print("❌ STATUS UPDATE: Firestore save failed: \(err)")
                         completion(.failure(err))
@@ -1344,6 +1420,13 @@ final class WorkOrdersDatabase: ObservableObject {
                     completion(.success(()))
                 }
             } catch {
+                #if DEBUG
+                print("❌ DEBUG: Error in updateItemStatusAndNote: \(error)")
+                print("   - Error type: \(type(of: error))")
+                if let decodingError = error as? DecodingError {
+                    print("   - Decoding error details: \(decodingError)")
+                }
+                #endif
                 print("❌ STATUS UPDATE: Failed to decode work order: \(error)")
                 completion(.failure(error))
             }
@@ -1386,7 +1469,23 @@ final class WorkOrdersDatabase: ObservableObject {
                 wo.lastModified = Date()
                 wo.lastModifiedBy = note.user
 
-                try docRef.setData(from: wo, merge: true) { err in
+                // Use targeted update instead of saving entire document to avoid encoding issues
+                let noteData: [String: Any] = [
+                    "id": note.id.uuidString,
+                    "user": note.user,
+                    "text": note.text,
+                    "timestamp": Timestamp(date: note.timestamp),
+                    "imageURLs": note.imageURLs
+                ]
+                
+                let updateData: [String: Any] = [
+                    "items.\(idx).completedReasons": completedReasons,
+                    "items.\(idx).notes": FieldValue.arrayUnion([noteData]),
+                    "lastModified": Timestamp(date: wo.lastModified),
+                    "lastModifiedBy": wo.lastModifiedBy ?? "Tech"
+                ]
+
+                docRef.updateData(updateData) { err in
                     if let err = err { completion(.failure(err)); return }
 
                     // Update local cache
@@ -1426,6 +1525,13 @@ final class WorkOrdersDatabase: ObservableObject {
                     completion(.success(()))
                 }
             } catch {
+                #if DEBUG
+                print("❌ DEBUG: Error in updateCompletedReasons: \(error)")
+                print("   - Error type: \(type(of: error))")
+                if let decodingError = error as? DecodingError {
+                    print("   - Decoding error details: \(decodingError)")
+                }
+                #endif
                 completion(.failure(error))
             }
         }
@@ -1488,7 +1594,70 @@ final class WorkOrdersDatabase: ObservableObject {
             }
             
             let docRef = db.collection(collectionName).document(woId)
-            try? docRef.setData(from: updatedWorkOrder, merge: true) { error in
+            
+            // Use targeted update instead of saving entire document to avoid encoding issues
+            // Break up the complex expression to help the compiler
+            let itemsData = updatedWorkOrder.items.map { item -> [String: Any] in
+                let statusHistoryData = item.statusHistory.map { status -> [String: Any] in
+                    [
+                        "status": status.status,
+                        "user": status.user,
+                        "timestamp": Timestamp(date: status.timestamp),
+                        "notes": status.notes ?? ""
+                    ]
+                }
+                
+                let notesData = item.notes.map { note -> [String: Any] in
+                    [
+                        "id": note.id.uuidString,
+                        "user": note.user,
+                        "text": note.text,
+                        "timestamp": Timestamp(date: note.timestamp),
+                        "imageURLs": note.imageURLs
+                    ]
+                }
+                
+                let tagReplacementData = item.tagReplacementHistory?.map { replacement -> [String: Any] in
+                    [
+                        "oldTagId": replacement.oldTagId,
+                        "newTagId": replacement.newTagId,
+                        "replacedBy": replacement.replacedBy,
+                        "timestamp": Timestamp(date: replacement.timestamp),
+                        "reason": replacement.reason ?? ""
+                    ]
+                } ?? []
+                
+                return [
+                    "id": item.id.uuidString,
+                    "woItemId": item.woItemId ?? "",
+                    "tagId": item.tagId ?? "",
+                    "type": item.type,
+                    "dropdowns": item.dropdowns,
+                    "reasonsForService": item.reasonsForService,
+                    "reasonNotes": item.reasonNotes ?? "",
+                    "completedReasons": item.completedReasons,
+                    "imageUrls": item.imageUrls,
+                    "thumbUrls": item.thumbUrls,
+                    "lastModified": Timestamp(date: item.lastModified),
+                    "dropdownSchemaVersion": item.dropdownSchemaVersion,
+                    "lastModifiedBy": item.lastModifiedBy ?? "",
+                    "statusHistory": statusHistoryData,
+                    "notes": notesData,
+                    "testResult": item.testResult ?? "",
+                    "partsUsed": item.partsUsed ?? "",
+                    "hoursWorked": item.hoursWorked ?? "",
+                    "cost": item.cost ?? "",
+                    "assignedTo": item.assignedTo,
+                    "isFlagged": item.isFlagged,
+                    "tagReplacementHistory": tagReplacementData
+                ]
+            }
+            
+            let updateData: [String: Any] = [
+                "items": itemsData
+            ]
+            
+            docRef.updateData(updateData) { error in
                 if let error = error {
                     #if DEBUG
                     print("   ❌ Failed to migrate \(workOrder.WO_Number): \(error.localizedDescription)")

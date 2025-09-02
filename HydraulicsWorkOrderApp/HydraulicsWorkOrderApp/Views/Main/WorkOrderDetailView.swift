@@ -269,6 +269,17 @@ class WorkOrderDetailViewModel: ObservableObject {
                         
                         // After successfully saving the note, also add images to the item's main collection
                         if !imageURLs.isEmpty {
+                            // Update local workOrder immediately so images appear in thumbnail grid
+                            for imageURL in imageURLs {
+                                if !self.workOrder.items[itemIndex].imageUrls.contains(imageURL) {
+                                    self.workOrder.items[itemIndex].imageUrls.append(imageURL)
+                                }
+                            }
+                            print("📸 IMAGES: Updated local workOrder with \(imageURLs.count) images")
+                            
+                            // Force UI refresh to show new images in thumbnail grid
+                            self.objectWillChange.send()
+                            
                             self.workOrdersDB.appendItemImagesFromNote(
                                 woId: workOrderId,
                                 itemId: self.workOrder.items[itemIndex].id,
@@ -277,7 +288,7 @@ class WorkOrderDetailViewModel: ObservableObject {
                             ) { imageResult in
                                 switch imageResult {
                                 case .success:
-                                    print("📸 IMAGES: Added \(imageURLs.count) images to item collection")
+                                    print("📸 IMAGES: Added \(imageURLs.count) images to item collection in Firebase")
                                     // Both note and images are now saved, resume continuation
                                     continuation.resume()
                                 case .failure(let error):
@@ -910,6 +921,7 @@ struct WorkOrderDetailView: View {
                             showAllThumbs = true
                         }
                     )
+                    .id("item-\(item.id)-images-\(item.imageUrls.count)-\(item.thumbUrls.count)")
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .onAppear {
                         #if DEBUG
