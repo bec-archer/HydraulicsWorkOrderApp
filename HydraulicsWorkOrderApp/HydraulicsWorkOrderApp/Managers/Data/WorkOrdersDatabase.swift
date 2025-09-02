@@ -22,7 +22,7 @@ final class WorkOrdersDatabase: ObservableObject {
 
     private let collectionName = "workOrders"
     private let db = Firestore.firestore()
-
+    
     @Published var workOrders: [WorkOrder] = []
 
     private init() {}
@@ -565,11 +565,71 @@ final class WorkOrdersDatabase: ObservableObject {
                 wo.lastModified = Date()
                 wo.lastModifiedBy = user
                 
-                // Use targeted update instead of saving entire document to avoid encoding issues
+                // CRITICAL FIX: Use the entire updated items array to ensure data persistence
+                // FieldValue.arrayUnion can be unreliable with nested arrays in Firestore
+                let itemsArray: [[String: Any]] = wo.items.map { item in
+                    var itemData: [String: Any] = [:]
+                    
+                    itemData["id"] = item.id.uuidString
+                    itemData["tagId"] = item.tagId ?? ""
+                    itemData["type"] = item.type
+                    itemData["dropdowns"] = item.dropdowns
+                    itemData["reasonsForService"] = item.reasonsForService
+                    itemData["reasonNotes"] = item.reasonNotes ?? ""
+                    itemData["completedReasons"] = item.completedReasons
+                    itemData["imageUrls"] = item.imageUrls
+                    itemData["thumbUrls"] = item.thumbUrls
+                    itemData["lastModified"] = Timestamp(date: item.lastModified)
+                    itemData["dropdownSchemaVersion"] = item.dropdownSchemaVersion
+                    itemData["lastModifiedBy"] = item.lastModifiedBy ?? "Tech"
+                    
+                    let statusHistoryArray: [[String: Any]] = item.statusHistory.map { status in
+                        var statusData: [String: Any] = [:]
+                        statusData["status"] = status.status
+                        statusData["user"] = status.user
+                        statusData["timestamp"] = Timestamp(date: status.timestamp)
+                        statusData["notes"] = status.notes ?? ""
+                        return statusData
+                    }
+                    itemData["statusHistory"] = statusHistoryArray
+                    
+                    let notesArray: [[String: Any]] = item.notes.map { note in
+                        var noteData: [String: Any] = [:]
+                        noteData["id"] = note.id.uuidString
+                        noteData["user"] = note.user
+                        noteData["text"] = note.text
+                        noteData["timestamp"] = Timestamp(date: note.timestamp)
+                        noteData["imageURLs"] = note.imageURLs
+                        return noteData
+                    }
+                    itemData["notes"] = notesArray
+                    
+                    itemData["testResult"] = item.testResult ?? ""
+                    itemData["partsUsed"] = item.partsUsed ?? ""
+                    itemData["hoursWorked"] = item.hoursWorked ?? ""
+                    itemData["cost"] = item.cost ?? ""
+                    itemData["assignedTo"] = item.assignedTo ?? ""
+                    itemData["isFlagged"] = item.isFlagged
+                    
+                    if let tagReplacementHistory = item.tagReplacementHistory {
+                        let tagReplacementArray: [[String: Any]] = tagReplacementHistory.map { replacement in
+                            var replacementData: [String: Any] = [:]
+                            replacementData["oldTagId"] = replacement.oldTagId
+                            replacementData["newTagId"] = replacement.newTagId
+                            replacementData["replacedBy"] = replacement.replacedBy
+                            replacementData["reason"] = replacement.reason
+                            return replacementData
+                        }
+                        itemData["tagReplacementHistory"] = tagReplacementArray
+                    }
+                    
+                    return itemData
+                }
+                
                 let updateData: [String: Any] = [
-                    "items.\(idx).imageUrls": wo.items[idx].imageUrls,
+                    "items": itemsArray,
                     "lastModified": Timestamp(date: wo.lastModified),
-                    "lastModifiedBy": wo.lastModifiedBy ?? "Tech"
+                    "lastModifiedBy": wo.lastModifiedBy
                 ]
 
                 docRef.updateData(updateData) { err in
@@ -1222,19 +1282,73 @@ final class WorkOrdersDatabase: ObservableObject {
                 }
                 #endif
 
-                // Use targeted update instead of saving entire document to avoid encoding issues
+                // CRITICAL FIX: Use the entire updated items array to ensure data persistence
+                // FieldValue.arrayUnion can be unreliable with nested arrays in Firestore
+                let itemsArray: [[String: Any]] = wo.items.map { item in
+                    var itemData: [String: Any] = [:]
+                    
+                    itemData["id"] = item.id.uuidString
+                    itemData["tagId"] = item.tagId ?? ""
+                    itemData["type"] = item.type
+                    itemData["dropdowns"] = item.dropdowns
+                    itemData["reasonsForService"] = item.reasonsForService
+                    itemData["reasonNotes"] = item.reasonNotes ?? ""
+                    itemData["completedReasons"] = item.completedReasons
+                    itemData["imageUrls"] = item.imageUrls
+                    itemData["thumbUrls"] = item.thumbUrls
+                    if let lastModified = item.lastModified {
+                        itemData["lastModified"] = Timestamp(date: lastModified)
+                    }
+                    itemData["dropdownSchemaVersion"] = item.dropdownSchemaVersion
+                    itemData["lastModifiedBy"] = item.lastModifiedBy ?? "Tech"
+                    
+                    let statusHistoryArray: [[String: Any]] = item.statusHistory.map { status in
+                        var statusData: [String: Any] = [:]
+                        statusData["status"] = status.status
+                        statusData["user"] = status.user
+                        statusData["timestamp"] = Timestamp(date: status.timestamp)
+                        statusData["notes"] = status.notes ?? ""
+                        return statusData
+                    }
+                    itemData["statusHistory"] = statusHistoryArray
+                    
+                    let notesArray: [[String: Any]] = item.notes.map { note in
+                        var noteData: [String: Any] = [:]
+                        noteData["id"] = note.id.uuidString
+                        noteData["user"] = note.user
+                        noteData["text"] = note.text
+                        noteData["timestamp"] = Timestamp(date: note.timestamp)
+                        noteData["imageURLs"] = note.imageURLs
+                        return noteData
+                    }
+                    itemData["notes"] = notesArray
+                    
+                    itemData["testResult"] = item.testResult ?? ""
+                    itemData["partsUsed"] = item.partsUsed ?? ""
+                    itemData["hoursWorked"] = item.hoursWorked ?? ""
+                    itemData["cost"] = item.cost ?? ""
+                    itemData["assignedTo"] = item.assignedTo ?? ""
+                    itemData["isFlagged"] = item.isFlagged
+                    
+                    if let tagReplacementHistory = item.tagReplacementHistory {
+                        let tagReplacementArray: [[String: Any]] = tagReplacementHistory.map { replacement in
+                            var replacementData: [String: Any] = [:]
+                            replacementData["oldTagId"] = replacement.oldTagId
+                            replacementData["newTagId"] = replacement.newTagId
+                            replacementData["replacedBy"] = replacement.replacedBy
+                            replacementData["reason"] = replacement.reason
+                            return replacementData
+                        }
+                        itemData["tagReplacementHistory"] = tagReplacementArray
+                    }
+                    
+                    return itemData
+                }
+                
                 let updateData: [String: Any] = [
-                    "items.\(idx).notes": FieldValue.arrayUnion([
-                        [
-                            "id": note.id.uuidString,
-                            "user": note.user,
-                            "text": note.text,
-                            "timestamp": Timestamp(date: note.timestamp),
-                            "imageURLs": note.imageURLs
-                        ]
-                    ]),
+                    "items": itemsArray,
                     "lastModified": Timestamp(date: wo.lastModified),
-                    "lastModifiedBy": wo.lastModifiedBy ?? "Tech"
+                    "lastModifiedBy": wo.lastModifiedBy
                 ]
 
                 docRef.updateData(updateData) { err in
@@ -1283,6 +1397,13 @@ final class WorkOrdersDatabase: ObservableObject {
                     completion(.success(()))
                 }
             } catch {
+                #if DEBUG
+                print("❌ DEBUG: Error in addItemNote: \(error)")
+                print("   - Error type: \(type(of: error))")
+                if let decodingError = error as? DecodingError {
+                    print("   - Decoding error details: \(decodingError)")
+                }
+                #endif
                 completion(.failure(error))
             }
         }
@@ -1324,7 +1445,7 @@ final class WorkOrdersDatabase: ObservableObject {
         // updating specific array elements by ID. Let's revert to the safer approach.
         // First, let's get the current work order from Firestore to ensure we have the latest data
         docRef.getDocument { [weak self] snap, err in
-            guard let self else { return }
+            guard let self = self else { return }
             if let err = err {
                 print("❌ STATUS UPDATE: Failed to fetch work order: \(err)")
                 completion(.failure(err))
@@ -1367,27 +1488,73 @@ final class WorkOrdersDatabase: ObservableObject {
                 workOrderFromFirestore.lastModified = Date()
                 workOrderFromFirestore.lastModifiedBy = status.user
                 
-                // Use targeted updates instead of saving entire document to avoid encoding issues
-                let statusData: [String: Any] = [
-                    "status": status.status,
-                    "user": status.user,
-                    "timestamp": Timestamp(date: status.timestamp),
-                    "notes": status.notes ?? ""
-                ]
-                
-                let noteData: [String: Any] = [
-                    "id": mirroredNote.id.uuidString,
-                    "user": mirroredNote.user,
-                    "text": mirroredNote.text,
-                    "timestamp": Timestamp(date: mirroredNote.timestamp),
-                    "imageURLs": mirroredNote.imageURLs
-                ]
+                // CRITICAL FIX: Use the entire updated items array to ensure data persistence
+                // FieldValue.arrayUnion can be unreliable with nested arrays in Firestore
+                let itemsArray: [[String: Any]] = workOrderFromFirestore.items.map { item in
+                    var itemData: [String: Any] = [:]
+                    
+                    itemData["id"] = item.id.uuidString
+                    itemData["tagId"] = item.tagId ?? ""
+                    itemData["type"] = item.type
+                    itemData["dropdowns"] = item.dropdowns
+                    itemData["reasonsForService"] = item.reasonsForService
+                    itemData["reasonNotes"] = item.reasonNotes ?? ""
+                    itemData["completedReasons"] = item.completedReasons
+                    itemData["imageUrls"] = item.imageUrls
+                    itemData["thumbUrls"] = item.thumbUrls
+                    if let lastModified = item.lastModified {
+                        itemData["lastModified"] = Timestamp(date: lastModified)
+                    }
+                    itemData["dropdownSchemaVersion"] = item.dropdownSchemaVersion
+                    itemData["lastModifiedBy"] = item.lastModifiedBy ?? "Tech"
+                    
+                    let statusHistoryArray: [[String: Any]] = item.statusHistory.map { status in
+                        var statusData: [String: Any] = [:]
+                        statusData["status"] = status.status
+                        statusData["user"] = status.user
+                        statusData["timestamp"] = Timestamp(date: status.timestamp)
+                        statusData["notes"] = status.notes ?? ""
+                        return statusData
+                    }
+                    itemData["statusHistory"] = statusHistoryArray
+                    
+                    let notesArray: [[String: Any]] = item.notes.map { note in
+                        var noteData: [String: Any] = [:]
+                        noteData["id"] = note.id.uuidString
+                        noteData["user"] = note.user
+                        noteData["text"] = note.text
+                        noteData["timestamp"] = Timestamp(date: note.timestamp)
+                        noteData["imageURLs"] = note.imageURLs
+                        return noteData
+                    }
+                    itemData["notes"] = notesArray
+                    
+                    itemData["testResult"] = item.testResult ?? ""
+                    itemData["partsUsed"] = item.partsUsed ?? ""
+                    itemData["hoursWorked"] = item.hoursWorked ?? ""
+                    itemData["cost"] = item.cost ?? ""
+                    itemData["assignedTo"] = item.assignedTo ?? ""
+                    itemData["isFlagged"] = item.isFlagged
+                    
+                    if let tagReplacementHistory = item.tagReplacementHistory {
+                        let tagReplacementArray: [[String: Any]] = tagReplacementHistory.map { replacement in
+                            var replacementData: [String: Any] = [:]
+                            replacementData["oldTagId"] = replacement.oldTagId
+                            replacementData["newTagId"] = replacement.newTagId
+                            replacementData["replacedBy"] = replacement.replacedBy
+                            replacementData["reason"] = replacement.reason
+                            return replacementData
+                        }
+                        itemData["tagReplacementHistory"] = tagReplacementArray
+                    }
+                    
+                    return itemData
+                }
                 
                 let updateData: [String: Any] = [
-                    "items.\(itemIdx).statusHistory": FieldValue.arrayUnion([statusData]),
-                    "items.\(itemIdx).notes": FieldValue.arrayUnion([noteData]),
+                    "items": itemsArray,
                     "lastModified": Timestamp(date: workOrderFromFirestore.lastModified),
-                    "lastModifiedBy": workOrderFromFirestore.lastModifiedBy ?? "Tech"
+                    "lastModifiedBy": workOrderFromFirestore.lastModifiedBy
                 ]
 
                 docRef.updateData(updateData) { err in
@@ -1469,20 +1636,73 @@ final class WorkOrdersDatabase: ObservableObject {
                 wo.lastModified = Date()
                 wo.lastModifiedBy = note.user
 
-                // Use targeted update instead of saving entire document to avoid encoding issues
-                let noteData: [String: Any] = [
-                    "id": note.id.uuidString,
-                    "user": note.user,
-                    "text": note.text,
-                    "timestamp": Timestamp(date: note.timestamp),
-                    "imageURLs": note.imageURLs
-                ]
+                // CRITICAL FIX: Use the entire updated items array to ensure data persistence
+                // FieldValue.arrayUnion can be unreliable with nested arrays in Firestore
+                let itemsArray: [[String: Any]] = wo.items.map { item in
+                    var itemData: [String: Any] = [:]
+                    
+                    itemData["id"] = item.id.uuidString
+                    itemData["tagId"] = item.tagId ?? ""
+                    itemData["type"] = item.type
+                    itemData["dropdowns"] = item.dropdowns
+                    itemData["reasonsForService"] = item.reasonsForService
+                    itemData["reasonNotes"] = item.reasonNotes ?? ""
+                    itemData["completedReasons"] = item.completedReasons
+                    itemData["imageUrls"] = item.imageUrls
+                    itemData["thumbUrls"] = item.thumbUrls
+                    if let lastModified = item.lastModified {
+                        itemData["lastModified"] = Timestamp(date: lastModified)
+                    }
+                    itemData["dropdownSchemaVersion"] = item.dropdownSchemaVersion
+                    itemData["lastModifiedBy"] = item.lastModifiedBy ?? "Tech"
+                    
+                    let statusHistoryArray: [[String: Any]] = item.statusHistory.map { status in
+                        var statusData: [String: Any] = [:]
+                        statusData["status"] = status.status
+                        statusData["user"] = status.user
+                        statusData["timestamp"] = Timestamp(date: status.timestamp)
+                        statusData["notes"] = status.notes ?? ""
+                        return statusData
+                    }
+                    itemData["statusHistory"] = statusHistoryArray
+                    
+                    let notesArray: [[String: Any]] = item.notes.map { note in
+                        var noteData: [String: Any] = [:]
+                        noteData["id"] = note.id.uuidString
+                        noteData["user"] = note.user
+                        noteData["text"] = note.text
+                        noteData["timestamp"] = Timestamp(date: note.timestamp)
+                        noteData["imageURLs"] = note.imageURLs
+                        return noteData
+                    }
+                    itemData["notes"] = notesArray
+                    
+                    itemData["testResult"] = item.testResult ?? ""
+                    itemData["partsUsed"] = item.partsUsed ?? ""
+                    itemData["hoursWorked"] = item.hoursWorked ?? ""
+                    itemData["cost"] = item.cost ?? ""
+                    itemData["assignedTo"] = item.assignedTo ?? ""
+                    itemData["isFlagged"] = item.isFlagged
+                    
+                    if let tagReplacementHistory = item.tagReplacementHistory {
+                        let tagReplacementArray: [[String: Any]] = tagReplacementHistory.map { replacement in
+                            var replacementData: [String: Any] = [:]
+                            replacementData["oldTagId"] = replacement.oldTagId
+                            replacementData["newTagId"] = replacement.newTagId
+                            replacementData["replacedBy"] = replacement.replacedBy
+                            replacementData["reason"] = replacement.reason
+                            return replacementData
+                        }
+                        itemData["tagReplacementHistory"] = tagReplacementArray
+                    }
+                    
+                    return itemData
+                }
                 
                 let updateData: [String: Any] = [
-                    "items.\(idx).completedReasons": completedReasons,
-                    "items.\(idx).notes": FieldValue.arrayUnion([noteData]),
+                    "items": itemsArray,
                     "lastModified": Timestamp(date: wo.lastModified),
-                    "lastModifiedBy": wo.lastModifiedBy ?? "Tech"
+                    "lastModifiedBy": wo.lastModifiedBy
                 ]
 
                 docRef.updateData(updateData) { err in
