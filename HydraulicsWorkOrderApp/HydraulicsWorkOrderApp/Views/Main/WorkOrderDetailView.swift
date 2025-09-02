@@ -9,12 +9,29 @@
 // Refactored version using WorkOrderDetailViewModel for better separation of concerns
 // ─────────────────────────────────────────────────────────────
 
+
 import SwiftUI
 import Foundation
 import FirebaseStorage
 import FirebaseFirestore
 import UIKit
 import Combine
+
+/*  ────────────────────────────────────────────────────────────────────────────
+    WARNING — LOCKED VIEW (GUARDRAIL)
+    GUARDRAIL_TOKEN: DO_NOT_MODIFY_VIEW_LAYOUT
+
+    This view’s layout, UI, and behavior are CRITICAL to the workflow and tests.
+    DO NOT change, refactor, or alter layout/styling/functionality in this file.
+
+    Allowed edits ONLY:
+      • Comments and documentation
+      • Preview sample data (non-shipping)
+      • Bugfixes that are 100% no-visual-change (must be verifiable in Preview)
+
+    Any change beyond the above requires explicit approval from Bec.
+    Rationale: This screen matches shop SOPs and downstream QA expectations.
+    ──────────────────────────────────────────────────────────────────────────── */
 
 extension View {
     /// Applies a transform only on iOS 17+, returns the original view otherwise.
@@ -447,6 +464,8 @@ extension WorkOrderDetailViewModel {
 }
 
 // MARK: - View
+// WARNING (GUARDRAIL_TOKEN: DO_NOT_MODIFY_VIEW_LAYOUT):
+// Do not alter layout/UI/behavior. See header block for allowed edits & rationale.
 struct WorkOrderDetailView: View {
     // MARK: - ViewModel
     @StateObject private var viewModel: WorkOrderDetailViewModel

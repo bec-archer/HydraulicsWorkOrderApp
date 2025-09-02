@@ -1,8 +1,25 @@
 //  ItemCard.swift
 //  HydraulicsWorkOrderApp
+
 import SwiftUI
 import PhotosUI
 import UIKit
+
+/*  ────────────────────────────────────────────────────────────────────────────
+    WARNING — LOCKED VIEW (GUARDRAIL)
+    GUARDRAIL_TOKEN: DO_NOT_MODIFY_VIEW_LAYOUT
+
+    This view’s layout, UI, and behavior are CRITICAL to the workflow and tests.
+    DO NOT change, refactor, or alter layout/styling/functionality in this file.
+
+    Allowed edits ONLY:
+      • Comments and documentation
+      • Preview sample data (non-shipping)
+      • Bugfixes that are 100% no-visual-change (must be verifiable in Preview)
+
+    Any change beyond the above requires explicit approval from Bec.
+    Rationale: This screen matches shop SOPs and downstream QA expectations.
+    ──────────────────────────────────────────────────────────────────────────── */
 
 // ───── Image URL Resolver (thumb ↔ full, zipped) ─────
 // Keeps thumbnail and full-size arrays paired to prevent mismatches.
@@ -34,6 +51,8 @@ private func resolvedURL(for item: WO_Item, at index: Int) -> URL? {
 }
 
 // ───── ITEM CARD ─────
+// WARNING (GUARDRAIL_TOKEN: DO_NOT_MODIFY_VIEW_LAYOUT):
+// Do not alter layout/UI/behavior. See header block for allowed edits & rationale.
 struct ItemCard: View {
     let item: WO_Item
 
