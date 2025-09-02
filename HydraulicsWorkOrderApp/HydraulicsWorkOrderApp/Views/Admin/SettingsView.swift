@@ -1,145 +1,54 @@
 //
-//  SettingsView.swift
+//  SettingsView 2.swift
 //  HydraulicsWorkOrderApp
 //
-//  Created by Bec Archer on 8/12/25.
+//  Created by Bec Archer on 9/2/25.
 //
-// ─────────────────────────────────────────────────────────────
-// 📄 SettingsView.swift
-// Admin/Dev toggles for bypassing login, scan enforcement, sample reload
-// ─────────────────────────────────────────────────────────────
 
+
+// ───── SETTINGS VIEW ─────
 import SwiftUI
 
+/// Admin/SuperAdmin-only settings panel.
+/// Provides access to sync health, dropdowns, user manager,
+/// and SuperAdmin dev toggles (login enforcement, scan enforcement, sample reset).
 struct SettingsView: View {
-    @ObservedObject var devSettings = DevSettingsManager.shared
-
-    // ───── PIN Prompt State ─────
-    @State private var showPinPrompt = false
-    @State private var enteredPin = ""
-    @State private var pinError: String?
-    @State private var pendingBypassValue: Bool = false
-    
-    // ───── Migration State ─────
-    @State private var showMigrationView = false
-
+    @EnvironmentObject var appState: AppState
 
     var body: some View {
-        Form {
-            // ───── Developer Settings ─────
-            Section(header: Text("Developer Settings")) {
-                
-                // 🔐 PIN-protected toggle for bypass login
-                Toggle("Bypass Login Screen", isOn: Binding(
-                    get: { devSettings.skipLogin },
-                    set: { newValue in
-                        showPinPrompt = true
-                        pendingBypassValue = newValue
-                    }
-                ))
-                
-                Toggle("Bypass Tag Scan Requirement", isOn: $devSettings.skipTagScan)
+        // ───── BODY ─────
+        NavigationStack {
+            List {
+                // Admin + SuperAdmin tools
+                if appState.isAdmin || appState.isSuperAdmin {
+                    NavigationLink("Manage Users", destination: UserManagerView()
+                        .environmentObject(appState))
 
-                // 🔐 Enable anonymous Firebase Auth so image uploads work with strict rules
-                Toggle("Enable Anonymous Firebase Auth", isOn: $devSettings.enableAnonAuth)
-                    .accessibilityHint("Turn on to sign in anonymously at launch so Firebase Storage uploads are allowed")
-            }
-            
-            // ───── Database Management ─────
-            Section(header: Text("Database Management")) {
-                Button(action: {
-                    showMigrationView = true
-                }) {
-                    HStack {
-                        Image(systemName: "arrow.triangle.2.circlepath")
-                            .foregroundColor(.orange)
-                        Text("Clear All Test Data")
-                        Spacer()
-                        Image(systemName: "chevron.right")
-                            .foregroundColor(.secondary)
-                    }
-                }
-                .foregroundColor(.primary)
-            }
-        }
-        .navigationTitle("Settings")
-        
-        // ───── PIN Entry Sheet ─────
-        .sheet(isPresented: $showPinPrompt) {
-            VStack(spacing: 16) {
-
-                // Title
-                Text("Super Admin PIN Required")
-                    .font(.title2.weight(.semibold))
-                    .padding(.top, 8)
-
-                // Secure PIN input (4–8 digits)
-                SecureField("Enter 4–8 digit PIN", text: $enteredPin)
-                    .keyboardType(.numberPad)
-                    .textContentType(.oneTimeCode) // shows numeric pad on iPad
-                    .padding()
-                    .background(Color(.secondarySystemBackground))
-                    .cornerRadius(12)
-
-                // Error feedback (if any)
-                if let pinError {
-                    Text(pinError)
-                        .font(.callout)
-                        .foregroundStyle(.red)
+                    NavigationLink("Sync Status", destination: SyncStatusView()
+                        .environmentObject(appState))
                 }
 
-                // Actions
-                HStack {
-                    Button("Cancel") {
-                        // Do not change the setting; just dismiss
-                        showPinPrompt = false
-                        enteredPin = ""
-                        pinError = nil
-                    }
-                    .buttonStyle(.bordered)
-
-                    Spacer(minLength: 24)
-
-                    Button("Confirm") {
-                        // ───── SuperAdmin validation + update ─────
-                        let ok = devSettings.setBypassLogin(pendingBypassValue, pin: enteredPin)
-                        if ok {
-                            // Success: the underlying Published skipLogin is updated & persisted
-                            showPinPrompt = false
-                            pinError = nil
-                        } else {
-                            // Failure: keep sheet open and show error
-                            pinError = "Incorrect PIN. Try again."
+                // SuperAdmin-only dev toggles
+                if appState.isSuperAdmin {
+                    Section("Developer Toggles") {
+                        Toggle("Disable Login Screen", isOn: .constant(false))
+                        Toggle("Bypass Tag Scan Enforcement", isOn: .constant(false))
+                        Button("Reload Sample Data") {
+                            // TODO: wire sample data loader
                         }
                     }
-                    .buttonStyle(.borderedProminent)
                 }
-                .padding(.top, 8)
             }
-            .padding()
-            .onAppear {
-                // Reset every time the sheet is shown
-                enteredPin = ""
-                pinError = nil
-            }
+            .navigationTitle("Settings")
         }
-        // END sheet
-        
-        // ───── Migration Sheet ─────
-        .sheet(isPresented: $showMigrationView) {
-            DataMigrationView()
-        }
-
+        // END
     }
 }
 
-
-// END .body
-// END struct
-
-// ───── Preview Template ─────
+// ───── PREVIEW ─────
 #Preview {
-    NavigationStack {
-        SettingsView()
-    }
+    let s = AppState.previewLoggedIn(role: .superadmin)
+    SettingsView()
+        .environmentObject(s)
 }
+// END

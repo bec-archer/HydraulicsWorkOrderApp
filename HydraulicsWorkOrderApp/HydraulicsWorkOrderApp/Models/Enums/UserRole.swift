@@ -11,11 +11,13 @@
 // User roles for PIN-based login and role-based routing
 // ─────────────────────────────────────────────────────────────
 
+// ───── USER ROLE ENUM ─────
 import Foundation
 
-enum UserRole: String, Codable {
+public enum UserRole: String, CaseIterable, Codable, Equatable {
     case tech
     case manager
     case admin
-    case superadmin
+    case superadmin   // NOTE: keeps AppState.isSuperAdmin gate working
 }
+// END

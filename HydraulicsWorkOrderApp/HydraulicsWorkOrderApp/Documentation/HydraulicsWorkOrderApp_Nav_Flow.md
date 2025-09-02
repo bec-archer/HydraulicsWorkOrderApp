@@ -38,7 +38,7 @@ Sidebar (Admin)
 ├── CompletedWorkOrdersView
 ├── CustomersView
 ├── DeletedWorkOrdersView
-├── DropdownManagerView
+├── DropdownManagerView (includes Reasons for Service)
 ├── UserManagerView
 ├── SettingsView
 └── SyncStatusView
@@ -47,6 +47,7 @@ Sidebar (Manager)
 ├── ActiveWorkOrdersView
 ├── PendingApprovalView
 ├── ManagerReviewView
+└── DropdownManagerView (read-only, Request Change)
 ```
 
 ---
@@ -67,7 +68,7 @@ SettingsView
 
 ```
 New ➝ Checked In ➝ In Progress ➝ Done ➝ Tested ➝ Completed ➝ Closed
-						↳ FAIL ➝ PROBLEM CHILD
+                        ↳ FAIL ➝ PROBLEM CHILD
 ```
 
 Each status emits a WO\_Status entry and appears in NotesTimelineView

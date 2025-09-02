@@ -1,6 +1,6 @@
 # ✅ Developer Checklist – Hydraulics Work Order App
 
-*Updated: August 7, 2025 – Matches Final PRD & File Structure*
+*Updated: September 2nd, 2025 – Matches Final PRD & File Structure*
 
 ---
 
@@ -34,6 +34,9 @@
   * [ ] At least one image captured
   * [ ] Dropdowns selected and saved
   * [ ] Reason(s) for service checked
+  * [ ] Reasons for Service are catalog-managed:
+    * Admin/SuperAdmin can add/edit/deactivate options
+    * Managers can submit change requests (read-only access in DropdownManagerView)
 
 * [ ] WorkOrder number auto-generated in format: `YYMMDD-001`, `001-A`, etc.
 
@@ -67,17 +70,20 @@
 
 | Feature                     | Tech | Manager | Admin | SuperAdmin |
 | --------------------------- | ---- | ------- | ----- | ---------- |
-| Add/Edit WorkOrder          | ✅    | ✅       | ✅     | ✅          |
-| Mark WorkOrder Completed    | ✅    | ✅       | ✅     | ✅          |
-| Mark WorkOrder Closed       | ✅    | ✅       | ✅     | ✅          |
-| Override Parts/Hours/Cost   | ❌    | ✅       | ✅     | ✅          |
-| View Closed WOs             | ❌    | ✅       | ✅     | ✅          |
-| Add/Delete Users            | ❌    | ❌       | ✅     | ✅          |
-| Edit Dropdowns              | ❌    | ❌       | ✅     | ✅          |
-| Developer Toggles           | ❌    | ❌       | ❌     | ✅          |
-| Restore Deleted WorkOrders  | ❌    | ✅       | ✅     | ✅          |
-| Unlock Completed WorkOrders | ❌    | ✅       | ✅     | ✅          |
-| Reassign/Replace Tag IDs    | ❌    | ✅       | ✅     | ✅          |
+| Add/Edit WorkOrder          | ✅   | ✅      | ✅    | ✅          |
+| Mark WorkOrder Completed    | ✅   | ✅      | ✅    | ✅          |
+| Mark WorkOrder Closed       | ✅   | ✅      | ✅    | ✅          |
+| Override Parts/Hours/Cost   | ❌   | ✅      | ✅    | ✅          |
+| View Closed WOs             | ❌   | ✅      | ✅    | ✅          |
+| Add/Delete Users            | ❌   | ❌      | ✅*   | ✅          |
+| Edit Dropdowns (general)    | ❌   | ❌      | ✅    | ✅          |
+| Manage Reasons for Service  | ❌   | Request | ✅    | ✅          |
+| Developer Toggles           | ❌   | ❌      | ❌    | ✅          |
+| Restore Deleted WorkOrders  | ❌   | ✅      | ✅    | ✅          |
+| Unlock Completed WorkOrders | ❌   | ✅      | ✅    | ✅          |
+| Reassign/Replace Tag IDs    | ❌   | ✅      | ✅    | ✅          |
+
+> *Admins cannot edit, activate/deactivate, or change any **SuperAdmin** account. Only SuperAdmin can manage SuperAdmin users.*
 
 ---
 
@@ -124,6 +130,8 @@
 * [ ] Fields always show `WorkOrder`, `WO_Item`, `WO_Note`, `WO_Status` — no "job" references
 * [ ] Modal flows return to origin screen properly
 * [ ] Fields support iPad keyboards + handwriting input
+* [ ] Managers see DropdownManagerView in read-only mode with a Request Change option
+* [ ] Admins can edit all dropdowns including Reasons for Service
 
 ---
 

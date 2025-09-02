@@ -38,11 +38,9 @@ struct RouterView: View {
                         Label("New Work Order", systemImage: "plus.square.on.square")
                     }
 
-                    Button {
-                        appState.navigateToView(.customers)
-                    } label: {
-                        Label("Customers", systemImage: "person.2")
-                    }
+                    // TODO: Customers view coming soon
+                    Label("Customers (coming soon)", systemImage: "person.2")
+                        .foregroundStyle(.secondary)
                 }
 
                 // ADMIN / TOOLS
@@ -53,8 +51,16 @@ struct RouterView: View {
                         Label("Settings", systemImage: "gearshape.fill")
                     }
 
-                    // Placeholders (keep visible for roadmap; disabled = no compile impact)
+                    // Users management (Admin/SuperAdmin only)
+                    if appState.isAdmin || appState.isSuperAdmin {
+                        Button {
+                            appState.navigateToView(.userManager)
+                        } label: {
+                            Label("Manage Users", systemImage: "person.2.circle")
+                        }
+                    }
 
+                    // Placeholders (keep visible for roadmap; disabled = no compile impact)
                     Label("Dropdown Manager (coming soon)", systemImage: "chevron.down.square")
                         .foregroundStyle(.secondary)
                     Label("Deleted WorkOrders (coming soon)", systemImage: "trash")
@@ -76,8 +82,11 @@ struct RouterView: View {
                         NewWorkOrderView()
                     case .settings:
                         SettingsView()
+                    case .userManager:
+                        UserManagerView()
+                            .environmentObject(appState)
                     case .customers:
-                        CustomersView()
+                        Text("Customers view coming soon")
                     @unknown default:
                         Text("⚠️ Unknown AppScreen state")
                     }

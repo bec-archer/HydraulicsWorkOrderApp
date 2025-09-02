@@ -15,6 +15,17 @@
 
 ---
 
+## 🧪 Catalog Management (Dropdowns & Reasons for Service)
+
+* [ ] Admin can add/edit/deactivate dropdown values
+* [ ] Admin can add/edit/deactivate **Reasons for Service**
+* [ ] SuperAdmin can manage all catalogs including Reasons for Service
+* [ ] Manager sees DropdownManagerView in read-only mode
+* [ ] Manager can submit a Request Change for catalogs (including Reasons for Service)
+* [ ] Tech does not see catalog management UI
+
+---
+
 ## 🧪 Status + Test Handling
 
 * [ ] Tech can mark In Progress
@@ -75,3 +86,6 @@
 * [ ] Completed WorkOrders appear gray
 * [ ] Flag icon shown for flagged WO
 * [ ] Tappable phone numbers initiate call or text
+
+* [ ] Managers see read-only DropdownManagerView with Request Change button
+* [ ] Admin UI prevents editing/activating/deactivating SuperAdmin accounts

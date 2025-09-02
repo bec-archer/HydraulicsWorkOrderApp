@@ -2,7 +2,7 @@
 
 **Project:** Hydraulics Equipment Check-In iPad App
 **Author:** Bec Archer
-**Last Updated:** August 7, 2025
+**Last Updated:** September 2nd, 2025
 **Platform:** iPad & iPhone (SwiftUI frontend)
 **Backend:** Firebase Firestore (primary), Firebase Storage for images, self-hosted backup
 
