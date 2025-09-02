@@ -5,6 +5,13 @@ import Foundation
 // Pure generator for creation-time WO numbers. Side-effect free.
 // ─────────────────────────────────────────────────────────────
 
+/*
+    WARNING: This WorkOrderNumberGenerator is a critical component of the project.
+    It is core functionality that must remain unchanged and unaltered.
+    Any modifications to this generator could compromise the stability and data integrity of the system.
+    DO NOT change or refactor this code without explicit authorization and thorough testing.
+*/
+
 /// WorkOrder numbers are frozen at creation and NEVER recomputed later.
 /// Format: "YYMMDD-###" e.g., "250820-001"
 struct WorkOrderNumberGenerator {
