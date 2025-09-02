@@ -246,15 +246,40 @@ struct WorkOrderRowView: View {
                         .font(.headline)
                         .foregroundColor(.primary)
                     
-                    Text(workOrder.WO_Type)
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
+                    // Display item types and quantities instead of WO_Type
+                    let itemTypes = getItemTypeCounts(for: workOrder)
+                    if !itemTypes.isEmpty {
+                        let itemTypeText = itemTypes.map { "\($0.type) × \($0.count)" }.joined(separator: " • ")
+                        Text(itemTypeText)
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                    }
                 }
                 
                 Spacer()
                 
                 VStack(alignment: .trailing, spacing: 4) {
-                    StatusBadge(status: workOrder.status)
+                    // Show status badges for each item
+                    if workOrder.items.count == 1 {
+                                            // Single item - show one status badge
+                    let status = workOrder.items[0].statusHistory.last?.status ?? "Checked In"
+                    StatusBadge(status: status)
+                    } else {
+                        // Multiple items - show status for each item
+                        VStack(spacing: 2) {
+                            ForEach(workOrder.items.indices, id: \.self) { index in
+                                let item = workOrder.items[index]
+                                let status = item.statusHistory.last?.status ?? "Checked In"
+                                HStack(spacing: 4) {
+                                    Text("\(index + 1)")
+                                        .font(.caption2)
+                                        .foregroundColor(.secondary)
+                                        .frame(width: 12)
+                                    StatusBadge(status: status)
+                                }
+                            }
+                        }
+                    }
                     
                     Text(workOrder.timestamp, style: .date)
                         .font(.caption)
@@ -290,6 +315,26 @@ struct WorkOrderRowView: View {
             RoundedRectangle(cornerRadius: 12)
                 .stroke(Color(.systemGray4), lineWidth: 1)
         )
+    }
+    
+    // Helper function to get item type counts
+    private func getItemTypeCounts(for workOrder: WorkOrder) -> [ItemTypeCount] {
+        var typeCounts: [String: Int] = [:]
+        
+        for item in workOrder.items {
+            let type = item.type.isEmpty ? "Item" : item.type
+            typeCounts[type, default: 0] += 1
+        }
+        
+        return typeCounts.map { ItemTypeCount(type: $0.key, count: $0.value) }
+            .sorted { $0.type < $1.type }
+    }
+    
+
+    
+    private struct ItemTypeCount {
+        let type: String
+        let count: Int
     }
 }
 
