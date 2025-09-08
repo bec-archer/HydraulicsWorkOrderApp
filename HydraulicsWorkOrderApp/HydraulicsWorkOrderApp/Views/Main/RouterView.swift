@@ -12,11 +12,19 @@
 import SwiftUI
 
 struct RouterView: View {
-    @ObservedObject private var appState = AppState.shared
+    @EnvironmentObject private var appState: AppState
+    @State private var lastView: AppScreen = .activeWorkOrders
 
     var body: some View {
         // 🧭 Debug: Print current view state to console
         let _ = print("🧭 RouterView displaying: \(appState.currentView)")
+        let _ = print("🔍 DEBUG: RouterView body being recreated")
+        
+        // Only recreate if view actually changed
+        if appState.currentView != lastView {
+            let _ = print("🔍 DEBUG: View changed from \(lastView) to \(appState.currentView)")
+            let _ = lastView = appState.currentView
+        }
 
         // ───── Split View Shell: Sidebar (left) + Detail (right) ─────
         NavigationSplitView(columnVisibility: $appState.splitVisibility) {

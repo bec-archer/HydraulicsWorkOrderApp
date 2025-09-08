@@ -43,6 +43,7 @@ struct ActiveWorkOrdersView: View {
     
     // MARK: - Body
     var body: some View {
+        let _ = print("🔍 DEBUG: ActiveWorkOrdersView body being recreated")
         ScrollView {
             VStack(spacing: 20) {
                 // Loading State
@@ -102,23 +103,19 @@ struct ActiveWorkOrdersView: View {
         .navigationBarTitleDisplayMode(.large)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
-                HStack {
-                    Image(systemName: "plus")
-                        .font(.title2)
-                        .fontWeight(.medium)
-                        .foregroundColor(.blue)
-                }
-                .padding(.vertical, 4)
-                .padding(.horizontal, 8)
-                .background(Color.blue.opacity(0.1))
-                .cornerRadius(6)
-                .onTapGesture {
+                Button {
                     print("🔍 DEBUG: Plus button tapped in ActiveWorkOrdersView")
                     print("🔍 DEBUG: Current appState.currentView: \(appState.currentView)")
                     print("🔍 DEBUG: Setting appState.currentView to .newWorkOrder")
                     appState.currentView = .newWorkOrder
                     print("🔍 DEBUG: New appState.currentView: \(appState.currentView)")
+                } label: {
+                    Image(systemName: "plus")
+                        .font(.title2)
+                        .fontWeight(.medium)
+                        .foregroundColor(.blue)
                 }
+                .buttonStyle(.plain)
                 .accessibilityLabel("Add Work Order")
             }
         }

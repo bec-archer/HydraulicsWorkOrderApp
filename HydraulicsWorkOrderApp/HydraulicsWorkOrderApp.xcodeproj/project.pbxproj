@@ -100,6 +100,7 @@
 				Views/Main/NewCustomerModalView.swift,
 				Views/Main/NewWorkOrderView.swift,
 				Views/Main/RouterView.swift,
+				Views/Main/SimpleRouterView.swift,
 				Views/Main/WorkOrderDetailView.swift,
 				Views/Sidebar/SidebarMenuContent.swift,
 				Views/Sidebar/SidebarMenuSheet.swift,

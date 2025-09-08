@@ -16,6 +16,7 @@ class DropdownManager: ObservableObject {
     @Published var options: [String: [DropdownOption]] = [:]
     
     // Schema version management
+    @MainActor
     private let versionService = DropdownVersionService.shared
 
     private init() {
