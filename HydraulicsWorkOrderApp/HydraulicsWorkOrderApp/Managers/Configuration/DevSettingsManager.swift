@@ -30,7 +30,7 @@ final class DevSettingsManager: ObservableObject {
     // ───── Dev Toggles (Published) ─────
 
     // Skip PIN/login entirely → boot straight to ActiveWorkOrdersView
-    @Published var skipLogin: Bool = UserDefaults.standard.object(forKey: Keys.bypassLogin) as? Bool ?? true {
+    @Published var skipLogin: Bool = UserDefaults.standard.object(forKey: Keys.bypassLogin) as? Bool ?? false {
         didSet { UserDefaults.standard.set(skipLogin, forKey: Keys.bypassLogin) }
     }
 
@@ -69,7 +69,7 @@ final class DevSettingsManager: ObservableObject {
         // Seed defaults on first run
         let defaults = UserDefaults.standard
         if defaults.object(forKey: Keys.enableAnonAuth) == nil { defaults.set(true,  forKey: Keys.enableAnonAuth) }
-        if defaults.object(forKey: Keys.bypassLogin)    == nil { defaults.set(true,  forKey: Keys.bypassLogin) }
+        if defaults.object(forKey: Keys.bypassLogin)    == nil { defaults.set(false, forKey: Keys.bypassLogin) }
         if defaults.object(forKey: Keys.enforceTagScan) == nil { defaults.set(true,  forKey: Keys.enforceTagScan) }
         if defaults.object(forKey: Keys.sampleData)     == nil { defaults.set(false, forKey: Keys.sampleData) }
 
@@ -81,7 +81,8 @@ final class DevSettingsManager: ObservableObject {
 
         // ───── Debug Override: always bypass login in DEBUG builds ─────
         #if DEBUG
-        self.skipLogin = true   // will persist via didSet
+        // Comment out to enable login screen in debug builds
+        // self.skipLogin = true   // will persist via didSet
         #endif
         // END Debug Override
     }

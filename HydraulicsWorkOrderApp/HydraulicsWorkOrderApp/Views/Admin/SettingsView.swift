@@ -31,7 +31,10 @@ struct SettingsView: View {
                 // SuperAdmin-only dev toggles
                 if appState.isSuperAdmin {
                     Section("Developer Toggles") {
-                        Toggle("Disable Login Screen", isOn: .constant(false))
+                        Toggle("Disable Login Screen", isOn: Binding(
+                            get: { DevSettingsManager.shared.skipLogin },
+                            set: { DevSettingsManager.shared.skipLogin = $0 }
+                        ))
                         Toggle("Bypass Tag Scan Enforcement", isOn: .constant(false))
                         Button("Reload Sample Data") {
                             // TODO: wire sample data loader

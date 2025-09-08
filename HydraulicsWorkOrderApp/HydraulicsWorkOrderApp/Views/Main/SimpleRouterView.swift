@@ -36,6 +36,26 @@ struct SimpleRouterView: View {
                 
                 Spacer()
                 
+                // User info and logout
+                HStack(spacing: 12) {
+                    Text(appState.currentUserName)
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                    
+                    Button {
+                        print("🔍 DEBUG: Logout button tapped")
+                        // Reset user state
+                        appState.currentUserRole = .tech
+                        appState.currentUserName = "Guest"
+                        appState.currentView = .login
+                    } label: {
+                        Image(systemName: "rectangle.portrait.and.arrow.right")
+                            .font(.title2)
+                            .foregroundColor(.red)
+                    }
+                    .buttonStyle(.plain)
+                }
+                
                 // Plus button for new work order
                 Button {
                     print("🔍 DEBUG: Plus button tapped - navigating to new work order")
@@ -160,6 +180,16 @@ struct SimpleRouterView: View {
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+        .onAppear {
+            // If dev bypass is enabled, ensure we have dev user credentials
+            if DevSettingsManager.shared.skipLogin {
+                if appState.currentUserName.isEmpty || appState.currentUserName == "Guest" {
+                    appState.currentUserRole = .superadmin
+                    appState.currentUserName = "Dev User"
+                    appState.currentView = .activeWorkOrders
+                }
             }
         }
     }

@@ -16,10 +16,10 @@ import SwiftUI
 // MARK: - LoginView
 
 struct LoginView: View {
+    @EnvironmentObject private var appState: AppState
     @State private var pin: String = ""
     @State private var loginError: String?
     @State private var isLoggedIn = false
-    @State private var userRole: UserRole?
 
     var body: some View {
         VStack(spacing: 24) {
@@ -53,21 +53,13 @@ struct LoginView: View {
 
         }
         .fullScreenCover(isPresented: $isLoggedIn) {
-            if let role = userRole {
-                switch role {
-                case .tech, .manager:
-                    Text("🚧 WorkOrdersView Coming Soon")
-                case .admin, .superadmin:
-                    Text("⚙️ SettingsView Coming Soon")
-                }
-            }
+            SimpleRouterView()
+                .environmentObject(appState)
         }
 
         .onAppear {
-            if DevSettingsManager.shared.skipLogin {
-                self.userRole = .superadmin
-                self.isLoggedIn = true
-            }
+            // LoginView only shows when dev bypass is disabled
+            // No auto-login needed here
         }
         .padding()
         // END .body
@@ -75,22 +67,36 @@ struct LoginView: View {
 
     // ───── PIN Matching Logic ─────
     func handleLogin() {
+        var userRole: UserRole?
+        var userName: String
+        
         switch pin {
         case "1234":
             userRole = .tech
+            userName = "Tech User"
         case "2345":
             userRole = .manager
+            userName = "Manager User"
         case "5678":
             userRole = .admin
+            userName = "Admin User"
         case "0000":
             userRole = .superadmin
+            userName = "Super Admin"
         default:
             loginError = "Invalid PIN"
             return
         }
 
-        loginError = nil
-        isLoggedIn = true
+        // Update AppState with user info
+        if let role = userRole {
+            appState.currentUserRole = role
+            appState.currentUserName = userName
+            appState.currentView = .activeWorkOrders
+            
+            loginError = nil
+            isLoggedIn = true
+        }
     }
 
     // END

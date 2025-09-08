@@ -38,6 +38,7 @@ struct HydraulicsWorkOrderAppApp: App {
             } else {
                 LoginView()
                     .environmentObject(AppState.shared) // also inject here for consistency
+                    .environment(\.defaultMinListRowHeight, CGFloat(6)) // tighter rows everywhere
             }
         }
         // END .body

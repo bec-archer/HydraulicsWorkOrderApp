@@ -115,6 +115,13 @@ class AppState: ObservableObject {
     }
     
     private func handleInactivityLogout() {
+        // Skip logout if dev bypass is enabled
+        if DevSettingsManager.shared.skipLogin {
+            print("🔍 DEBUG: Inactivity logout skipped - dev bypass enabled")
+            return
+        }
+        
+        print("🔍 DEBUG: Performing inactivity logout")
         // Reset to login screen
         currentView = .login
         currentUserName = ""
