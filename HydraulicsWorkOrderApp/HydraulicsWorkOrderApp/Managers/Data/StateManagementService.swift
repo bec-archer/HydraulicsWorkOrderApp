@@ -42,8 +42,9 @@ class StateManagementService: ObservableObject {
     }
     
     private func setupNetworkMonitoring() {
-        // Start monitoring network connectivity
-        networkMonitor.startMonitoring()
+        // Network monitoring is automatically started in NetworkMonitor.init()
+        // Just access the shared instance to ensure it's initialized
+        _ = NetworkMonitor.shared
     }
     
     // MARK: - Public Methods
@@ -156,13 +157,24 @@ class StateManagementService: ObservableObject {
             try await workOrdersDB.updateWorkOrder(workOrder)
             
         case .deleteWorkOrder(let workOrderId):
-            try await workOrdersDB.deleteWorkOrder(workOrderId)
+            // First fetch the work order, then delete it
+            let workOrder = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<WorkOrder, Error>) in
+                workOrdersDB.fetchWorkOrder(woId: workOrderId) { result in
+                    switch result {
+                    case .success(let workOrder):
+                        continuation.resume(returning: workOrder)
+                    case .failure(let error):
+                        continuation.resume(throwing: error)
+                    }
+                }
+            }
+            try await workOrdersDB.deleteWorkOrder(workOrder)
             
-        case .addNote(let workOrderId, let itemId, let note):
+        case .addNote(_, _, _):
             // Handle note addition
             break
             
-        case .updateStatus(let workOrderId, let itemId, let status):
+        case .updateStatus(_, _, _):
             // Handle status update
             break
         }
@@ -201,7 +213,7 @@ enum PendingChangeType {
     case updateWorkOrder(WorkOrder)
     case deleteWorkOrder(String)
     case addNote(String, UUID, WO_Note)
-    case updateStatus(String, UUID, WorkOrderStatus)
+    case updateStatus(String, UUID, String)
 }
 
 struct StateValidationResult {

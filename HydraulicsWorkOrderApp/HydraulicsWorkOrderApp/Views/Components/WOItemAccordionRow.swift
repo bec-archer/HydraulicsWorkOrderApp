@@ -123,11 +123,12 @@ struct WOItemAccordionRow: View {
         @State private var items: [WO_Item] = [
             WO_Item(
                 id: UUID(),
-                woItemId: "250826-001-WOI-001",
-                tagId: "XYZ123",
+                itemNumber: "250826-001-WOI-001",
+                assetTagId: "XYZ123",
+                type: "Pump",
                 imageUrls: [],
                 thumbUrls: [],
-                type: "Pump",
+                localImages: [],
                 dropdowns: [:],
                 dropdownSchemaVersion: 1,
                 reasonsForService: [],
@@ -136,10 +137,12 @@ struct WOItemAccordionRow: View {
                 statusHistory: [
                     WO_Status(status: "In Progress", user: "TestUser", timestamp: Date(), notes: nil)
                 ],
+                notes: [],
                 testResult: nil,
                 partsUsed: nil,
                 hoursWorked: nil,
-                cost: nil,
+                estimatedCost: nil,
+                finalCost: nil,
                 assignedTo: "Tech",
                 isFlagged: false,
                 tagReplacementHistory: nil

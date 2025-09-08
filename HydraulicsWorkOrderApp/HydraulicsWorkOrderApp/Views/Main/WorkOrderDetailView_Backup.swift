@@ -77,12 +77,12 @@ struct WorkOrderDetailView: View {
         }
         .onAppear {
             #if DEBUG
-            print("🔍 WorkOrderDetailView: WorkOrder \(woWrapper.wo.WO_Number) has \(woWrapper.wo.items.count) items")
+            print("🔍 WorkOrderDetailView: WorkOrder \(woWrapper.wo.workOrderNumber) has \(woWrapper.wo.items.count) items")
             for (i, item) in woWrapper.wo.items.enumerated() {
                 print("  Item \(i): type='\(item.type)', images=\(item.imageUrls.count), thumbs=\(item.thumbUrls.count)")
             }
             if woWrapper.wo.items.isEmpty {
-                print("⚠️ WorkOrderDetailView: No items found for work order \(woWrapper.wo.WO_Number)")
+                print("⚠️ WorkOrderDetailView: No items found for work order \(woWrapper.wo.workOrderNumber)")
             }
             #endif
         }
@@ -164,7 +164,7 @@ struct WorkOrderDetailView: View {
             HStack(alignment: .top) {
                 // Left Column - Work Order Info
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Work Order #\(woWrapper.wo.WO_Number)")
+                    Text("Work Order #\(woWrapper.wo.workOrderNumber)")
                         .font(.largeTitle.bold())
                     
                     Text(woWrapper.wo.timestamp.formatted(date: .abbreviated, time: .shortened))
@@ -239,9 +239,9 @@ struct WorkOrderDetailView: View {
             
             #if DEBUG
             let _ = {
-                print("🔍 WorkOrderDetailView: WorkOrder \(woWrapper.wo.WO_Number) has \(woWrapper.wo.items.count) items")
+                print("🔍 WorkOrderDetailView: WorkOrder \(woWrapper.wo.workOrderNumber) has \(woWrapper.wo.items.count) items")
                 if woWrapper.wo.items.isEmpty {
-                    print("⚠️ WorkOrderDetailView: No items found for work order \(woWrapper.wo.WO_Number)")
+                    print("⚠️ WorkOrderDetailView: No items found for work order \(woWrapper.wo.workOrderNumber)")
                 } else {
                     for (index, item) in woWrapper.wo.items.enumerated() {
                         print("  Item \(index): type='\(item.type)', images=\(item.imageUrls.count), thumbs=\(item.thumbUrls.count)")
@@ -302,7 +302,7 @@ struct WorkOrderDetailView: View {
                                 ) { result in
                                     switch result {
                                     case .success:
-                                        print("✅ Note saved for \(item.type) – images: \(note.imageURLs.count)")
+                                        print("✅ Note saved for \(item.type) – images: \(note.primaryImageURLs.count)")
                                     case .failure(let err):
                                         print("❌ Failed to save note: \(err.localizedDescription)")
                                     }
@@ -333,7 +333,7 @@ extension WorkOrderDetailView {
         switch result {
         case .success:
             #if DEBUG
-            print("✅ Note added for \(item.type) with \(note.imageURLs.count) images")
+            print("✅ Note added for \(item.type) with \(note.primaryImageURLs.count) images")
             #endif
             
             // Update local state immediately
@@ -352,9 +352,9 @@ extension WorkOrderDetailView {
                     woWrapper.wo = updatedWO
                     
                     #if DEBUG
-                    print("🔄 Updated local state with new note for item \(item.type) with \(note.imageURLs.count) images")
+                    print("🔄 Updated local state with new note for item \(item.type) with \(note.primaryImageURLs.count) images")
                     print("   Note text: '\(note.text)'")
-                    print("   Image URLs: \(note.imageURLs)")
+                    print("   Image URLs: \(note.primaryImageURLs)")
                     #endif
                 }
             }
@@ -479,10 +479,10 @@ extension WorkOrderDetailView {
                                     .foregroundStyle(.secondary)
                                 
                                 // Note-attached images
-                                if !n.imageURLs.isEmpty {
+                                if !n.primaryImageURLs.isEmpty {
                                     ScrollView(.horizontal, showsIndicators: false) {
                                         HStack(spacing: 8) {
-                                            ForEach(Array(n.imageURLs.enumerated()), id: \.offset) { _, urlStr in
+                                            ForEach(Array(n.primaryImageURLs.enumerated()), id: \.offset) { _, urlStr in
                                                 if let url = URL(string: urlStr) {
                                                     Button {
                                                         selectedImageURL = url
@@ -643,15 +643,15 @@ extension WorkOrderDetailView {
         
         if woIdString == nil || woIdString?.isEmpty == true {
             #if DEBUG
-            print("⚠️ Work Order ID is empty, attempting to find by WO_Number: \(woWrapper.wo.WO_Number)")
+            print("⚠️ Work Order ID is empty, attempting to find by WO_Number: \(woWrapper.wo.workOrderNumber)")
             #endif
             
             // Try to get the document ID from Firestore
-            db.findWorkOrderId(byWONumber: woWrapper.wo.WO_Number) { result in
+            db.findWorkOrderId(byWONumber: woWrapper.wo.workOrderNumber) { result in
                 switch result {
                 case .success(let foundId):
                     #if DEBUG
-                    print("✅ Found Firestore ID for WO \(woWrapper.wo.WO_Number): \(foundId)")
+                    print("✅ Found Firestore ID for WO \(woWrapper.wo.workOrderNumber): \(foundId)")
                     #endif
                     
                     // Update completed reasons with found ID
@@ -709,7 +709,7 @@ extension WorkOrderDetailView {
         NotificationCenter.default.post(
             name: .WorkOrderSaved,
             object: woWrapper.wo.id,
-            userInfo: ["WO_Number": woWrapper.wo.WO_Number]
+            userInfo: ["WO_Number": woWrapper.wo.workOrderNumber]
         )
     }
     
@@ -888,10 +888,10 @@ extension WorkOrderDetailView {
                                         .foregroundStyle(.secondary)
                                     
                                     // Note-attached images
-                                    if !note.imageURLs.isEmpty {
+                                    if !note.primaryImageURLs.isEmpty {
                                         ScrollView(.horizontal, showsIndicators: false) {
                                             HStack(spacing: 8) {
-                                                ForEach(Array(note.imageURLs.enumerated()), id: \.offset) { _, urlStr in
+                                                ForEach(Array(note.primaryImageURLs.enumerated()), id: \.offset) { _, urlStr in
                                                     if let url = URL(string: urlStr) {
                                                         Button {
                                                             handleImageTap(url)
@@ -970,7 +970,7 @@ extension WorkOrderDetailView {
         
         // Check if we have a valid work order ID
         if let woId = woWrapper.wo.id, !woId.isEmpty {
-            print("🔄 Adding note to WO \(woWrapper.wo.WO_Number) with ID: \(woId)")
+            print("🔄 Adding note to WO \(woWrapper.wo.workOrderNumber) with ID: \(woId)")
             
             WorkOrdersDatabase.shared.addItemNote(
                 woId: woId,
@@ -980,13 +980,13 @@ extension WorkOrderDetailView {
                 handleNoteAddResult(result, item: item, note: note)
             }
         } else {
-            print("⚠️ Work Order ID is empty, attempting to find by WO_Number: \(woWrapper.wo.WO_Number)")
+            print("⚠️ Work Order ID is empty, attempting to find by WO_Number: \(woWrapper.wo.workOrderNumber)")
             
             // Try to get the document ID from Firestore using WO_Number
-            WorkOrdersDatabase.shared.findWorkOrderId(byWONumber: woWrapper.wo.WO_Number) { result in
+            WorkOrdersDatabase.shared.findWorkOrderId(byWONumber: woWrapper.wo.workOrderNumber) { result in
                 switch result {
                 case .success(let foundId):
-                    print("✅ Found Firestore ID for WO \(woWrapper.wo.WO_Number): \(foundId)")
+                    print("✅ Found Firestore ID for WO \(woWrapper.wo.workOrderNumber): \(foundId)")
                     
                     WorkOrdersDatabase.shared.addItemNote(
                         woId: foundId,
@@ -1021,7 +1021,7 @@ extension WorkOrderDetailView {
         
         // Check if we have a valid work order ID
         if let woId = woWrapper.wo.id, !woId.isEmpty {
-            print("🔄 Updating status for WO \(woWrapper.wo.WO_Number) with ID: \(woId)")
+            print("🔄 Updating status for WO \(woWrapper.wo.workOrderNumber) with ID: \(woId)")
             
             WorkOrdersDatabase.shared.updateItemStatusAndNote(
                 woId: woId,
@@ -1032,13 +1032,13 @@ extension WorkOrderDetailView {
                 handleStatusUpdateResult(result, item: item, newStatus: newStatus)
             }
         } else {
-            print("⚠️ Work Order ID is empty, attempting to find by WO_Number: \(woWrapper.wo.WO_Number)")
+            print("⚠️ Work Order ID is empty, attempting to find by WO_Number: \(woWrapper.wo.workOrderNumber)")
             
             // Try to get the document ID from Firestore using WO_Number
-            WorkOrdersDatabase.shared.findWorkOrderId(byWONumber: woWrapper.wo.WO_Number) { result in
+            WorkOrdersDatabase.shared.findWorkOrderId(byWONumber: woWrapper.wo.workOrderNumber) { result in
                 switch result {
                 case .success(let foundId):
-                    print("✅ Found Firestore ID for WO \(woWrapper.wo.WO_Number): \(foundId)")
+                    print("✅ Found Firestore ID for WO \(woWrapper.wo.workOrderNumber): \(foundId)")
                     
                     WorkOrdersDatabase.shared.updateItemStatusAndNote(
                         woId: foundId,

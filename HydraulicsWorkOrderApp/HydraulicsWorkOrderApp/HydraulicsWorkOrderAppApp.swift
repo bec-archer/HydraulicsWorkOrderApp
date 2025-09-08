@@ -18,6 +18,11 @@ struct HydraulicsWorkOrderAppApp: App {
         UITableView.appearance().sectionFooterHeight = 6           // tighten footers
         UITableView.appearance().estimatedSectionFooterHeight = 6  // keep estimates in sync
         // END Global spacing tune
+        
+        // Start inactivity monitoring
+        Task { @MainActor in
+            InactivityManager.shared.startMonitoring()
+        }
     }
     // END INIT
 

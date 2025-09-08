@@ -35,10 +35,10 @@ struct NotesTimelineView: View {
                         .foregroundStyle(.gray)
 
                     // 🖼 Image Thumbnails
-                    if !note.imageURLs.isEmpty {
+                    if !note.imageUrls.isEmpty {
                         ScrollView(.horizontal, showsIndicators: false) {
                             HStack(spacing: 8) {
-                                ForEach(note.imageURLs, id: \.self) { url in
+                                ForEach(note.imageUrls, id: \.self) { url in
                                     AsyncImage(url: URL(string: url)) { phase in
                                         switch phase {
                                         case .success(let image):
@@ -101,15 +101,17 @@ struct NotesTimelineView: View {
 #Preview {
     NotesTimelineView(notes: [
         WO_Note(
+            workOrderId: "PREVIEW-WO-001",
             user: "Maria",
             text: "This one leaks worse under pressure.",
             timestamp: Date().addingTimeInterval(-3600),
-            imageURLs: [
+            imageUrls: [
                 "https://via.placeholder.com/150",
                 "https://via.placeholder.com/150/000000/FFFFFF"
             ]
         ),
         WO_Note(
+            workOrderId: "PREVIEW-WO-001",
             user: "Joe",
             text: "Replaced seals. Retest tomorrow.",
             timestamp: Date()

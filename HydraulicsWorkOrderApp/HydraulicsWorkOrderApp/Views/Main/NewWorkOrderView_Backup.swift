@@ -111,7 +111,7 @@ struct NewWorkOrderView: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(customer.name).font(.headline)
                         HStack(spacing: 4) {
-                            Text(customer.phone.formattedPhoneNumber).font(.subheadline).foregroundStyle(.secondary)
+                            Text(customer.phoneNumber.formattedPhoneNumber).font(.subheadline).foregroundStyle(.secondary)
                             if let company = customer.company, !company.isEmpty {
                                 Text("•").font(.subheadline).foregroundStyle(.secondary)
                                 Text(company).font(.subheadline).foregroundStyle(.secondary)
@@ -147,12 +147,12 @@ struct NewWorkOrderView: View {
                                 selectCustomer(customer)
                                 customerSearch.resetSearch()
                                 DispatchQueue.main.async { customerSearch.isPickingCustomer = false }
-                                print("👆 PICKED:", customer.id.uuidString, customer.name, customer.phone)
+                                print("👆 PICKED:", customer.id.uuidString, customer.name, customer.phoneNumber)
                             } label: {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(customer.name)
                                     HStack(spacing: 4) {
-                                        Text(customer.phone.formattedPhoneNumber).font(.caption).foregroundStyle(.secondary)
+                                        Text(customer.phoneNumber.formattedPhoneNumber).font(.caption).foregroundStyle(.secondary)
                                         if let company = customer.company, !company.isEmpty {
                                             Text("•").font(.caption).foregroundStyle(.secondary)
                                             Text(company).font(.caption).foregroundStyle(.secondary)
@@ -436,7 +436,7 @@ struct NewWorkOrderView: View {
             customerSearch.resetSearch()
         }
 
-        print("✅ selectCustomer:", customer.id.uuidString, customer.name, customer.phone)
+        print("✅ selectCustomer:", customer.id.uuidString, customer.name, customer.phoneNumber)
     }
 
     // END Selection Helper
@@ -475,7 +475,7 @@ struct NewWorkOrderView: View {
 
         // ───── DEBUG LOG ─────
                     print("🔍 SAVING: Starting work order save")
-        print("Customer: \(customer.name) – \(customer.phone)")
+        print("Customer: \(customer.name) – \(customer.phoneNumber)")
         print("WO_Items count: \(items.count)")
         for (i, item) in items.enumerated() {
             print("  Item[\(i)] id=\(item.id) type=\(item.type) " +
@@ -517,7 +517,7 @@ struct NewWorkOrderView: View {
                 customerCompany: customer.company,
                 customerEmail: customer.email,
                 customerTaxExempt: customer.taxExempt,
-                customerPhone: customer.phone,
+                customerPhone: customer.phoneNumber,
                 WO_Type: "Intake",
                 imageURL: nil,                             // Will be set when images are uploaded
                 imageURLs: [],                             // Initialize as empty array instead of nil
@@ -541,7 +541,7 @@ struct NewWorkOrderView: View {
 
             // ───── Persist via WorkOrdersDatabase (auto-ID; prevents overwrite) ─────
             #if DEBUG
-            print("🚀 Attempting to save WorkOrder: \(wo.WO_Number)")
+            print("🚀 Attempting to save WorkOrder: \(wo.workOrderNumber)")
             #endif
             
             // Check network connectivity first
@@ -552,9 +552,9 @@ struct NewWorkOrderView: View {
                     case .success(let docId): // Get the actual Firestore document ID
                         DispatchQueue.main.async {
                             #if DEBUG
-                            print("✅ WorkOrder saved successfully: \(wo.WO_Number) with Firestore ID: \(docId)")
+                            print("✅ WorkOrder saved successfully: \(wo.workOrderNumber) with Firestore ID: \(docId)")
                             #endif
-                            savedWONumber = wo.WO_Number
+                            savedWONumber = wo.workOrderNumber
                             showSaveBanner = true
 
                             // 🚩 Make a fresh storage namespace immediately for the NEXT WorkOrder
@@ -598,7 +598,7 @@ struct NewWorkOrderView: View {
                 }
                 
                 DispatchQueue.main.async {
-                    savedWONumber = wo.WO_Number
+                    savedWONumber = wo.workOrderNumber
                     showSaveBanner = true
                     alertMessage = "📱 Work order saved offline. Will sync when connection is restored."
                     showAlert = true

@@ -9,6 +9,8 @@
 import SwiftUI
 import Foundation
 
+
+
 /// Shows WO_Items filtered by user and status (excluding "Checked In")
 /// Filters: statusHistory.status != "Checked In" && statusHistory.user == selectedUser.displayName
 struct MyWorkItemsView: View {
@@ -85,11 +87,12 @@ struct MyWorkItemsView: View {
         return [
             WO_Item(
                 id: UUID(),
-                woItemId: nil,
-                tagId: nil,
+                itemNumber: nil,
+                assetTagId: nil,
+                type: "Hydraulic Pump",
                 imageUrls: [],
                 thumbUrls: [],
-                type: "Hydraulic Pump",
+                localImages: [],
                 dropdowns: [:],
                 dropdownSchemaVersion: 1,
                 reasonsForService: [],
@@ -99,21 +102,24 @@ struct MyWorkItemsView: View {
                     WO_Status(status: "Checked In", user: "Tech", timestamp: Date().addingTimeInterval(-86400), notes: nil),
                     WO_Status(status: "In Progress", user: user.displayName, timestamp: Date().addingTimeInterval(-3600), notes: "Started repair work")
                 ],
+                notes: [],
                 testResult: nil,
                 partsUsed: nil,
                 hoursWorked: nil,
-                cost: nil,
+                estimatedCost: nil,
+                finalCost: nil,
                 assignedTo: "",
                 isFlagged: false,
                 tagReplacementHistory: nil
             ),
             WO_Item(
                 id: UUID(),
-                woItemId: nil,
-                tagId: nil,
+                itemNumber: nil,
+                assetTagId: nil,
+                type: "Control Valve",
                 imageUrls: [],
                 thumbUrls: [],
-                type: "Control Valve",
+                localImages: [],
                 dropdowns: [:],
                 dropdownSchemaVersion: 1,
                 reasonsForService: [],
@@ -124,10 +130,12 @@ struct MyWorkItemsView: View {
                     WO_Status(status: "In Progress", user: user.displayName, timestamp: Date().addingTimeInterval(-86400), notes: "Valve disassembly complete"),
                     WO_Status(status: "Done", user: user.displayName, timestamp: Date().addingTimeInterval(-43200), notes: "Repair completed successfully")
                 ],
+                notes: [],
                 testResult: nil,
                 partsUsed: nil,
                 hoursWorked: nil,
-                cost: nil,
+                estimatedCost: nil,
+                finalCost: nil,
                 assignedTo: "",
                 isFlagged: false,
                 tagReplacementHistory: nil
@@ -169,7 +177,7 @@ private struct WorkItemRow: View {
             }
             
             if let workOrder = workOrder {
-                Text("WO: \(workOrder.WO_Number)")
+                Text("WO: \(workOrder.workOrderNumber)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

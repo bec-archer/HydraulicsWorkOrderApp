@@ -22,23 +22,23 @@ struct ActiveWorkOrdersView: View {
         for workOrder in db.workOrders {
             if !workOrder.isDeleted && workOrder.status != "Closed" {
                 // If we already have this WO_Number, keep the one with the most recent lastModified
-                if let existing = uniqueWorkOrders[workOrder.WO_Number] {
+                if let existing = uniqueWorkOrders[workOrder.workOrderNumber] {
                     // Prefer work orders with Firestore IDs, then most recent
                     let existingHasId = existing.id != nil && !existing.id!.isEmpty
                     let currentHasId = workOrder.id != nil && !workOrder.id!.isEmpty
                     
                     if currentHasId && !existingHasId {
                         // Current has ID, existing doesn't - prefer current
-                        uniqueWorkOrders[workOrder.WO_Number] = workOrder
+                        uniqueWorkOrders[workOrder.workOrderNumber] = workOrder
                     } else if !currentHasId && existingHasId {
                         // Existing has ID, current doesn't - keep existing
                         // Do nothing
                     } else if workOrder.lastModified > existing.lastModified {
                         // Both have same ID status, prefer most recent
-                        uniqueWorkOrders[workOrder.WO_Number] = workOrder
+                        uniqueWorkOrders[workOrder.workOrderNumber] = workOrder
                     }
                 } else {
-                    uniqueWorkOrders[workOrder.WO_Number] = workOrder
+                    uniqueWorkOrders[workOrder.workOrderNumber] = workOrder
                 }
             }
         }
@@ -97,7 +97,7 @@ struct ActiveWorkOrdersView: View {
                                 GridItem(.fixed(cardWidth), spacing: spacing),
                                 GridItem(.fixed(cardWidth), spacing: spacing)
                             ], spacing: spacing) {
-                                ForEach(activeWorkOrders, id: \.WO_Number) { workOrder in
+                                ForEach(activeWorkOrders, id: \.workOrderNumber) { workOrder in
                                     NavigationLink(destination: WorkOrderDetailView(
                                         workOrder: workOrder,
                                         onDelete: { deletedWorkOrder in
@@ -108,9 +108,9 @@ struct ActiveWorkOrdersView: View {
                                                     DispatchQueue.main.async {
                                                         switch result {
                                                         case .success:
-                                                            print("✅ WorkOrder deleted successfully: \(deletedWorkOrder.WO_Number)")
+                                                            print("✅ WorkOrder deleted successfully: \(deletedWorkOrder.workOrderNumber)")
                                                             // Remove from local cache after successful Firestore delete
-                                                            if let index = db.workOrders.firstIndex(where: { $0.WO_Number == deletedWorkOrder.WO_Number }) {
+                                                            if let index = db.workOrders.firstIndex(where: { $0.workOrderNumber == deletedWorkOrder.workOrderNumber }) {
                                                                 db.workOrders.remove(at: index)
                                                             }
                                                         case .failure(let error):
@@ -120,21 +120,21 @@ struct ActiveWorkOrdersView: View {
                                                     }
                                                 }
                                             } else {
-                                                print("⚠️ WorkOrder \(deletedWorkOrder.WO_Number) has no document ID - attempting to find and delete from Firestore")
+                                                print("⚠️ WorkOrder \(deletedWorkOrder.workOrderNumber) has no document ID - attempting to find and delete from Firestore")
                                                 // For legacy work orders without document IDs, try to find them in Firestore by WO_Number
-                                                WorkOrdersDatabase.shared.deleteLegacyWorkOrder(woNumber: deletedWorkOrder.WO_Number) { result in
+                                                WorkOrdersDatabase.shared.deleteLegacyWorkOrder(woNumber: deletedWorkOrder.workOrderNumber) { result in
                                                     DispatchQueue.main.async {
                                                         switch result {
                                                         case .success:
-                                                            print("✅ Legacy WorkOrder \(deletedWorkOrder.WO_Number) deleted from Firestore")
+                                                            print("✅ Legacy WorkOrder \(deletedWorkOrder.workOrderNumber) deleted from Firestore")
                                                             // Remove from local cache after successful Firestore delete
-                                                            if let index = db.workOrders.firstIndex(where: { $0.WO_Number == deletedWorkOrder.WO_Number }) {
+                                                            if let index = db.workOrders.firstIndex(where: { $0.workOrderNumber == deletedWorkOrder.workOrderNumber }) {
                                                                 db.workOrders.remove(at: index)
                                                             }
                                                         case .failure(let error):
                                                             print("❌ Failed to delete legacy WorkOrder from Firestore: \(error.localizedDescription)")
                                                             // Fall back to local cache marking
-                                                            if let index = db.workOrders.firstIndex(where: { $0.WO_Number == deletedWorkOrder.WO_Number }) {
+                                                            if let index = db.workOrders.firstIndex(where: { $0.workOrderNumber == deletedWorkOrder.workOrderNumber }) {
                                                                 var updatedWorkOrder = db.workOrders[index]
                                                                 updatedWorkOrder.isDeleted = true
                                                                 db.workOrders[index] = updatedWorkOrder
@@ -146,7 +146,7 @@ struct ActiveWorkOrdersView: View {
                                         }
                                     )) {
                                         WorkOrderCardView(workOrder: workOrder)
-                                            .id(workOrder.WO_Number) // Add stable ID to prevent recreation
+                                            .id(workOrder.workOrderNumber) // Add stable ID to prevent recreation
                                     }
                                     .buttonStyle(PlainButtonStyle())
                                 }

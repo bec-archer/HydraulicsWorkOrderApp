@@ -31,247 +31,8 @@ import FirebaseStorage
     Rationale: This screen matches shop SOPs and downstream QA expectations.
     ──────────────────────────────────────────────────────────────────────────── */
 
-// MARK: - ViewModel (Temporarily included for testing)
-@MainActor
-class NewWorkOrderViewModel: ObservableObject {
-    // MARK: - Published Properties
-    @Published var selectedCustomer: Customer?
-    @Published var items: [WO_Item] = []
-    @Published var isLoading = false
-    @Published var errorMessage: String?
-    @Published var showError = false
-    @Published var canCheckIn = false
-    
-    // MARK: - Private Properties
-    private var cancellables = Set<AnyCancellable>()
-    private let workOrdersDB = WorkOrdersDatabase.shared
-    private let customerDB = CustomerDatabase.shared
-    // TODO: Re-enable after fixing module resolution
-    // private let imageService = ImageManagementService.shared
-    
-    // MARK: - Computed Properties
-    var workOrderNumber: String {
-        WorkOrderNumberGenerator.generateWorkOrderNumber()
-    }
-    
-    var hasValidCustomer: Bool {
-        selectedCustomer != nil
-    }
-    
-    var hasValidItems: Bool {
-        !items.isEmpty && items.allSatisfy { item in
-            itemHasType(item) && 
-            itemHasPhoto(item) && 
-            !item.reasonsForService.isEmpty
-        }
-    }
-    
-    // MARK: - Validation Helpers
-    private func itemHasType(_ item: WO_Item) -> Bool {
-        let t = item.type.isEmpty ? (item.dropdowns["type"] ?? "") : item.type
-        return !t.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-    }
-
-    private func itemHasPhoto(_ item: WO_Item) -> Bool {
-        return !item.thumbUrls.isEmpty || !item.imageUrls.isEmpty
-    }
-
-    private func isCompleteItem(_ item: WO_Item) -> Bool {
-        return itemHasType(item) && itemHasPhoto(item) && !item.reasonsForService.isEmpty
-    }
-    
-    private func isBlankItem(_ item: WO_Item) -> Bool {
-        return !itemHasType(item) && !itemHasPhoto(item)
-    }
-    
-    private func isPartiallyFilledItem(_ item: WO_Item) -> Bool {
-        let hasType = itemHasType(item)
-        let hasPhoto = itemHasPhoto(item)
-        let hasReasons = !item.reasonsForService.isEmpty
-        return (hasType && !hasPhoto) || (!hasType && hasPhoto) || (hasType && hasPhoto && !hasReasons)
-    }
-    
-    // MARK: - Initialization
-    init() {
-        setupBindings()
-        addInitialItem()
-    }
-    
-    // MARK: - Setup
-    private func setupBindings() {
-        Publishers.CombineLatest3(
-            $selectedCustomer,
-            $items,
-            $isLoading
-        )
-        .map { customer, items, loading in
-            guard !loading else { return false }
-            guard customer != nil else { return false }
-            guard !items.isEmpty else { return false }
-            return items.allSatisfy { item in
-                self.itemHasType(item) && 
-                self.itemHasPhoto(item) && 
-                !item.reasonsForService.isEmpty
-            }
-        }
-        .assign(to: &$canCheckIn)
-    }
-    
-    // MARK: - Public Methods
-    func addItem() {
-        var newItem = WO_Item.blank()
-        // Generate WO Item ID for the new item
-        let itemIndex = items.count
-        newItem.woItemId = WO_Item.generateWOItemId(woNumber: workOrderNumber, itemIndex: itemIndex)
-        items.append(newItem)
-    }
-    
-    func removeItem(at index: Int) {
-        guard index >= 0 && index < items.count else { return }
-        items.remove(at: index)
-        
-        // Regenerate WO Item IDs for remaining items to maintain sequential order
-        for (itemIndex, _) in items.enumerated() {
-            items[itemIndex].woItemId = WO_Item.generateWOItemId(woNumber: workOrderNumber, itemIndex: itemIndex)
-        }
-        
-        if items.isEmpty {
-            addInitialItem()
-        }
-    }
-    
-    func updateItem(_ item: WO_Item, at index: Int) {
-        guard index >= 0 && index < items.count else { return }
-        items[index] = item
-    }
-    
-    // MARK: - Image Management
-    
-    /// Upload images for a specific item
-    func uploadImages(_ images: [UIImage], for itemIndex: Int) async {
-        // TODO: Re-enable after fixing module resolution
-        print("Image upload temporarily disabled - module resolution issue")
-    }
-    
-    /// Delete an image from a specific item
-    func deleteImage(_ imageURL: String, from itemIndex: Int) async {
-        // TODO: Re-enable after fixing module resolution
-        print("Image deletion temporarily disabled - module resolution issue")
-    }
-    
-    /// Get image URLs for a specific item
-    func getImageURLs(for itemIndex: Int) async -> [String] {
-        // TODO: Re-enable after fixing module resolution
-        return []
-    }
-    
-    func saveWorkOrder() async {
-        guard let customer = selectedCustomer else {
-            setError("Please select or add a Customer before saving this WorkOrder.")
-            return
-        }
-        
-        let nonBlankItems = items.filter { !isBlankItem($0) }
-        
-        if nonBlankItems.contains(where: { isPartiallyFilledItem($0) }) {
-            setError("Please finish the highlighted WO_Item. Each item needs a Type and at least one Photo.")
-            return
-        }
-        
-        guard !nonBlankItems.isEmpty, nonBlankItems.contains(where: { isCompleteItem($0) }) else {
-            setError("Add at least one WO_Item with a Type and Photo before checking in.")
-            return
-        }
-        
-        isLoading = true
-        errorMessage = nil
-        
-        do {
-            print("🔍 SAVING WORK ORDER: \(workOrderNumber)")
-            print("  Customer: \(customer.name)")
-            print("  Items to save: \(nonBlankItems.count)")
-            
-            // Debug each item being saved
-            for (i, item) in nonBlankItems.enumerated() {
-                print("  Item \(i): type='\(item.type)', images=\(item.imageUrls.count), reasons=\(item.reasonsForService.count)")
-            }
-            
-            let itemsSnapshot = nonBlankItems
-            let builtItems: [WO_Item] = itemsSnapshot.map { $0 }
-            
-            let workOrder = WorkOrder(
-                id: nil,
-                createdBy: "Tech",
-                customerId: customer.id.uuidString,
-                customerName: customer.name,
-                customerCompany: customer.company,
-                customerEmail: customer.email,
-                customerTaxExempt: customer.taxExempt,
-                customerPhone: customer.phone,
-                WO_Type: "Intake",
-                imageURL: nil,
-                imageURLs: [],
-                timestamp: Date(),
-                status: "Checked In",
-                WO_Number: workOrderNumber,
-                flagged: false,
-                tagId: nil,
-                estimatedCost: nil,
-                finalCost: nil,
-                dropdowns: [:],
-                dropdownSchemaVersion: 1,
-                lastModified: Date(),
-                lastModifiedBy: "Tech",
-                tagBypassReason: nil,
-                isDeleted: false,
-                notes: [],
-                items: builtItems
-            )
-            
-            print("🚀 Saving to Firebase...")
-            try await withCheckedThrowingContinuation { continuation in
-                workOrdersDB.addWorkOrder(workOrder) { result in
-                    switch result {
-                    case .success(let docId):
-                        print("✅ SAVED SUCCESSFULLY: \(workOrder.WO_Number) -> ID: \(docId)")
-                        continuation.resume()
-                    case .failure(let error):
-                        print("❌ SAVE FAILED: \(error.localizedDescription)")
-                        continuation.resume(throwing: error)
-                    }
-                }
-            }
-            
-        } catch {
-            print("❌ SAVE ERROR: \(error.localizedDescription)")
-            setError("Failed to save work order: \(error.localizedDescription)")
-        }
-        
-        isLoading = false
-    }
-    
-    func resetForm() async {
-        selectedCustomer = nil
-        items.removeAll()
-        addInitialItem()
-        errorMessage = nil
-        showError = false
-    }
-    
-    private func addInitialItem() {
-        if items.isEmpty {
-            var newItem = WO_Item.blank()
-            // Generate WO Item ID for the initial item
-            newItem.woItemId = WO_Item.generateWOItemId(woNumber: workOrderNumber, itemIndex: 0)
-            items.append(newItem)
-        }
-    }
-    
-    private func setError(_ message: String) {
-        errorMessage = message
-        showError = true
-    }
-}
+// MARK: - ViewModel Integration
+// Using dedicated NewWorkOrderViewModel from Views/ViewModels/
 // WARNING (GUARDRAIL_TOKEN: DO_NOT_MODIFY_VIEW_LAYOUT):
 // Do not alter layout/UI/behavior. See header block for allowed edits & rationale.
 
@@ -340,6 +101,9 @@ struct NewWorkOrderView: View {
             
             // Lifecycle
             .onAppear {
+                print("🔍 DEBUG: NewWorkOrderView appeared")
+                print("🔍 DEBUG: ViewModel items count: \(viewModel.items.count)")
+                print("🔍 DEBUG: ViewModel selectedCustomer: \(viewModel.selectedCustomer?.name ?? "nil")")
                 setupInitialState()
             }
             .onChange(of: viewModel.selectedCustomer?.id) { _, _ in
@@ -371,7 +135,7 @@ struct NewWorkOrderView: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(customer.name).font(.headline)
                             HStack(spacing: 4) {
-                        Text(customer.phone.formattedPhoneNumber).font(.subheadline).foregroundStyle(.secondary)
+                        Text(customer.phoneNumber.formattedPhoneNumber).font(.subheadline).foregroundStyle(.secondary)
                                 if let company = customer.company, !company.isEmpty {
                                     Text("•").font(.subheadline).foregroundStyle(.secondary)
                                     Text(company).font(.subheadline).foregroundStyle(.secondary)
@@ -410,7 +174,7 @@ struct NewWorkOrderView: View {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(customer.name)
                                         HStack(spacing: 4) {
-                                    Text(customer.phone.formattedPhoneNumber).font(.caption).foregroundStyle(.secondary)
+                                    Text(customer.phoneNumber.formattedPhoneNumber).font(.caption).foregroundStyle(.secondary)
                                             if let company = customer.company, !company.isEmpty {
                                                 Text("•").font(.caption).foregroundStyle(.secondary)
                                                 Text(company).font(.caption).foregroundStyle(.secondary)
@@ -576,7 +340,7 @@ struct NewWorkOrderView: View {
             customerSearch.resetSearch()
         }
 
-        print("✅ selectCustomer:", customer.id.uuidString, customer.name, customer.phone)
+        print("✅ selectCustomer:", customer.id.uuidString, customer.name, customer.phoneNumber)
     }
 
     private func addNewItem() {
@@ -636,7 +400,7 @@ struct NewWorkOrderView: View {
         } else {
             // Must always have ≥ 1 WO_Item: reset the lone item
             withAnimation {
-                viewModel.items[0] = WO_Item.blank()
+                viewModel.items[0] = WO_Item.create()
             }
             expandedIndices = [0]
         }

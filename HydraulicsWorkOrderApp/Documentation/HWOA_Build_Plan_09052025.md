@@ -17,45 +17,29 @@
 ## 🧾 Phase 2: WorkOrder Models & Storage
 
 * [x] `WorkOrder.swift`
-
 * [x] `WO_Item.swift`
-
 * [x] `WO_Status.swift`
-
 * [x] `WO_Note.swift`
-
-* [x] `TagReplacement.swift`
-
+* [x] `TagBinding.swift`
+* [x] `TagHistory.swift`
 * [x] `Customer.swift`
-
-* [ ] `AuditLog.swift`
-
+* [ ] `AuditLog.swift` (core model; required)
 * [x] `WorkOrdersDatabase.swift`
-
 * [x] `CustomerDatabase.swift`
-
 * [x] `DropdownManager.swift`
-
+* [x] `TagManager.swift`     // manages tag bindings (bind/unbind/reassign); writes TagHistory; updates /tagIndex
 ---
 
 ## 🧪 Phase 3: WorkOrder Intake UI
 
 * [x] `ActiveWorkOrdersView.swift`
-
 * [x] `NewWorkOrderView.swift`
-
 * [x] `WorkOrderCardView.swift`
-
 * [x] `DropdownField.swift`
-
 * [x] `PhotoPickerView.swift`
-
 * [x] `SearchView.swift`
-
 * [ ] `NewCustomerModalView.swift`
-
 * [ ] `WorkOrderNumberGenerator.swift`
-
 * [ ] `UIConstants.swift`
 
 ---
@@ -64,8 +48,10 @@
 
 * [ ] `WorkOrderDetailView.swift`
 * [ ] `WorkOrderItemDetailView.swift`
+* [ ] `WO_ItemTagListView.swift`    // chips UI for QR bindings (Primary/Aux • Position Label • Set Primary • Edit • Unbind)
 * [ ] `NotesTimelineView.swift`
 * [ ] `StatusBadge.swift`
+* [ ] `WorkOrderNumberBadge.swift`
 
 ---
 
@@ -78,6 +64,12 @@
 * [ ] `SyncStatusView.swift`
 * [ ] `PendingApprovalView.swift`
 * [ ] `ManagerReviewView.swift`
+* [ ] `ClosedWorkOrdersView.swift`
+* [ ] `AuditLogView.swift` (UI; role-gated Admin/Manager)
+* [ ] `SidebarDrawerView.swift` (compact sidebar)
+* [ ] `NavBarHamburgerButton.swift` (compact only)
+* [ ] `NavBarOverflowButton.swift` (ellipsis actions)
+* [ ] `NavBarSettingsButton.swift` (gear, wide only)
 
 ---
 
@@ -87,8 +79,10 @@
 * [ ] Developer Checklist ✅
 * [ ] Firebase sync & retry logic
 * [ ] Offline queue testing
-* [ ] Tag reassignment searchability
+* [ ] Tag search resolves via **active bindings + tagHistory** (dedupes to the current WO_Item owner; shows “matched via history” hint when applicable)
 * [ ] Sample data loader
+* [ ] `EmojiPickerView.swift`
+* [ ] `CustomersCSVImport` (wizard surfaced in `CustomersView`)
 
 ---
 

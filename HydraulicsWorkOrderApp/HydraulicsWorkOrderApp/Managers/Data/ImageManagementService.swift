@@ -2,6 +2,27 @@ import SwiftUI
 import FirebaseStorage
 import Combine
 
+// MARK: - ImageError Enum
+enum ImageError: Error, LocalizedError {
+    case compressionFailed
+    case thumbnailCreationFailed
+    case invalidURL
+    case uploadFailed(String)
+    
+    var errorDescription: String? {
+        switch self {
+        case .compressionFailed:
+            return "Failed to compress image"
+        case .thumbnailCreationFailed:
+            return "Failed to create thumbnail"
+        case .invalidURL:
+            return "Invalid image URL"
+        case .uploadFailed(let message):
+            return "Upload failed: \(message)"
+        }
+    }
+}
+
 
 
 @MainActor
@@ -25,7 +46,7 @@ class ImageManagementService: ObservableObject {
     // MARK: - Public Methods
     
     /// Upload a single image and return the URL
-    func uploadImage(_ image: UIImage, for workOrderId: String, itemId: UUID) async throws -> String {
+    func uploadSingleImage(_ image: UIImage, for workOrderId: String, itemId: UUID) async throws -> String {
         isUploading = true
         uploadProgress = 0.0
         errorMessage = nil
@@ -57,7 +78,7 @@ class ImageManagementService: ObservableObject {
             let imageMetadata = StorageMetadata()
             imageMetadata.contentType = "image/jpeg"
             
-            let imageUploadTask = imageRef.putData(compressedImageData, metadata: imageMetadata)
+            let imageUploadTask: StorageUploadTask = imageRef.putData(compressedImageData, metadata: imageMetadata)
             
             // Upload thumbnail
             let thumbnailRef = storage.reference().child(thumbnailPath)
@@ -72,15 +93,28 @@ class ImageManagementService: ObservableObject {
                 self.uploadProgress = progress
             }
             
-            // Wait for both uploads to complete
-            let (imageResult, thumbnailResult) = try await (
-                imageUploadTask.value,
-                thumbnailUploadTask.value
-            )
+            // Wait for both uploads to complete using completion handlers
+            _ = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<StorageMetadata, Error>) in
+                imageUploadTask.observe(.success) { snapshot in
+                    continuation.resume(returning: snapshot.metadata!)
+                }
+                imageUploadTask.observe(.failure) { snapshot in
+                    continuation.resume(throwing: snapshot.error!)
+                }
+            }
+            
+            _ = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<StorageMetadata, Error>) in
+                thumbnailUploadTask.observe(.success) { snapshot in
+                    continuation.resume(returning: snapshot.metadata!)
+                }
+                thumbnailUploadTask.observe(.failure) { snapshot in
+                    continuation.resume(throwing: snapshot.error!)
+                }
+            }
             
             // Get download URLs
             let imageURL = try await imageRef.downloadURL().absoluteString
-            let thumbnailURL = try await thumbnailRef.downloadURL().absoluteString
+            _ = try await thumbnailRef.downloadURL().absoluteString
             
             return imageURL
             
@@ -106,7 +140,7 @@ class ImageManagementService: ObservableObject {
         
         for (index, image) in images.enumerated() {
             do {
-                let imageURL = try await uploadImage(image, for: workOrderId, itemId: itemId)
+                let imageURL = try await uploadSingleImage(image, for: workOrderId, itemId: itemId)
                 uploadedURLs.append(imageURL)
                 
                 // Update progress
@@ -124,7 +158,7 @@ class ImageManagementService: ObservableObject {
     /// Delete an image from Firebase Storage
     func deleteImage(_ imageURL: String) async throws {
         do {
-            guard let url = URL(string: imageURL) else {
+            guard URL(string: imageURL) != nil else {
                 throw ImageError.invalidURL
             }
             

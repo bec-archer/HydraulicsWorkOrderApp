@@ -25,7 +25,7 @@ struct UsersListView: View {
                 .padding(.horizontal)
 
             List {
-                ForEach(results) { user in
+                ForEach(results, id: \.id) { user in
                     NavigationLink(destination: UserDetailView(user: user)) {
                         HStack(spacing: 12) {
                             VStack(alignment: .leading, spacing: 2) {

@@ -48,7 +48,7 @@ class CustomerSearchViewModel: ObservableObject {
             let nameHit = c.name.lowercased().contains(qLower)
             let phoneHit: Bool = {
                 if qDigits.isEmpty { return false }
-                return digits(c.phone).contains(qDigits)
+                return digits(c.phoneNumber).contains(qDigits)
             }()
             let companyHit = c.company?.lowercased().contains(qLower) ?? false
             return nameHit || phoneHit || companyHit
@@ -58,7 +58,7 @@ class CustomerSearchViewModel: ObservableObject {
         let unique = filtered.filter { seen.insert($0.id).inserted }
         let sorted = unique.sorted {
             if $0.name.caseInsensitiveCompare($1.name) == .orderedSame {
-                return $0.phone < $1.phone
+                return $0.phoneNumber < $1.phoneNumber
             }
             return $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
         }

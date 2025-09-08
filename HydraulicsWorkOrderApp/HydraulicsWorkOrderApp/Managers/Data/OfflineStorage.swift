@@ -54,14 +54,14 @@ class OfflineStorage {
         
         // Check if work order already exists
         let fetchRequest: NSFetchRequest<CachedWorkOrder> = CachedWorkOrder.fetchRequest()
-        fetchRequest.predicate = NSPredicate(format: "woNumber == %@", workOrder.WO_Number)
+        fetchRequest.predicate = NSPredicate(format: "woNumber == %@", workOrder.workOrderNumber)
         
         do {
             let results = try context.fetch(fetchRequest)
             let cached = results.first ?? CachedWorkOrder(context: context)
             
             // Update or create cache entry
-            cached.woNumber = workOrder.WO_Number
+            cached.woNumber = workOrder.workOrderNumber
             cached.id = workOrder.id
             cached.lastModified = Date()
             cached.data = try? JSONEncoder().encode(workOrder)
@@ -69,7 +69,7 @@ class OfflineStorage {
             try context.save()
             
             #if DEBUG
-            print("✅ CoreData: Cached WorkOrder \(workOrder.WO_Number)")
+            print("✅ CoreData: Cached WorkOrder \(workOrder.workOrderNumber)")
             #endif
         } catch {
             #if DEBUG

@@ -22,95 +22,198 @@ struct RouterView: View {
         NavigationSplitView(columnVisibility: $appState.splitVisibility) {
 
             // ───── Sidebar: Routes aligned to AppState ─────
-            List {
+            VStack {
+                ScrollView {
+                    VStack(spacing: 8) {
 
                 // MAIN
-                Section("Main") {
-                    Button {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Main")
+                        .font(.headline)
+                        .foregroundColor(.secondary)
+                        .padding(.horizontal)
+                    HStack {
+                        Image(systemName: "square.grid.2x2")
+                        Text("Active WorkOrders")
+                        Spacer()
+                    }
+                    .padding(.vertical, 8)
+                    .padding(.horizontal, 12)
+                    .background(Color.blue.opacity(0.1))
+                    .cornerRadius(8)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        print("🔍 DEBUG: Sidebar 'Active WorkOrders' button tapped")
                         appState.navigateToView(.activeWorkOrders)
-                    } label: {
-                        Label("Active WorkOrders", systemImage: "square.grid.2x2")
                     }
 
-                    Button {
+                    HStack {
+                        Image(systemName: "plus.square.on.square")
+                        Text("New Work Order")
+                        Spacer()
+                    }
+                    .padding(.vertical, 8)
+                    .padding(.horizontal, 12)
+                    .background(Color.blue.opacity(0.1))
+                    .cornerRadius(8)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        print("🔍 DEBUG: Sidebar 'New Work Order' button tapped")
+                        print("🔍 DEBUG: Current appState.currentView: \(appState.currentView)")
+                        print("🔍 DEBUG: Calling appState.navigateToView(.newWorkOrder)")
                         appState.navigateToView(.newWorkOrder)
-                    } label: {
-                        Label("New Work Order", systemImage: "plus.square.on.square")
+                        print("🔍 DEBUG: After navigateToView, appState.currentView: \(appState.currentView)")
                     }
 
-                    Button {
+                    HStack {
+                        Image(systemName: "doc.text.magnifyingglass")
+                        Text("My Work Order Items")
+                        Spacer()
+                    }
+                    .padding(.vertical, 8)
+                    .padding(.horizontal, 12)
+                    .background(Color.blue.opacity(0.1))
+                    .cornerRadius(8)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        print("🔍 DEBUG: Sidebar 'My Work Order Items' button tapped")
                         appState.navigateToView(.myWorkOrderItems)
-                    } label: {
-                        Label("My Work Order Items", systemImage: "doc.text.magnifyingglass")
                     }
 
-                    Button {
+                    HStack {
+                        Image(systemName: "person.2")
+                        Text("Customers")
+                        Spacer()
+                    }
+                    .padding(.vertical, 8)
+                    .padding(.horizontal, 12)
+                    .background(Color.blue.opacity(0.1))
+                    .cornerRadius(8)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        print("🔍 DEBUG: Sidebar 'Customers' button tapped")
                         appState.navigateToView(.customers)
-                    } label: {
-                        Label("Customers", systemImage: "person.2")
                     }
                 }
-
+                
                 // ADMIN / TOOLS
-                Section("Admin & Tools") {
-                    Button {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Admin & Tools")
+                        .font(.headline)
+                        .foregroundColor(.secondary)
+                        .padding(.horizontal)
+                    HStack {
+                        Image(systemName: "gearshape.fill")
+                        Text("Settings")
+                        Spacer()
+                    }
+                    .padding(.vertical, 8)
+                    .padding(.horizontal, 12)
+                    .background(Color.blue.opacity(0.1))
+                    .cornerRadius(8)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        print("🔍 DEBUG: Sidebar 'Settings' button tapped")
                         appState.navigateToView(.settings)
-                    } label: {
-                        Label("Settings", systemImage: "gearshape.fill")
                     }
 
                     // Users management (Admin/SuperAdmin only)
                     if appState.isAdmin || appState.isSuperAdmin {
-                        Button {
+                        HStack {
+                            Image(systemName: "person.2.circle")
+                            Text("Manage Users")
+                            Spacer()
+                        }
+                        .padding(.vertical, 8)
+                        .padding(.horizontal, 12)
+                        .background(Color.blue.opacity(0.1))
+                        .cornerRadius(8)
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            print("🔍 DEBUG: Sidebar 'Manage Users' button tapped")
                             appState.navigateToView(.userManager)
-                        } label: {
-                            Label("Manage Users", systemImage: "person.2.circle")
                         }
                     }
 
-                    // Placeholders (keep visible for roadmap; disabled = no compile impact)
-                    Label("Dropdown Manager (coming soon)", systemImage: "chevron.down.square")
-                        .foregroundStyle(.secondary)
+                    // Dropdown Manager (Admin/Manager access)
+                    if appState.isAdmin || appState.isSuperAdmin || appState.isManager {
+                        HStack {
+                            Image(systemName: "chevron.down.square")
+                            Text("Dropdown Manager")
+                            Spacer()
+                        }
+                        .padding(.vertical, 8)
+                        .padding(.horizontal, 12)
+                        .background(Color.blue.opacity(0.1))
+                        .cornerRadius(8)
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            print("🔍 DEBUG: Sidebar 'Dropdown Manager' button tapped")
+                            appState.navigateToView(.dropdownManager)
+                        }
+                    }
                     Label("Deleted WorkOrders (coming soon)", systemImage: "trash")
                         .foregroundStyle(.secondary)
+                }
+                }
                 }
             }
             // END Sidebar
 
         } detail: {
             // ───── Detail: Navigation handled by sidebar ─────
-            NavigationStack {
-                Group {
+            ZStack {
+                NavigationStack {
                     switch appState.currentView {
-                    case .login:
-                        LoginView()
-                    case .activeWorkOrders:
-                        ActiveWorkOrdersView()
-                    case .newWorkOrder:
-                        NewWorkOrderView()
-                    case .myWorkOrderItems:
-                        MyWorkOrderItemsView()
-                            .environmentObject(appState)
-                    case .settings:
-                        SettingsView()
-                    case .userManager:
-                        UserManagerView()
-                            .environmentObject(appState)
-                    case .customers:
-                        CustomersView()
-                    @unknown default:
-                        Text("⚠️ Unknown AppScreen state")
+                        case .login:
+                            LoginView()
+                                .onAppear { print("🔍 DEBUG: RouterView switching to LoginView") }
+                        case .activeWorkOrders:
+                            ActiveWorkOrdersView()
+                                .onAppear { print("🔍 DEBUG: RouterView switching to ActiveWorkOrdersView") }
+                        case .newWorkOrder:
+                            NewWorkOrderView()
+                                .onAppear { print("🔍 DEBUG: RouterView switching to NewWorkOrderView") }
+                        case .myWorkOrderItems:
+                            MyWorkOrderItemsView()
+                                .environmentObject(appState)
+                                .onAppear { print("🔍 DEBUG: RouterView switching to MyWorkOrderItemsView") }
+                        case .settings:
+                            SettingsView()
+                                .onAppear { print("🔍 DEBUG: RouterView switching to SettingsView") }
+                        case .userManager:
+                            UserManagerView()
+                                .environmentObject(appState)
+                                .onAppear { print("🔍 DEBUG: RouterView switching to UserManagerView") }
+                        case .dropdownManager:
+                            Text("Dropdown Manager - Coming Soon")
+                                .navigationTitle("Dropdown Manager")
+                                .onAppear { print("🔍 DEBUG: RouterView switching to DropdownManagerView") }
+                        case .customers:
+                            CustomersView()
+                                .onAppear { print("🔍 DEBUG: RouterView switching to CustomersView") }
+                        @unknown default:
+                            Text("⚠️ Unknown AppScreen state")
+                                .onAppear { print("🔍 DEBUG: RouterView switching to Unknown state") }
                     }
                 }
-            }
-            .id(appState.currentView) // Force recreation when app state changes
-            .onAppear {
-                print("🔍 RouterView detail area showing: \(appState.currentView)")
-            }
-            .onChange(of: appState.currentView) { _, newView in
-                print("🔄 RouterView detail area switching to: \(newView)")
+                .id(appState.currentView) // Force recreation when app state changes
+                .onAppear {
+                    print("🔍 RouterView detail area showing: \(appState.currentView)")
+                }
+                .onChange(of: appState.currentView) { _, newView in
+                    print("🔄 RouterView detail area switching to: \(newView)")
+                }
+                
+                // Inactivity Warning Overlay
+                VStack {
+                    InactivityWarningView()
+                        .environmentObject(appState)
+                    Spacer()
+                }
             }
         }
+        .trackUserInteraction() // Track user interactions for inactivity monitoring
         // ───── END Split View Shell ─────
     }
 

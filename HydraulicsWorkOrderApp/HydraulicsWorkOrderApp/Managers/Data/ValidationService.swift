@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 
 class ValidationService {
     // MARK: - Singleton
@@ -13,8 +14,17 @@ class ValidationService {
     func validateWorkOrder(_ workOrder: WorkOrder) -> ValidationResult {
         var errors: [String] = []
         
-        // Validate customer
-        let customerValidation = validateCustomer(workOrder.customer)
+        // Validate customer (reconstruct Customer object from WorkOrder properties)
+        let customer = Customer(
+            id: UUID(uuidString: workOrder.customerId) ?? UUID(),
+            name: workOrder.customerName,
+            phoneNumber: workOrder.customerPhone,
+            company: workOrder.customerCompany,
+            email: workOrder.customerEmail,
+            taxExempt: workOrder.customerTaxExempt,
+            emojiTag: workOrder.customerEmojiTag
+        )
+        let customerValidation = validateCustomer(customer)
         errors.append(contentsOf: customerValidation.errors)
         
         // Validate items
@@ -22,7 +32,7 @@ class ValidationService {
         errors.append(contentsOf: itemsValidation.errors)
         
         // Validate work order number
-        if workOrder.WO_Number.isEmpty {
+        if workOrder.workOrderNumber.isEmpty {
             errors.append("Work order number is required")
         }
         
@@ -40,12 +50,12 @@ class ValidationService {
             errors.append("Customer name is required")
         }
         
-        if customer.phone.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        if customer.phoneNumber.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             errors.append("Customer phone number is required")
         }
         
         // Validate phone number format (basic validation)
-        if !isValidPhoneNumber(customer.phone) {
+        if !isValidPhoneNumber(customer.phoneNumber) {
             errors.append("Invalid phone number format")
         }
         
@@ -103,7 +113,7 @@ class ValidationService {
         }
         
         // Validate tag ID if provided
-        if let tagId = item.tagId, !tagId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        if let tagId = item.assetTagId, !tagId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             if !isValidTagId(tagId) {
                 errors.append("\(itemPrefix)Invalid tag ID format")
             }
@@ -171,17 +181,17 @@ class ValidationService {
     // MARK: - Status Validation
     
     /// Validate status transition
-    func validateStatusTransition(from currentStatus: WorkOrderStatus, to newStatus: WorkOrderStatus) -> ValidationResult {
+    func validateStatusTransition(from currentStatus: String, to newStatus: String) -> ValidationResult {
         var errors: [String] = []
         
         // Define valid status transitions
-        let validTransitions: [WorkOrderStatus: [WorkOrderStatus]] = [
-            .checkedIn: [.disassembly, .inProgress, .closed],
-            .disassembly: [.inProgress, .testFailed, .closed],
-            .inProgress: [.testFailed, .complete, .closed],
-            .testFailed: [.inProgress, .complete, .closed],
-            .complete: [.closed],
-            .closed: [] // No further transitions from closed
+        let validTransitions: [String: [String]] = [
+            "Checked In": ["Disassembly", "In Progress", "Closed"],
+            "Disassembly": ["In Progress", "Test Failed", "Closed"],
+            "In Progress": ["Test Failed", "Complete", "Closed"],
+            "Test Failed": ["In Progress", "Complete", "Closed"],
+            "Complete": ["Closed"],
+            "Closed": [] // No further transitions from closed
         ]
         
         guard let allowedTransitions = validTransitions[currentStatus] else {
@@ -190,7 +200,7 @@ class ValidationService {
         }
         
         if !allowedTransitions.contains(newStatus) {
-            errors.append("Cannot transition from \(currentStatus.rawValue) to \(newStatus.rawValue)")
+            errors.append("Cannot transition from \(currentStatus) to \(newStatus)")
         }
         
         return ValidationResult(

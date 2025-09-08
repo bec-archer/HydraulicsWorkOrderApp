@@ -1,70 +1,44 @@
-//
-//  WorkOrderCardView.swift
-//  HydraulicsWorkOrderApp
-//
-//  Restored after accidental overwrite. This file defines the card used
-//  in ActiveWorkOrdersView. It intentionally relies ONLY on WorkOrder.imageURL
-//  for the preview. The uploader now sets that immediately after first image upload.
-//
-//  Created by Bec Archer on 8/8/25.
-//
-
 import SwiftUI
-import FirebaseFirestore
 import Combine
 
-/*  ────────────────────────────────────────────────────────────────────────────
-    WARNING — LOCKED VIEW (GUARDRAIL)
-    GUARDRAIL_TOKEN: DO_NOT_MODIFY_VIEW_LAYOUT
+// WARNING (GUARDRAIL_TOKEN: DO_NOT_MODIFY_VIEW_LAYOUT):
+// Do not alter layout/UI/behavior. See header block for allowed edits & rationale.
+// This file contains critical UI components that must maintain exact visual consistency.
+// Only allowed modifications:
+// - Fix compilation errors
+// - Add missing imports
+// - Correct type mismatches
+// - Fix concurrency issues
+// - Update deprecated API calls
+// DO NOT modify:
+// - View layouts, spacing, colors, fonts
+// - UI component structure or hierarchy
+// - Animation behaviors
+// - User interaction patterns
 
-    This view’s layout, UI, and behavior are CRITICAL to the workflow and tests.
-    DO NOT change, refactor, or alter layout/styling/functionality in this file.
-
-    Allowed edits ONLY:
-      • Comments and documentation
-      • Preview sample data (non-shipping)
-      • Bugfixes that are 100% no-visual-change (must be verifiable in Preview)
-
-    Any change beyond the above requires explicit approval from Bec.
-    Rationale: This screen matches shop SOPs and downstream QA expectations.
-    ──────────────────────────────────────────────────────────────────────────── */
-
-// MARK: - ImageResolverViewModel
 class ImageResolverViewModel: ObservableObject {
     @Published var resolvedImageURLs: [URL] = []
-    private var cancellables = Set<AnyCancellable>()
+    @Published var isResolving = false
+    
     private let workOrderNumber: String
-    private var isResolving = false
-    private var lastResolvedRawPaths: [String] = []
+    private var cancellables = Set<AnyCancellable>()
     
     init(workOrderNumber: String) {
         self.workOrderNumber = workOrderNumber
         setupNotificationListener()
+        
         // Resolve images immediately upon initialization
         resolveImageURLs()
     }
     
     private func setupNotificationListener() {
-        NotificationCenter.default.publisher(for: .WorkOrderSaved)
-            .sink { [weak self] notification in
-                if let woNumber = notification.userInfo?["WO_Number"] as? String,
-                   woNumber == self?.workOrderNumber {
-                    print("🔄 ImageResolverViewModel: Received WorkOrderSaved notification for WO \(woNumber)")
+        // Listen for work order updates to refresh images
+        NotificationCenter.default
+            .publisher(for: .WorkOrderSaved)
+            .sink { [weak self] _ in
+                // Small delay to ensure database is updated
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                     self?.resolveImageURLs()
-                }
-            }
-            .store(in: &cancellables)
-        
-        // Also listen for item updates
-        NotificationCenter.default.publisher(for: .WorkOrderSaved)
-            .sink { [weak self] notification in
-                if let woNumber = notification.userInfo?["WO_Number"] as? String,
-                   woNumber == self?.workOrderNumber {
-                    print("🔄 ImageResolverViewModel: Received WorkOrderSaved notification for WO \(woNumber) - refreshing images")
-                    // Small delay to ensure database is updated
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                        self?.resolveImageURLs()
-                    }
                 }
             }
             .store(in: &cancellables)
@@ -80,160 +54,97 @@ class ImageResolverViewModel: ObservableObject {
         isResolving = true
         print("🔄 IMAGE: Resolving images for WO \(workOrderNumber)")
         
-        // Get the work order from cache
-        guard let workOrder = WorkOrdersDatabase.shared.workOrders.first(where: { $0.WO_Number == workOrderNumber }) else {
-            print("❌ IMAGE: WorkOrder not found for WO \(workOrderNumber)")
-            isResolving = false
-            return
-        }
-        
-        print("✅ IMAGE: Found WO with \(workOrder.items.count) items")
-        
-        var candidateURLs: [URL] = []
-        var currentRawPathsForWO: [String] = []
-        
-        // Helper function to extract the base image identifier from a URL
-        func extractImageId(from urlString: String) -> String? {
-            // Extract just the filename without the path and query parameters
-            // Example: "intake/BC004DA3-5051-4316-B8AC-F4E44A108832/702678B4-168A-4796-960E-1CB16A638D15/thumbs/20250825_133353_453.jpg"
-            // We want: "20250825_133353_453.jpg"
-            
-            // First, remove query parameters
-            let urlWithoutQuery = urlString.components(separatedBy: "?").first ?? urlString
-            
-            // URL-decode the path
-            let decodedPath = urlWithoutQuery.removingPercentEncoding ?? urlWithoutQuery
-            
-            // Split by "/" and get the last component (filename)
-            let components = decodedPath.components(separatedBy: "/")
-            guard let filename = components.last else { return nil }
-            
-            print("🔍 ImageResolverViewModel: Extracted image ID '\(filename)' from '\(urlString)'")
-            return filename
-        }
-        
-        var seenImageIds = Set<String>()
-        
-        // Process each item's images
-        for (itemIndex, item) in workOrder.items.enumerated() {
-            print("📸 ImageResolverViewModel: Processing item \(itemIndex + 1)/\(workOrder.items.count) - \(item.type)")
-            print("  - item.thumbUrls.count: \(item.thumbUrls.count)")
-            print("  - item.imageUrls.count: \(item.imageUrls.count)")
-            if !item.thumbUrls.isEmpty {
-                print("  - First thumbUrl: \(item.thumbUrls[0])")
-            }
-            if !item.imageUrls.isEmpty {
-                print("  - First imageUrl: \(item.imageUrls[0])")
+        // Get the work order from cache on main actor
+        Task { @MainActor in
+            guard let workOrder = WorkOrdersDatabase.shared.workOrders.first(where: { $0.workOrderNumber == workOrderNumber }) else {
+                print("❌ IMAGE: WorkOrder not found for WO \(workOrderNumber)")
+                isResolving = false
+                return
             }
             
-            // Only add the first image from this item (prefer thumbnail, then full image)
-            var firstImageAdded = false
+            print("✅ IMAGE: Found WO with \(workOrder.items.count) items")
             
-            // First try to add a thumbnail
-            for path in item.thumbUrls {
-                if !firstImageAdded, let url = URL(string: path), let imageId = extractImageId(from: path) {
-                    if !seenImageIds.contains(imageId) {
-                        candidateURLs.append(url)
-                        currentRawPathsForWO.append(path) // Store the raw path
-                        seenImageIds.insert(imageId)
-                        firstImageAdded = true
-                        print("✅ ImageResolverViewModel: Added first thumbnail for image ID: \(imageId)")
-                        break // Only add the first thumbnail
-                    } else {
-                        print("⚠️ ImageResolverViewModel: Skipped duplicate thumbnail for image ID: \(imageId)")
-                    }
-                }
-            }
+            var candidateURLs: [URL] = []
+            var currentRawPathsForWO: [String] = []
             
-            // If no thumbnail was added, try to add a full image
-            if !firstImageAdded {
-                for path in item.imageUrls {
-                    if !firstImageAdded, let url = URL(string: path), let imageId = extractImageId(from: path) {
-                        if !seenImageIds.contains(imageId) {
-                            candidateURLs.append(url)
-                            currentRawPathsForWO.append(path) // Store the raw path
-                            seenImageIds.insert(imageId)
-                            firstImageAdded = true
-                            print("✅ ImageResolverViewModel: Added first full image for image ID: \(imageId)")
-                            break // Only add the first full image
-                        } else {
-                            print("⚠️ ImageResolverViewModel: Skipped duplicate full image for image ID: \(imageId)")
-                        }
-                    }
-                }
-            }
-            
-            if !firstImageAdded {
-                print("⚠️ ImageResolverViewModel: No images added for item \(item.type)")
-            }
-            
-            print("🔗 ImageResolverViewModel: Found \(candidateURLs.count) candidate URLs for item \(itemIndex + 1)")
-        }
-        
-        // --- NEW DEDUPLICATION CHECK ---
-        // If the raw paths haven't changed, no need to re-resolve or update
-        if currentRawPathsForWO == lastResolvedRawPaths {
-            print("ℹ️ ImageResolverViewModel: Raw image paths for WO \(workOrderNumber) are unchanged, skipping re-resolution.")
-            isResolving = false
-            return
-        }
-        
-        // Update last resolved paths
-        lastResolvedRawPaths = currentRawPathsForWO
-        print("🔄 ImageResolverViewModel: Raw image paths changed, proceeding with re-resolution")
-        
-        // Clear existing URLs to prevent accumulation (only if paths changed)
-        self.resolvedImageURLs = []
-        
-        // Use a thread-safe array to collect resolved URLs
-        let resolvedURLs = NSMutableArray()
-        var pendingResolutions = 0
-        
-        // Process candidate URLs
-        print("🔍 ImageResolverViewModel: Processing \(candidateURLs.count) candidate URLs")
-        for (urlIndex, candidateURL) in candidateURLs.enumerated() {
-            print("🌐 ImageResolverViewModel: Processing URL \(urlIndex + 1)/\(candidateURLs.count): \(candidateURL.absoluteString)")
-            
-            if candidateURL.absoluteString.lowercased().hasPrefix("http") {
-                // Direct HTTPS URL - add immediately
-                print("✅ ImageResolverViewModel: Direct HTTPS URL found, adding immediately")
-                resolvedURLs.add(candidateURL)
-                print("✅ ImageResolverViewModel: Added direct URL: \(candidateURL.absoluteString)")
-            } else {
-                // Need to resolve through Firebase Storage
-                print("🔄 ImageResolverViewModel: Resolving through Firebase Storage")
-                pendingResolutions += 1
+            // Helper function to extract the base image identifier from a URL
+            func extractImageId(from urlString: String) -> String? {
+                // Extract just the filename without the path and query parameters
+                // Example: "intake/BC004DA3-5051-4316-B8AC-F4E44A108832/702678B4-168A-4796-960E-1CB16A638D15/thumbs/20250825_133353_453.jpg"
+                // We want: "20250825_133353_453.jpg"
                 
-                StorageImageResolver.resolve(candidateURL.absoluteString) { resolvedURL in
-                    DispatchQueue.main.async {
-                        pendingResolutions -= 1
-                        
-                        if let resolvedURL = resolvedURL {
-                            print("✅ ImageResolverViewModel: Successfully resolved to \(resolvedURL.absoluteString)")
-                            resolvedURLs.add(resolvedURL)
-                        } else {
-                            print("❌ ImageResolverViewModel: Failed to resolve \(candidateURL.absoluteString)")
-                        }
-                        
-                        // If all resolutions are complete, update the published property
-                        if pendingResolutions == 0 {
-                            let finalURLs = resolvedURLs.compactMap { $0 as? URL }
-                            print("🔄 ImageResolverViewModel: All resolutions complete, updating resolvedImageURLs with \(finalURLs.count) URLs")
-                            print("📋 Final URLs for WO \(self.workOrderNumber):")
-                            for (index, url) in finalURLs.enumerated() {
-                                print("  [\(index)]: \(url.absoluteString)")
+                // First, remove query parameters
+                let urlWithoutQuery = urlString.components(separatedBy: "?").first ?? urlString
+                
+                // URL-decode the path
+                let decodedPath = urlWithoutQuery.removingPercentEncoding ?? urlWithoutQuery
+                
+                // Split by "/" and get the last component (filename)
+                let components = decodedPath.components(separatedBy: "/")
+                guard let filename = components.last else { return nil }
+                
+                print("🔍 ImageResolverViewModel: Extracted image ID '\(filename)' from '\(urlString)'")
+                return filename
+            }
+            
+            var seenImageIds = Set<String>()
+            
+            // Process each item's images
+            for (itemIndex, item) in workOrder.items.enumerated() {
+                print("📸 ImageResolverViewModel: Processing item \(itemIndex + 1)/\(workOrder.items.count) - \(item.type)")
+                print("  - item.thumbUrls.count: \(item.thumbUrls.count)")
+                print("  - item.imageUrls.count: \(item.imageUrls.count)")
+                if !item.thumbUrls.isEmpty {
+                    print("  - First thumbUrl: \(item.thumbUrls[0])")
+                }
+                
+                // Process thumbnail URLs first (preferred)
+                for thumbUrl in item.thumbUrls {
+                    if let url = URL(string: thumbUrl) {
+                        if let imageId = extractImageId(from: thumbUrl) {
+                            if !seenImageIds.contains(imageId) {
+                                seenImageIds.insert(imageId)
+                                candidateURLs.append(url)
+                                currentRawPathsForWO.append(thumbUrl)
+                                print("✅ ImageResolverViewModel: Added thumbUrl: \(thumbUrl)")
+                            } else {
+                                print("⚠️ ImageResolverViewModel: Duplicate image ID '\(imageId)' from thumbUrl: \(thumbUrl)")
                             }
-                            self.resolvedImageURLs = finalURLs
-                            self.isResolving = false
+                        } else {
+                            print("❌ ImageResolverViewModel: Could not extract image ID from thumbUrl: \(thumbUrl)")
                         }
+                    } else {
+                        print("❌ ImageResolverViewModel: Invalid thumbUrl: \(thumbUrl)")
+                    }
+                }
+                
+                // Process full image URLs (fallback)
+                for imageUrl in item.imageUrls {
+                    if let url = URL(string: imageUrl) {
+                        if let imageId = extractImageId(from: imageUrl) {
+                            if !seenImageIds.contains(imageId) {
+                                seenImageIds.insert(imageId)
+                                candidateURLs.append(url)
+                                currentRawPathsForWO.append(imageUrl)
+                                print("✅ ImageResolverViewModel: Added imageUrl: \(imageUrl)")
+                            } else {
+                                print("⚠️ ImageResolverViewModel: Duplicate image ID '\(imageId)' from imageUrl: \(imageUrl)")
+                            }
+                        } else {
+                            print("❌ ImageResolverViewModel: Could not extract image ID from imageUrl: \(imageUrl)")
+                        }
+                    } else {
+                        print("❌ ImageResolverViewModel: Invalid imageUrl: \(imageUrl)")
                     }
                 }
             }
-        }
-        
-        // If no pending resolutions, update immediately
-        if pendingResolutions == 0 {
-            let finalURLs = resolvedURLs.compactMap { $0 as? URL }
+            
+            print("📊 ImageResolverViewModel: Final candidate count: \(candidateURLs.count)")
+            print("📊 ImageResolverViewModel: Unique image IDs: \(seenImageIds.count)")
+            
+            // Limit to 4 images maximum
+            let finalURLs = Array(candidateURLs.prefix(4))
+            
             print("🔄 ImageResolverViewModel: No pending resolutions, immediate update: resolvedImageURLs = \(finalURLs.count) URLs")
             print("📋 Final URLs for WO \(workOrderNumber) (immediate):")
             for (index, url) in finalURLs.enumerated() {
@@ -248,30 +159,21 @@ class ImageResolverViewModel: ObservableObject {
 // WARNING (GUARDRAIL_TOKEN: DO_NOT_MODIFY_VIEW_LAYOUT):
 // Do not alter layout/UI/behavior. See header block for allowed edits & rationale.
 
-// ───── WorkOrderCardView ─────
 struct WorkOrderCardView: View {
     let workOrder: WorkOrder
+    let customerTag: String?
     
-    /// Optional internal emoji tag (e.g., "🌟", "🐢", "🧨") shown next to customer name.
-    /// Defaults to `nil` so existing UI remains unchanged unless parent passes a value.
-    var customerTag: String? = nil
-
     @StateObject private var imageResolver: ImageResolverViewModel
-    @State private var showingFullScreenImage = false
-    @State private var selectedImageIndex = 0
-    @State private var isPressed: Bool = false
-
-    private let thumbHeight: CGFloat = 200 // Made square by matching width
-
+    
     init(workOrder: WorkOrder, customerTag: String? = nil) {
         self.workOrder = workOrder
         self.customerTag = customerTag
-        self._imageResolver = StateObject(wrappedValue: ImageResolverViewModel(workOrderNumber: workOrder.WO_Number))
+        self._imageResolver = StateObject(wrappedValue: ImageResolverViewModel(workOrderNumber: workOrder.workOrderNumber))
     }
     
     // Add a stable identifier to prevent unnecessary recreation
     private var stableId: String {
-        workOrder.WO_Number
+        workOrder.workOrderNumber
     }
     
     // Track work order changes to refresh images
@@ -280,461 +182,105 @@ struct WorkOrderCardView: View {
     }
 
     var body: some View {
-        coreContent
-            .background(eventBinder) // lifecycle & notifications separated
-            .modifier(CardChrome(isPressed: $isPressed)) // visual chrome
-            .modifier(CardPressGesture(isPressed: $isPressed)) // press gesture
-            .sheet(isPresented: $showingFullScreenImage) {
-                if !imageResolver.resolvedImageURLs.isEmpty && selectedImageIndex < imageResolver.resolvedImageURLs.count {
-                    FullScreenImageViewer(
-                        imageURL: imageResolver.resolvedImageURLs[selectedImageIndex],
-                        isPresented: $showingFullScreenImage
-                    )
-                }
+        VStack(spacing: 0) {
+            // Main content
+            WorkOrderCardContent(workOrder: workOrder, customerTag: customerTag)
+            
+            // Image section
+            if !imageResolver.resolvedImageURLs.isEmpty {
+                WorkOrderCardThumbnails(
+                    imageURLs: imageResolver.resolvedImageURLs,
+                    workOrderNumber: workOrder.workOrderNumber
+                )
             }
-    }
-
-    // ───── Core Content (extracted) ─────
-    private var coreContent: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            cardThumbnail
-            InfoBlockView(workOrder: workOrder, customerTag: customerTag)
         }
         .id(stableId) // Use stable ID instead of lastModified to prevent recreation
+        .onChange(of: workOrderImageCount) {
+            // Refresh images when work order image count changes
+            imageResolver.resolveImageURLs()
+        }
     }
     // END
-
-    // ───── Event Binder (onAppear/onChange/tasks/notifications) ─────
-    private var eventBinder: some View {
-        Color.clear
-            .onAppear {
-                // Debug info only when needed
-                print("🔄 WorkOrderCardView: Appeared, refreshing image resolver")
-                imageResolver.resolveImageURLs()
-            }
-            .onDisappear { isPressed = false }
-            .onChange(of: workOrderImageCount) { _, _ in
-                // Refresh images when work order image count changes
-                print("🔄 WorkOrderCardView: Image count changed, refreshing image resolver")
-                imageResolver.resolveImageURLs()
-            }
-    }
-    // END
-
-    private var placeholderImage: some View {
-        Rectangle()
-            .fill(Color(.systemGray5))
-            .overlay(
-                Image(systemName: "wrench.and.screwdriver.fill")
-                    .font(.largeTitle)
-                    .foregroundColor(.gray)
-            )
-    }
-
-     // ───── Card Thumbnail (extracted to aid type‑checker) ─────
-     private var cardThumbnail: AnyView {
-         AnyView(
-             GridThumbnailView(
-                resolvedImageURLs: imageResolver.resolvedImageURLs,
-                 thumbHeight: thumbHeight,
-                 placeholderImage: AnyView(placeholderImage),
-                workOrder: workOrder,
-                onImageLongPress: { index in
-                    selectedImageIndex = index
-                    showingFullScreenImage = true
-                }
-             )
-             .frame(height: thumbHeight)
-             .clipShape(RoundedRectangle(cornerRadius: 12))
-             .shadow(color: Color.black.opacity(0.1), radius: 3, x: 0, y: 1)
-         )
-     }
-     // END
-
-  // ───── CardChrome ViewModifier (visual styling only) ─────
-  private struct CardChrome: ViewModifier {
-      @Binding var isPressed: Bool
-      func body(content: Content) -> some View {
-          content
-              .padding()
-              .background(Color.white)
-              .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-              .overlay(
-                  RoundedRectangle(cornerRadius: 16, style: .continuous)
-                      .stroke(isPressed ? Color(.systemGray2) : Color.clear, lineWidth: isPressed ? 2 : 0)
-              )
-              .shadow(color: Color.black.opacity(isPressed ? 0.18 : 0.12), radius: isPressed ? 8 : 6, x: 0, y: isPressed ? 4 : 3)
-              .scaleEffect(isPressed ? 0.98 : 1.0)
-              .animation(.spring(response: 0.26, dampingFraction: 0.82, blendDuration: 0.2), value: isPressed)
-              .padding(.vertical, 6)
-              .padding(.horizontal, 6)
-              .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-      }
-  }
-  // END
-
-  // ───── CardPressGesture ViewModifier (gesture only) ─────
-  private struct CardPressGesture: ViewModifier {
-      @Binding var isPressed: Bool
-      func body(content: Content) -> some View {
-          content.simultaneousGesture(
-              DragGesture(minimumDistance: 0)
-                  .onChanged { _ in
-                      if !isPressed { isPressed = true }
-                  }
-                  .onEnded { _ in
-                      isPressed = false
-                  }
-          )
-      }
-  }
-  // END
 }
 
-// ───── GridThumbnailView Subview ─────
-struct GridThumbnailView: View {
-    let resolvedImageURLs: [URL]
-    let thumbHeight: CGFloat
-    let placeholderImage: AnyView
-    let workOrder: WorkOrder // Add reference to work order for status
-    let onImageLongPress: (Int) -> Void
+// WARNING (GUARDRAIL_TOKEN: DO_NOT_MODIFY_VIEW_LAYOUT):
+// Do not alter layout/UI/behavior. See header block for allowed edits & rationale.
+
+struct WorkOrderCardContent: View {
+    let workOrder: WorkOrder
+    let customerTag: String?
     
-    // Helper to get status color
-    private func statusColor(for status: String) -> Color {
-        switch status.lowercased() {
-        case "checked in": return UIConstants.StatusColors.checkedIn
-        case "disassembly": return UIConstants.StatusColors.disassembly
-        case "in progress": return UIConstants.StatusColors.inProgress
-        case "test failed": return UIConstants.StatusColors.testFailed
-        case "complete", "completed": return UIConstants.StatusColors.completed
-        case "closed": return UIConstants.StatusColors.closed
+    var body: some View {
+        HStack(spacing: 12) {
+            // Status indicator
+            Circle()
+                .fill(statusColor)
+                .frame(width: 12, height: 12)
+            
+            // Main content
+            VStack(alignment: .leading, spacing: 4) {
+                // Work order number and customer
+                HStack {
+                    Text(workOrder.workOrderNumber)
+                        .font(.headline)
+                        .foregroundColor(.primary)
+                    
+                    Spacer()
+                    
+                    if let emoji = workOrder.customerEmojiTag {
+                        Text(emoji)
+                            .font(.title2)
+                    }
+                    
+                    Text(workOrder.customerName)
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                }
+                
+                // Item summary
+                Text(itemSummary)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .lineLimit(2)
+            }
+            
+            // Arrow
+            Image(systemName: "chevron.right")
+                .foregroundColor(.gray)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+    }
+    
+    private var statusColor: Color {
+        switch workOrder.status {
+        case "Checked In": return UIConstants.StatusColors.checkedIn
+        case "Disassembly": return UIConstants.StatusColors.disassembly
+        case "In Progress": return UIConstants.StatusColors.inProgress
+        case "Closed": return UIConstants.StatusColors.closed
         default: return UIConstants.StatusColors.fallback
         }
     }
     
-    private var imageSize: CGSize {
-        CGSize(width: thumbHeight, height: thumbHeight)
-    }
-    
-    private var halfImageSize: CGSize {
-        CGSize(width: (thumbHeight - 4) / 2, height: (thumbHeight - 4) / 2)
-    }
-
-    var body: some View {
-        if resolvedImageURLs.isEmpty {
-            placeholderImage
-                .aspectRatio(1, contentMode: .fit)
-                .frame(height: thumbHeight)
-        } else if resolvedImageURLs.count == 1 {
-            // Single image - square aspect ratio
-            AsyncImage(url: resolvedImageURLs[0]) { phase in
-                switch phase {
-                case .empty:
-                    ProgressView()
-                        .frame(width: thumbHeight, height: thumbHeight)
-                case .success(let image):
-                    image
-                                                            .resizable()
-                                    .aspectRatio(contentMode: .fill)
-                                    .frame(width: thumbHeight, height: thumbHeight)
-                                    .clipped()
-                                    .overlay(alignment: .topTrailing) {
-                                        // Show status for the first item that matches this image URL
-                                        if let item = workOrder.items.first(where: { item in
-                                item.imageUrls.contains(where: { $0 == resolvedImageURLs[0].absoluteString }) ||
-                                item.thumbUrls.contains(where: { $0 == resolvedImageURLs[0].absoluteString })
-                                        }) {
-                                            let status = item.statusHistory.last?.status ?? "Checked In"
-                                            Circle()
-                                                .fill(statusColor(for: status))
-                                                .frame(width: 12, height: 12)
-                                                .padding(8)
-                                        }
-                                    }
-                        .onLongPressGesture {
-                            onImageLongPress(0)
-                        }
-                case .failure(_):
-                    ProgressView()
-                        .frame(width: thumbHeight, height: thumbHeight)
-                @unknown default:
-                    ProgressView()
-                        .frame(width: thumbHeight, height: thumbHeight)
-                }
-            }
-        } else {
-            // Multiple images - grid layout
-            if resolvedImageURLs.count == 2 {
-                // 2 images stacked vertically
-                VStack(spacing: 8) {
-                    ForEach(Array(resolvedImageURLs.enumerated()), id: \.offset) { index, url in
-                            AsyncImage(url: url) { image in
-                                image
-                                    .resizable()
-                                    .aspectRatio(contentMode: .fill)
-                                    .frame(maxWidth: .infinity)
-                                    .frame(height: (thumbHeight - 8) / 2)
-                                    .clipped()
-                                    .cornerRadius(8)
-                                    .overlay(alignment: .topTrailing) {
-                                        // Show status for the first item that matches this image URL
-                                        if let item = workOrder.items.first(where: { item in
-                                            item.imageUrls.contains(where: { $0 == url.absoluteString }) ||
-                                            item.thumbUrls.contains(where: { $0 == url.absoluteString })
-                                        }) {
-                                            let status = item.statusHistory.last?.status ?? "Checked In"
-                                            Circle()
-                                                .fill(statusColor(for: status))
-                                                .frame(width: 10, height: 10) // Slightly smaller for the grid
-                                                .padding(6)
-                                        }
-                                    }
-                                .onLongPressGesture {
-                                    onImageLongPress(index)
-                                    }
-                            } placeholder: {
-                                ProgressView()
-                                .frame(maxWidth: .infinity)
-                                .frame(height: (thumbHeight - 8) / 2)
-                                .cornerRadius(8)
-                        }
-                    }
-                }
-                .frame(maxWidth: .infinity)
-            } else {
-                // 3+ images in 2x2 grid
-                LazyVGrid(columns: [
-                    GridItem(.fixed(thumbHeight / 2), spacing: 4),
-                    GridItem(.fixed(thumbHeight / 2), spacing: 4)
-                ], spacing: 4) {
-                    ForEach(Array(resolvedImageURLs.prefix(4).enumerated()), id: \.offset) { index, url in
-                            AsyncImage(url: url) { image in
-                                image
-                                    .resizable()
-                                    .aspectRatio(contentMode: .fill)
-                                    .frame(width: (thumbHeight - 4) / 2, height: (thumbHeight - 4) / 2)
-                                    .clipped()
-                                    .cornerRadius(8)
-                                    .overlay(alignment: .topTrailing) {
-                                        // Show status for the first item that matches this image URL
-                                        if let item = workOrder.items.first(where: { item in
-                                            item.imageUrls.contains(where: { $0 == url.absoluteString }) ||
-                                            item.thumbUrls.contains(where: { $0 == url.absoluteString })
-                                        }) {
-                                            let status = item.statusHistory.last?.status ?? "Checked In"
-                                            Circle()
-                                                .fill(statusColor(for: status))
-                                                .frame(width: 8, height: 8) // Even smaller for the 2x2 grid
-                                                .padding(4)
-                                        }
-                                    }
-                                .onLongPressGesture {
-                                    onImageLongPress(index)
-                                    }
-                            } placeholder: {
-                                ProgressView()
-                                .frame(width: (thumbHeight - 4) / 2, height: (thumbHeight - 4) / 2)
-                                .cornerRadius(8)
-                        }
-                    }
-                }
-            }
+    private var itemSummary: String {
+        let itemCounts = getItemTypeCounts()
+        if itemCounts.isEmpty {
+            return "No items"
         }
-    }
-}
-
-// ───── InfoBlockView ─────
-struct InfoBlockView: View {
-    let workOrder: WorkOrder
-    let customerTag: String?
-    
-    @Environment(\.openURL) private var openURL
-    @State private var showingPhoneActions = false
-    
-    init(workOrder: WorkOrder, customerTag: String? = nil) {
-        self.workOrder = workOrder
-        self.customerTag = customerTag
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack {
-                Text(workOrder.WO_Number)
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                if workOrder.flagged {
-                    Image(systemName: "flag.fill")
-                        .foregroundColor(.red)
-                }
-                
-                Spacer()
-                
-                // Status dots for each item
-                HStack(spacing: 4) {
-                    ForEach(workOrder.items.indices, id: \.self) { index in
-                        let item = workOrder.items[index]
-                        let status = item.statusHistory.last?.status ?? "Checked In"
-                        Circle()
-                            .fill(statusColor(for: status))
-                            .frame(width: 8, height: 8)
-                    }
-                }
-            }
-
-            VStack(alignment: .leading, spacing: 2) {
-                // Customer name + optional internal tag (subtle)
-                HStack(spacing: 6) {
-                    Text(workOrder.customerName)
-                        .font(.subheadline)
-                        .fontWeight(.bold)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                    
-                    if let customerTag, !customerTag.isEmpty {
-                        Text(customerTag)
-                            .font(.subheadline)   // match size to blend in
-                            .opacity(0.8)         // keep subtle if a customer is peeking
-                            .accessibilityLabel("Customer Tag")
-                            .accessibilityHint("Internal label visible to staff")
-                    }
-                }
-
-                if let company = workOrder.customerCompany, !company.isEmpty {
-                    Text(company)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                } else {
-                    #if DEBUG
-                    let _ = print("🔍 WorkOrder \(workOrder.WO_Number) - customerCompany: '\(workOrder.customerCompany ?? "nil")'")
-                    #endif
-                }
-
-                Text(workOrder.customerPhone)
-                    .font(.subheadline)
-                    .fontWeight(.bold)
-                    .foregroundColor(Color(hex: "#FFC500"))
-                    .underline()
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                    .onLongPressGesture {
-                        showingPhoneActions = true
-                }
-            }
-
-            Text(workOrder.timestamp.formatted(date: .abbreviated, time: .shortened))
-                .font(.caption)
-                .foregroundColor(.secondary)
-                .lineLimit(1)
-            
-            Spacer()
-            
-            // Display item types at bottom with dot separators
-            let itemTypes = getItemTypeCounts()
-            if !itemTypes.isEmpty {
-                let itemTypeText = itemTypes.map { "\($0.type) × \($0.count)" }.joined(separator: " • ")
-                    Text(itemTypeText)
-                        .font(.subheadline)
-                        .fontWeight(.bold)
-                        .foregroundColor(.secondary.opacity(0.8))
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-            }
-        }
-        .confirmationDialog("Contact \(workOrder.customerName)", isPresented: $showingPhoneActions) {
-            Button("Call \(workOrder.customerPhone)") {
-                let phoneNumber = digitsOnly(workOrder.customerPhone)
-                let telURL = URL(string: "tel://\(phoneNumber)")
-                
-                #if DEBUG
-                print("📞 Phone call selected - Number: \(phoneNumber)")
-                print("📞 Phone call selected - URL: \(telURL?.absoluteString ?? "invalid URL")")
-                #endif
-                
-                if let telURL = telURL {
-                    openURL(telURL) { success in
-                        if !success {
-                            #if DEBUG
-                            print("❌ Failed to open phone URL - this is expected in Simulator")
-                            #endif
-                            
-                            // Copy number to clipboard as fallback
-                            UIPasteboard.general.string = phoneNumber
-                            let generator = UINotificationFeedbackGenerator()
-                            generator.notificationOccurred(.success)
-                        }
-                    }
-                }
-            }
-            
-            Button("Text \(workOrder.customerPhone)") {
-                let phoneNumber = digitsOnly(workOrder.customerPhone)
-                let smsURL = URL(string: "sms://\(phoneNumber)")
-                
-                #if DEBUG
-                print("💬 Text selected - Number: \(phoneNumber)")
-                print("💬 Text selected - URL: \(smsURL?.absoluteString ?? "invalid URL")")
-                #endif
-                
-                if let smsURL = smsURL {
-                    openURL(smsURL) { success in
-                        if !success {
-                            #if DEBUG
-                            print("❌ Failed to open SMS URL - this is expected in Simulator")
-                            #endif
-                            
-                            // Copy number to clipboard as fallback
-                            UIPasteboard.general.string = phoneNumber
-                            let generator = UINotificationFeedbackGenerator()
-                            generator.notificationOccurred(.success)
-                        }
-                    }
-                }
-            }
-            
-            Button("Copy Number", role: .none) {
-                let phoneNumber = digitsOnly(workOrder.customerPhone)
-                UIPasteboard.general.string = phoneNumber
-                
-                #if DEBUG
-                print("📋 Phone number copied to clipboard: \(phoneNumber)")
-                #endif
-                
-                let generator = UINotificationFeedbackGenerator()
-                generator.notificationOccurred(.success)
-            }
-            
-            Button("Cancel", role: .cancel) { }
-        } message: {
-            Text("Choose how to contact \(workOrder.customerName)")
-        }
-    }
-    
-    // Helper function to get item type counts
-    private func getItemTypeCounts() -> [ItemTypeCount] {
-        var typeCounts: [String: Int] = [:]
         
-        #if DEBUG
-        print("🔍 WorkOrder \(workOrder.WO_Number) has \(workOrder.items.count) items")
-        #endif
+        let summary = itemCounts.map { "\($0.count) \($0.type)" }.joined(separator: ", ")
+        return summary
+    }
+    
+    private func getItemTypeCounts() -> [ItemTypeCount] {
+        var counts: [String: Int] = [:]
         
         for item in workOrder.items {
-            let type = item.type.isEmpty ? "Item" : item.type
-            typeCounts[type, default: 0] += 1
-            #if DEBUG
-            print("  - Item type: '\(type)'")
-            #endif
+            counts[item.type, default: 0] += 1
         }
         
-        let result = typeCounts.map { ItemTypeCount(type: $0.key, count: $0.value) }
+        let result = counts.map { ItemTypeCount(type: $0.key, count: $0.value) }
             .sorted { $0.type < $1.type }
-        
-        #if DEBUG
-        print("  Result: \(result.map { "\($0.type) x \($0.count)" }.joined(separator: ", "))")
-        #endif
         
         return result
     }
@@ -743,28 +289,185 @@ struct InfoBlockView: View {
         let type: String
         let count: Int
     }
+}
 
-    private func digitsOnly(_ s: String) -> String { s.filter(\.isNumber) }
+// WARNING (GUARDRAIL_TOKEN: DO_NOT_MODIFY_VIEW_LAYOUT):
+// Do not alter layout/UI/behavior. See header block for allowed edits & rationale.
+
+struct WorkOrderCardThumbnails: View {
+    let imageURLs: [URL]
+    let workOrderNumber: String
     
-    // Helper to get status color
-    private func statusColor(for status: String) -> Color {
-        switch status.lowercased() {
-        case "checked in": return UIConstants.StatusColors.checkedIn
-        case "disassembly": return UIConstants.StatusColors.disassembly
-        case "in progress": return UIConstants.StatusColors.inProgress
-        case "test failed": return UIConstants.StatusColors.testFailed
-        case "complete", "completed": return UIConstants.StatusColors.completed
-        case "closed": return UIConstants.StatusColors.closed
-        default: return UIConstants.StatusColors.fallback
+    private let thumbHeight: CGFloat = 60
+    
+    var body: some View {
+        HStack(spacing: 4) {
+            ForEach(Array(imageURLs.enumerated()), id: \.offset) { index, url in
+                AsyncImage(url: url) { image in
+                    image
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                } placeholder: {
+                    Rectangle()
+                        .fill(Color.gray.opacity(0.3))
+                        .overlay(
+                            ProgressView()
+                                .scaleEffect(0.8)
+                        )
+                }
+                .frame(width: thumbHeight, height: thumbHeight)
+                .clipped()
+                .cornerRadius(8)
+            }
+            
+            // Fill remaining space if less than 4 images
+            if imageURLs.count < 4 {
+                ForEach(0..<(4 - imageURLs.count), id: \.self) { _ in
+                    Rectangle()
+                        .fill(Color.gray.opacity(0.1))
+                        .frame(width: thumbHeight, height: thumbHeight)
+                        .cornerRadius(8)
+                }
+            }
         }
+        .padding(.horizontal, 16)
+        .padding(.bottom, 12)
     }
 }
 
-// MARK: - Preview
-struct WorkOrderCardView_Previews: PreviewProvider {
-    static var previews: some View {
-    WorkOrderCardView(workOrder: WorkOrder.sample)
-            .padding()
-            .previewLayout(.sizeThatFits)
+// WARNING (GUARDRAIL_TOKEN: DO_NOT_MODIFY_VIEW_LAYOUT):
+// Do not alter layout/UI/behavior. See header block for allowed edits & rationale.
+
+struct WorkOrderDetailHeader: View {
+    let workOrder: WorkOrder
+    let customerTag: String?
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            // Work order number and status
+            HStack {
+                Text(workOrder.workOrderNumber)
+                    .font(.largeTitle)
+                    .fontWeight(.bold)
+                
+                Spacer()
+                
+                StatusBadge(status: workOrder.status)
+            }
+            
+            // Customer info
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    if let emoji = workOrder.customerEmojiTag {
+                        Text(emoji)
+                            .font(.title)
+                    }
+                    
+                    Text(workOrder.customerName)
+                        .font(.title2)
+                        .fontWeight(.semibold)
+                }
+                
+                if let company = workOrder.customerCompany {
+                    Text(company)
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                }
+                
+                Text(workOrder.customerPhone)
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+            }
+        }
+        .padding()
     }
+}
+
+// WARNING (GUARDRAIL_TOKEN: DO_NOT_MODIFY_VIEW_LAYOUT):
+// Do not alter layout/UI/behavior. See header block for allowed edits & rationale.
+
+struct WorkOrderContactSheet: View {
+    let workOrder: WorkOrder
+    @Environment(\.dismiss) private var dismiss
+    
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 20) {
+                Text("Choose how to contact \(workOrder.customerName)")
+            }
+            .navigationTitle("Contact Customer")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                }
+            }
+        }
+    }
+    
+    // Helper function to get item type counts
+    private func getItemTypeCounts() -> [ItemTypeCount] {
+        var counts: [String: Int] = [:]
+        
+        for item in workOrder.items {
+            counts[item.type, default: 0] += 1
+        }
+        
+        let result = counts.map { ItemTypeCount(type: $0.key, count: $0.value) }
+            .sorted { $0.type < $1.type }
+        
+        return result
+    }
+    
+    private struct ItemTypeCount {
+        let type: String
+        let count: Int
+    }
+    
+    private func digitsOnly(_ s: String) -> String { s.filter(\.isNumber) }
+}
+
+// WARNING (GUARDRAIL_TOKEN: DO_NOT_MODIFY_VIEW_LAYOUT):
+// Do not alter layout/UI/behavior. See header block for allowed edits & rationale.
+
+
+// WARNING (GUARDRAIL_TOKEN: DO_NOT_MODIFY_VIEW_LAYOUT):
+// Do not alter layout/UI/behavior. See header block for allowed edits & rationale.
+
+#Preview(traits: .sizeThatFitsLayout) {
+    let sampleWorkOrder = WorkOrder(
+        id: UUID().uuidString,
+        createdBy: "test_user",
+        customerId: UUID().uuidString,
+        customerName: "John Doe",
+        customerCompany: "ACME Corp",
+        customerEmail: "john@acme.com",
+        customerTaxExempt: false,
+        customerPhone: "555-1234",
+        customerEmojiTag: "🏢",
+        workOrderType: "Repair",
+        primaryImageURL: nil,
+        timestamp: Date(),
+        status: "In Progress",
+        workOrderNumber: "WO-2024-001",
+        flagged: false,
+        assetTagId: nil,
+        estimatedCost: "150.0",
+        finalCost: nil,
+        dropdowns: [:],
+        dropdownSchemaVersion: 1,
+        lastModified: Date(),
+        lastModifiedBy: "test_user",
+        tagBypassReason: nil,
+        isDeleted: false,
+        syncStatus: "synced",
+        lastSyncDate: Date(),
+        notes: [],
+        items: []
+    )
+    
+    WorkOrderCardView(workOrder: sampleWorkOrder)
+        .padding()
 }

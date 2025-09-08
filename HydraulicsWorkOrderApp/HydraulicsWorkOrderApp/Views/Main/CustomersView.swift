@@ -23,7 +23,7 @@ struct CustomersView: View {
         if !searchText.isEmpty {
             customers = customers.filter { customer in
                 customer.name.localizedCaseInsensitiveContains(searchText) ||
-                customer.phone.localizedCaseInsensitiveContains(searchText) ||
+                customer.phoneNumber.localizedCaseInsensitiveContains(searchText) ||
                 (customer.company?.localizedCaseInsensitiveContains(searchText) ?? false)
             }
         }
@@ -176,18 +176,10 @@ private struct CustomerRow: View {
                 Text(customer.name)
                     .font(.headline)
                 Spacer()
-                if let tag = customer.customerTag, !tag.isEmpty {
-                    Text(tag)
-                        .font(.caption)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 2)
-                        .background(Color.blue.opacity(0.1))
-                        .foregroundStyle(.blue)
-                        .clipShape(Capsule())
-                }
+                // Customer tag removed from model
             }
             
-            Text(customer.phone.formattedPhoneNumber)
+            Text(customer.phoneNumber.formattedPhoneNumber)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
             

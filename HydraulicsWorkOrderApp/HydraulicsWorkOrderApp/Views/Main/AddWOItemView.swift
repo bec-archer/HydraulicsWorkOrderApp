@@ -62,21 +62,24 @@ struct AddWOItemView: View {
 
         let newItem = WO_Item(
             id: UUID(),
-            woItemId: nil,  // Will be set when added to work order
-            tagId: tagId.isEmpty ? nil : tagId,
+            itemNumber: nil,  // Will be set when added to work order
+            assetTagId: tagId.isEmpty ? nil : tagId,
+            type: type,
             imageUrls: [],
             thumbUrls: [],
-            type: type,
+            localImages: [],
             dropdowns: [:],
             dropdownSchemaVersion: 1,
             reasonsForService: reason.isEmpty ? [] : [reason],
             reasonNotes: nil,
             completedReasons: [],
             statusHistory: [],
+            notes: [],
             testResult: nil,
             partsUsed: nil,
             hoursWorked: nil,
-            cost: nil,
+            estimatedCost: nil,
+            finalCost: nil,
             assignedTo: "",
             isFlagged: isFlagged,
             tagReplacementHistory: nil

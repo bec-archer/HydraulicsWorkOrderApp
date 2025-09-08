@@ -17,6 +17,7 @@ enum AppScreen {
     case customers
     case settings
     case userManager
+    case dropdownManager
     // Add more cases as needed (e.g., completedWorkOrders, etc.)
 }
 // END enum
@@ -65,8 +66,12 @@ class AppState: ObservableObject {
     
     // Navigate to a view and automatically collapse sidebar
     func navigateToView(_ view: AppScreen) {
+        print("🔍 DEBUG: AppState.navigateToView called with: \(view)")
+        print("🔍 DEBUG: Previous currentView: \(currentView)")
         currentView = view
+        print("🔍 DEBUG: New currentView: \(currentView)")
         splitVisibility = .detailOnly
+        print("🔍 DEBUG: Sidebar collapsed to detailOnly")
     }
 
 
@@ -91,7 +96,30 @@ class AppState: ObservableObject {
     }
 
 
-    private init() {}  // Singleton enforcement
+    private init() {
+        setupInactivityMonitoring()
+    }
+    
+    // MARK: - Setup
+    private func setupInactivityMonitoring() {
+        // Listen for inactivity logout notifications
+        NotificationCenter.default.addObserver(
+            forName: .inactivityLogout,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.handleInactivityLogout()
+            }
+        }
+    }
+    
+    private func handleInactivityLogout() {
+        // Reset to login screen
+        currentView = .login
+        currentUserName = ""
+        currentUserRole = .tech // Reset to default role
+    }
     
 
 }

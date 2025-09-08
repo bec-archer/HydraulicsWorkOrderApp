@@ -24,13 +24,13 @@ struct WorkOrderPreviewResolver {
     /// 3) First WO_Item full
     /// 4) Legacy plural first (older docs)
     static func bestCandidate(from workOrder: WorkOrder) -> String? {
-        let top       = workOrder.imageURL?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let top       = workOrder.primaryImageURL?.trimmingCharacters(in: .whitespacesAndNewlines)
         let itemThumb = workOrder.items.first?.thumbUrls.first?.trimmingCharacters(in: .whitespacesAndNewlines)
         let itemFull  = workOrder.items.first?.imageUrls.first?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let legacy    = workOrder.imageURLs?.first?.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Legacy field removed - was primaryImageURLs
 
         #if DEBUG
-        print("🔍 WorkOrderPreviewResolver for WO \(workOrder.WO_Number):")
+        print("🔍 WorkOrderPreviewResolver for WO \(workOrder.workOrderNumber):")
         print("  - items.count: \(workOrder.items.count)")
         if let firstItem = workOrder.items.first {
             print("  - firstItem.thumbUrls.count: \(firstItem.thumbUrls.count)")
@@ -38,13 +38,12 @@ struct WorkOrderPreviewResolver {
             print("  - top: \(top ?? "nil")")
             print("  - itemThumb: \(itemThumb ?? "nil")")
             print("  - itemFull: \(itemFull ?? "nil")")
-            print("  - legacy: \(legacy ?? "nil")")
         } else {
             print("  - No items found!")
         }
         #endif
 
-        return [top, itemFull, itemThumb, legacy]
+        return [top, itemFull, itemThumb]
             .compactMap { $0 }
             .first { !$0.isEmpty }
     }

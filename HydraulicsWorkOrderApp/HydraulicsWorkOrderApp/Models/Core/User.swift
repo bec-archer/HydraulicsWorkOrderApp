@@ -19,5 +19,28 @@ public struct User: Identifiable, Codable, Equatable {
     public var updatedAt: Date
     public var createdByUserId: String?
     public var updatedByUserId: String?
+    
+    // MARK: - Initializers
+    public init(
+        id: String,
+        displayName: String,
+        phoneE164: String?,
+        role: UserRole,
+        isActive: Bool,
+        createdAt: Date,
+        updatedAt: Date,
+        createdByUserId: String?,
+        updatedByUserId: String?
+    ) {
+        self.id = id
+        self.displayName = displayName
+        self.phoneE164 = phoneE164
+        self.role = role
+        self.isActive = isActive
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+        self.createdByUserId = createdByUserId
+        self.updatedByUserId = updatedByUserId
+    }
 }
 // END

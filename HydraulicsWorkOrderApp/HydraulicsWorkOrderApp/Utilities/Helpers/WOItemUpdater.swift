@@ -26,18 +26,17 @@ struct WOItemUpdater {
         workOrder.lastModified = note.timestamp
         workOrder.lastModifiedBy = note.user
 
-        if let woId = workOrder.id {
-            WorkOrdersDatabase.shared.addItemNote(
-                woId: woId,
-                itemId: itemId,
-                note: note
-            ) { result in
-                switch result {
-                case .success():
-                    print("✅ Note saved for item \(itemId)")
-                case .failure(let err):
-                    print("❌ Failed to save note: \(err.localizedDescription)")
-                }
+        if !workOrder.id.isEmpty {
+            let workOrderId = workOrder.id
+            Task { @MainActor in
+                WorkOrdersDatabase.shared.addItemNote(note, to: workOrderId, completion: { result in
+                    switch result {
+                    case .success():
+                        print("✅ Note saved for item \(itemId)")
+                    case .failure(let err):
+                        print("❌ Failed to save note: \(err.localizedDescription)")
+                    }
+                })
             }
         }
     }
@@ -53,26 +52,24 @@ struct WOItemUpdater {
         let ts = Date()
 
         let statusEntry = WO_Status(status: newStatus, user: user, timestamp: ts, notes: nil)
-        let noteEntry = WO_Note(user: user, text: "Status changed to \(newStatus)", timestamp: ts)
+        let noteEntry = WO_Note(workOrderId: workOrder.id, user: user, text: "Status changed to \(newStatus)", timestamp: ts)
 
         workOrder.items[idx].statusHistory.append(statusEntry)
         workOrder.items[idx].notes.append(noteEntry)
         workOrder.lastModified = ts
         workOrder.lastModifiedBy = user
 
-        if let woId = workOrder.id {
-            WorkOrdersDatabase.shared.updateItemStatusAndNote(
-                woId: woId,
-                itemId: itemId,
-                status: statusEntry,
-                mirroredNote: noteEntry
-            ) { result in
-                switch result {
-                case .success():
-                    print("✅ Status update saved for item \(itemId)")
-                case .failure(let err):
-                    print("❌ Failed to save status update: \(err.localizedDescription)")
-                }
+        if !workOrder.id.isEmpty {
+            let workOrderId = workOrder.id
+            Task { @MainActor in
+                WorkOrdersDatabase.shared.updateItemStatusAndNote(newStatus, note: noteEntry, for: workOrderId, completion: { result in
+                    switch result {
+                    case .success():
+                        print("✅ Status update saved for item \(itemId)")
+                    case .failure(let err):
+                        print("❌ Failed to save status update: \(err.localizedDescription)")
+                    }
+                })
             }
         }
     }

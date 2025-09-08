@@ -13,29 +13,19 @@
   - WO_Type: String
   - imageURL: String?
   - timestamp: Date
-  - status: String
   - WO_Number: String
   - flagged: Bool
-  - tagId: String?
-  - estimatedCost: String?
-  - finalCost: String?
-  - dropdowns: [String: String]
-  - dropdownSchemaVersion: Int
-  - lastModified: Date
-  - lastModifiedBy: String
-  - tagBypassReason: String?
-  - isDeleted: Bool
-  - notes: [WO_Note]
+  - cost: Decimal/Double <--should add up finalCosts from associated WO Items
+  - notes: [WO_Note] (separate item from Item Notes) 
   - items: Subcollection → /workOrders/{id}/items/{itemId}
 ```
 
 ### 🔩 `/items/{itemId}` (WO\_Item)
 
 ```
-  - tagId: String?
   - imageUrls: [String]
   - type: String
-  - dropdowns: [String: String]
+  - dropdowns: { [String: String] }
   - dropdownSchemaVersion: Int
   - reasonsForService: [String]
   - reasonNotes: String?
@@ -43,19 +33,40 @@
   - testResult: String?
   - partsUsed: String?
   - hoursWorked: String?
-  - cost: String?
   - assignedTo: String
   - isFlagged: Bool
   - tagReplacementHistory: [TagReplacement]?
+  - tagId: String?
+  - estimatedCost: Decimal/Double
+  - finalCost: Decimal/Double
+  - dropdowns: [String: String]
+  - dropdownSchemaVersion: Int
+  - lastModified: Date
+  - lastModifiedBy: String
+  - tagBypassReason: String?
+  - isDeleted: Bool
+  - notes: [WO_Note]
 ```
 
-### 🗒 `notes` (WO\_Note)
+### 🗒 `notes`
 
-```
-  - id: UUID
-  - user: String
-  - text: String
-  - timestamp: Date
+// ───── NOTES (two clear kinds) ─────
+struct WO_Note: Identifiable, Codable, Equatable {    // WorkOrder-level
+  let id: UUID
+  var workOrderId: UUID
+  var user: String
+  var text: String
+  var timestamp: Date
+}
+
+struct WO_ItemNote: Identifiable, Codable, Equatable { // Item-level
+  let id: UUID
+  var workOrderId: UUID
+  var itemId: UUID
+  var user: String
+  var text: String
+  var timestamp: Date
+}
 ```
 
 ### 🕒 `statusHistory` (WO\_Status)
@@ -96,12 +107,12 @@
 
 ```swift
 struct Customer: Identifiable, Codable {
-	let id: UUID
-	var name: String
-	var phone: String
-	var company: String?
-	var email: String?
-	var taxExempt: Bool
+    let id: UUID
+    var name: String
+    var phone: String
+    var company: String?
+    var email: String?
+    var taxExempt: Bool
 }
 ```
 

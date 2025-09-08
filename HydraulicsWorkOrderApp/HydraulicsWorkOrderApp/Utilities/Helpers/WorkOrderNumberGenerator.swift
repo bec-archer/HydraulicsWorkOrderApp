@@ -18,11 +18,21 @@ struct WorkOrderNumberGenerator {
 
     // ───── Public API (Creation-time only) ─────
 
-    /// Generates the next available work order number for today's date.
+    /// Generates a work order number for today's date (synchronous version for initialization).
     static func generateWorkOrderNumber() -> String {
         print("🚨🚨🚨 WORK ORDER NUMBER GENERATOR CALLED! 🚨🚨🚨")
         let today = Date()
-        let nextSequence = getNextSequenceForDate(today)
+        let nextSequence = 1 // Default to 1 for initialization, will be updated later if needed
+        let result = make(date: today, sequence: nextSequence)
+        print("🚨🚨🚨 Generated work order number: \(result) 🚨🚨🚨")
+        return result
+    }
+    
+    /// Generates the next available work order number for today's date (async version for database checking).
+    static func generateWorkOrderNumberAsync() async -> String {
+        print("🚨🚨🚨 WORK ORDER NUMBER GENERATOR CALLED! 🚨🚨🚨")
+        let today = Date()
+        let nextSequence = await getNextSequenceForDate(today)
         let result = make(date: today, sequence: nextSequence)
         print("🚨🚨🚨 Generated work order number: \(result) 🚨🚨🚨")
         return result
@@ -60,30 +70,32 @@ struct WorkOrderNumberGenerator {
     }
 
     /// Gets the next available sequence number for a given date by querying existing work orders.
-    private static func getNextSequenceForDate(_ date: Date) -> Int {
+    private static func getNextSequenceForDate(_ date: Date) async -> Int {
         let todayPrefix = prefix(from: date)
         print("🔍 DEBUG: Generating work order number for date: \(todayPrefix)")
         
-        let workOrders = WorkOrdersDatabase.shared.workOrders
+        let workOrders = await MainActor.run {
+            WorkOrdersDatabase.shared.workOrders
+        }
         print("🔍 DEBUG: Total work orders in database: \(workOrders.count)")
         
         let todaysWorkOrders = workOrders.filter { workOrder in
-            workOrder.WO_Number.hasPrefix(todayPrefix)
+            workOrder.workOrderNumber.hasPrefix(todayPrefix)
         }
         print("🔍 DEBUG: Work orders for today (\(todayPrefix)): \(todaysWorkOrders.count)")
         
         for wo in todaysWorkOrders {
-            print("🔍 DEBUG: Found today's WO: \(wo.WO_Number)")
+            print("🔍 DEBUG: Found today's WO: \(wo.workOrderNumber)")
         }
         
         let sequences = todaysWorkOrders.compactMap { workOrder -> Int? in
-            let components = workOrder.WO_Number.components(separatedBy: "-")
-            print("🔍 DEBUG: Parsing WO \(workOrder.WO_Number) - components: \(components)")
+            let components = workOrder.workOrderNumber.components(separatedBy: "-")
+            print("🔍 DEBUG: Parsing WO \(workOrder.workOrderNumber) - components: \(components)")
             
             guard components.count == 2,
                   let sequenceStr = components.last,
                   let sequence = Int(sequenceStr) else {
-                print("🔍 DEBUG: Failed to parse sequence from \(workOrder.WO_Number)")
+                print("🔍 DEBUG: Failed to parse sequence from \(workOrder.workOrderNumber)")
                 return nil
             }
             print("🔍 DEBUG: Successfully parsed sequence: \(sequence)")

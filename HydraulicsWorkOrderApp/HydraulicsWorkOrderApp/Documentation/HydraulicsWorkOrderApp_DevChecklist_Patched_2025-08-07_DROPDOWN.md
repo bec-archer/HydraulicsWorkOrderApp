@@ -32,7 +32,7 @@
 
   * [ ] QR Code scanned (or bypass reason selected)
   * [ ] At least one image captured
-  * [ ] Dropdowns selected and saved
+  * [ ] Dropdowns selected and saved (dropdowns + dropdownSchemaVersion live on WO_Item)
   * [ ] Reason(s) for service checked
   * [ ] Reasons for Service are catalog-managed:
     * Admin/SuperAdmin can add/edit/deactivate options
@@ -40,7 +40,7 @@
 
 * [ ] WorkOrder number auto-generated in format: `YYMMDD-001`, `001-A`, etc.
 
-* [ ] First image becomes card thumbnail
+* [ ] Card shows up to 4 images: the first image from up to four WO_Items (in item create order)
 
 * [ ] All WO\_Items show up under WorkOrderDetailView
 
@@ -51,12 +51,11 @@
 ## 🧑‍🔧 Status Update + Test Logic
 
 * [ ] Tech can mark WO\_Item:
-
   * [ ] In Progress
   * [ ] WO\_Item Done
   * [ ] Tested: PASS → enter Parts Used, Hours, Cost
-  * [ ] Mark WorkOrder as Completed → card turns gray
-* [ ] Tech can mark WorkOrder as Closed after completion
+  * [ ] Mark WorkOrder as Completed → card turns gray (roll-up derived from WO_Item statuses)
+* [ ] Tech can mark WorkOrder as Closed after completion (roll-up flag/timestamp on WorkOrder)
 * [ ] FAIL logic:
 
   * [ ] First FAIL = logged, no alert
@@ -91,9 +90,8 @@
 
 * [ ] Dropdown versioning:
 
-  * [ ] `WorkOrder` includes `dropdownSchemaVersion`
-  * [ ] Value is frozen at WO creation using `DropdownSchema.currentVersion`
-  * [ ] UI warns or disables edits if version mismatch is detected
+* [ ] Each `WO_Item` includes `dropdownSchemaVersion` (snapshot at item creation)
+* [ ] UI warns or disables edits on the item if version mismatch is detected
 
 * [ ] Conflict resolution logic in `SyncManager.swift`:
 
@@ -105,7 +103,7 @@
 
 * [ ] Images uploaded to Firebase Storage
 
-* [ ] WorkOrder includes image URL fallback logic
+* [ ] Card thumbnails derive from items.imageUrls (first image per WO_Item, up to 4); optional WO image cache is non-authoritative
 
 * [ ] Local SQLite backup created
 
@@ -114,6 +112,12 @@
 * [ ] SyncManager retries failed uploads
 
 * [ ] Offline mode queue confirmed
+
+* [ ] WorkOrder.finalCost is a computed aggregate (cents) = sum of items.finalCost; recompute on any item cost change
+
+* [ ] Collection-group index on `/workOrders/*/items`: (assignedToId ASC, status ASC) for “My Work Items”
+
+* [ ] DeletedWorkOrdersView filters by `workOrders.isDeleted == true`
 
 ---
 
@@ -124,7 +128,7 @@
 * [ ] Tap targets are iPad-friendly
 * [ ] Status badges are color-coded
 * [ ] All major actions timestamped and attributed to user
-* [ ] Completed WorkOrders appear grayed out
+* [ ] Completed WorkOrders appear grayed out (based on roll-up Completed)
 * [ ] Flagged WorkOrders show icon
 * [ ] Deleted WorkOrders hidden unless Admin or above
 * [ ] Fields always show `WorkOrder`, `WO_Item`, `WO_Note`, `WO_Status` — no "job" references
@@ -132,17 +136,21 @@
 * [ ] Fields support iPad keyboards + handwriting input
 * [ ] Managers see DropdownManagerView in read-only mode with a Request Change option
 * [ ] Admins can edit all dropdowns including Reasons for Service
+* [ ] Card shows up to 4 thumbnails (first image from up to four WO_Items)
+* [ ] DeletedWorkOrdersView lists `isDeleted == true`
 
 ---
 
 ## 🗃 Notes & History
 
-* [ ] WO\_Status and WO\_Note stored separately
-* [ ] Both displayed in `NotesTimelineView`
+* [ ] WO_Status and WO_Note stored separately
+* [ ] WorkOrder-level notes stored in `/workOrders/{woId}/workOrderNotes`
+* [ ] Item-level notes stored in `/workOrders/{woId}/items/{itemId}/itemNotes`
+* [ ] Both displayed together in `NotesTimelineView` (merged + sorted by timestamp desc)
 * [ ] User and timestamp shown on all entries
 * [ ] Notes allow freeform input
-* [ ] Status changes reflect dropdown + logic state
-* [ ] Status: Checked In, In Progress, Done, Tested: PASS/FAIL, Completed, Closed
+* [ ] Status changes reflect dropdown + logic state (status & statusHistory live on WO_Item)
+* [ ] Status: Checked In, In Progress, Done, Tested: PASS/FAIL at WO_Item level; WorkOrder uses roll-up Completed/Closed flags
 
 ---
 
@@ -150,10 +158,20 @@
 
 * [ ] Codebase avoids "job" or legacy terms
 * [ ] Developer toggles exist for:
-
   * [ ] Bypass tag scan enforcement
   * [ ] Disable login screen
 * [ ] WO\_Number generation tested across midnight rollover
 * [ ] Tag replacement logs are searchable by both old and new IDs
 * [ ] Offline-first behavior tested
 * [ ] Sample data can be reloaded on cold start
+
+### 🔧 Patch — PRD: Customer Emoji Tag
+
+#### Customer Emoji Tag (new)
+- Each Customer may have an optional **emoji tag** (e.g., 🔧, ⭐️).
+- Any signed-in user can set/change/remove the emoji from **Customer Detail**.
+- The emoji appears:
+  - Next to the customer name in **WorkOrderCardView** and **WorkOrderDetailView**.
+  - In **Customer lookup results** and the **Selected Customer Summary** in NewWorkOrderView.
+- Validation:
+  - Must be a single emoji (one visible symbol). If multiple characters are entered, keep the **first grapheme** and discard the rest.

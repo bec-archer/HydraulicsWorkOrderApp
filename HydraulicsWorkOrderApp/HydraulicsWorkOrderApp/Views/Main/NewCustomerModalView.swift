@@ -35,7 +35,7 @@ struct NewCustomerModalView: View {
     @State private var isSaving: Bool = false
     @FocusState private var focusedField: Field?
 
-    enum Field { case phone, name, company, email }
+    enum Field { case phoneNumber, name, company, email }
 
     // ───── BODY ─────
     var body: some View {
@@ -44,9 +44,9 @@ struct NewCustomerModalView: View {
                 // ───── Customer Info ─────
                 Section(header: Text("Customer Info")) {
                     TextField("Phone Number", text: $phone)
-                        .keyboardType(.phonePad)
+                        .keyboardType(.numberPad)
                         .textContentType(.telephoneNumber)
-                        .focused($focusedField, equals: .phone)
+                        .focused($focusedField, equals: .phoneNumber)
 
                     TextField("Full Name", text: $name)
                         .textContentType(.name)
@@ -105,7 +105,7 @@ struct NewCustomerModalView: View {
                 name = prefillName
                 phone = prefillPhone
                 // Focus the first empty field
-                if phone.isEmpty { focusedField = .phone }
+                if phone.isEmpty { focusedField = .phoneNumber }
                 else if name.isEmpty { focusedField = .name }
             }
         }
@@ -135,7 +135,7 @@ struct NewCustomerModalView: View {
         let newCustomer = Customer(
             id: UUID(),
             name: name.trimmingCharacters(in: .whitespacesAndNewlines),
-            phone: phoneDigits,
+            phoneNumber: phoneDigits,
             company: company.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : company,
             email: email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : email,
             taxExempt: taxExempt
@@ -144,11 +144,11 @@ struct NewCustomerModalView: View {
 
         // ───── Persistence Call ─────
         CustomerDatabase.shared.addCustomer(newCustomer) { result in
-            DispatchQueue.main.async {
+            Task { @MainActor in
                 isSaving = false
                 switch result {
                 case .success:
-                    print("✅ NewCustomerModalView SAVED:", newCustomer.id, newCustomer.name, newCustomer.phone) // TEMP LOG
+                    print("✅ NewCustomerModalView SAVED:", newCustomer.id, newCustomer.name, newCustomer.phoneNumber) // TEMP LOG
                     selectedCustomer = newCustomer
                     print("🔁 NewCustomerModalView INJECTED BACK TO PARENT") // TEMP LOG
                     dismiss()

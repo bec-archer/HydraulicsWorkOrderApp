@@ -14,6 +14,9 @@ class DropdownManager: ObservableObject {
 
     // Map of field keys to dropdown option arrays
     @Published var options: [String: [DropdownOption]] = [:]
+    
+    // Schema version management
+    private let versionService = DropdownVersionService.shared
 
     private init() {
         loadDefaults()

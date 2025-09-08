@@ -297,8 +297,8 @@ class OfflineManager: ObservableObject {
         db.collection("workOrders").document(item.id.uuidString).setData([
             "type": item.type,
             "dropdowns": item.dropdowns,
-            "notes": item.notes.map { $0.toDictionary() },
-            "statusHistory": item.statusHistory.map { $0.toDictionary() },
+            "notes": item.notes.map { try? JSONEncoder().encode($0) },
+            "statusHistory": item.statusHistory.map { try? JSONEncoder().encode($0) },
             "imageUrls": item.imageUrls,
             "thumbUrls": item.thumbUrls,
             "createdAt": Timestamp(date: Date())
@@ -318,8 +318,8 @@ class OfflineManager: ObservableObject {
         db.collection("workOrders").document(item.id.uuidString).updateData([
             "type": item.type,
             "dropdowns": item.dropdowns,
-            "notes": item.notes.map { $0.toDictionary() },
-            "statusHistory": item.statusHistory.map { $0.toDictionary() },
+            "notes": item.notes.map { try? JSONEncoder().encode($0) },
+            "statusHistory": item.statusHistory.map { try? JSONEncoder().encode($0) },
             "imageUrls": item.imageUrls,
             "thumbUrls": item.thumbUrls,
             "updatedAt": Timestamp(date: Date())

@@ -29,7 +29,7 @@ final class CustomerDatabase: ObservableObject {
         let lowerQuery = query.lowercased()
         return customers.filter {
             $0.name.lowercased().contains(lowerQuery) ||
-            $0.phone.contains(lowerQuery) ||
+            $0.phoneNumber.contains(lowerQuery) ||
             ($0.company?.lowercased().contains(lowerQuery) ?? false)
         }
     }
@@ -53,7 +53,7 @@ final class CustomerDatabase: ObservableObject {
 
                     guard
                         let name = data["name"] as? String,
-                        let phone = data["phone"] as? String
+                        let phone = data["phoneNumber"] as? String
                     else {
                         print("⚠️ Skipping customer \(doc.documentID): missing required fields")
                         return nil
@@ -62,8 +62,6 @@ final class CustomerDatabase: ObservableObject {
                     let company = data["company"] as? String
                     let email = data["email"] as? String
                     let taxExempt = data["taxExempt"] as? Bool ?? false
-                    let customerTag = data["customerTag"] as? String
-
                     // Prefer documentID if it is a UUID string; else try "id" field; else generate UUID
                     let docUUID = UUID(uuidString: doc.documentID)
                     let fieldUUID = (data["id"] as? String).flatMap(UUID.init(uuidString:))
@@ -72,11 +70,10 @@ final class CustomerDatabase: ObservableObject {
                     return Customer(
                         id: uuid,
                         name: name,
-                        phone: phone,
+                        phoneNumber: phone,
                         company: company,
                         email: email,
-                        taxExempt: taxExempt,
-                        customerTag: customerTag
+                        taxExempt: taxExempt
                     )
                 }
 

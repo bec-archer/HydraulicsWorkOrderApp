@@ -29,28 +29,26 @@ struct UserEditView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Info") {
-                    TextField("Display Name", text: $displayName).textInputAutocapitalization(.words)
-                    TextField("Phone (+15551234567)", text: $phoneE164).keyboardType(.phonePad)
+                Section(header: Text("Info")) {
+                    TextField("Display Name", text: $displayName)
+                    TextField("Phone (+15551234567)", text: $phoneE164)
                 }
-                Section("Role & Status") {
+                Section(header: Text("Role & Status")) {
                     Picker("Role", selection: $role) {
-                        ForEach(UserRole.allCases, id: \.self) { r in
-                            Text(r.rawValue.capitalized).tag(r)
+                        ForEach(UserRole.allCases, id: \.self) { role in
+                            Text(role.rawValue.capitalized).tag(role)
                         }
-                    }.disabled(!canAdjustRole)
-                    Toggle("Active", isOn: $isActive).disabled(!canAdjustRole)
+                    }
+                    Toggle("Active", isOn: $isActive)
                 }
                 Section {
-                    Button(mode == .create ? "Create User" : "Save Changes") { save() }
-                        .buttonStyle(.borderedProminent)
-                    Button("Cancel") { dismiss() }.buttonStyle(.bordered)
+                    Button("Save") { save() }
+                    Button("Cancel") { dismiss() }
                 }
             }
-            .navigationTitle(mode == .create ? "New User" : "Edit User")
+            .navigationTitle("User")
             .onAppear { bootstrap() }
         }
-        // END
     }
 
     private func bootstrap() {
@@ -65,20 +63,19 @@ struct UserEditView: View {
     private func save() {
         let now = Date()
         if mode == .create {
-            // SuperAdmin protections: Admin cannot create a SuperAdmin account
-            if appState.isAdmin && role == .superadmin {
-                // Silently ignore or show a toast in the calling view if desired.
-                return
-            }
-            let new = User(id: UUID().uuidString, displayName: displayName,
-                           phoneE164: phoneE164.isEmpty ? nil : phoneE164,
-                           role: role, isActive: isActive,
-                           createdAt: now, updatedAt: now,
-                           createdByUserId: nil, updatedByUserId: nil)
+            let new = User(
+                id: UUID().uuidString, 
+                displayName: displayName,
+                phoneE164: phoneE164.isEmpty ? nil : phoneE164,
+                role: role, 
+                isActive: isActive,
+                createdAt: now, 
+                updatedAt: now,
+                createdByUserId: nil, 
+                updatedByUserId: nil
+            )
             db.create(new)
         } else if var u = user {
-            if appState.isAdmin && u.role == .superadmin { return } // protect SuperAdmin
-            if appState.isAdmin && role == .superadmin { return } // prevent Admin from setting SuperAdmin
             u.displayName = displayName
             u.phoneE164   = phoneE164.isEmpty ? nil : phoneE164
             u.role        = role
@@ -90,9 +87,7 @@ struct UserEditView: View {
     }
 }
 
-// ───── PREVIEW ─────
 #Preview {
-    let s = AppState.previewLoggedIn(role: .superadmin)
-    return UserEditView(mode: .create, user: nil).environmentObject(s)
+    UserEditView(mode: .create, user: nil)
+        .environmentObject(AppState.previewLoggedIn(role: .superadmin))
 }
-// END

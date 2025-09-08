@@ -1,8 +1,10 @@
 
 # 🔽 WO_Item Dropdown & Checkbox Configuration
 
-This file defines the dropdown and checkbox field options used in `NewWorkOrderView` and `AddWOItemFormView`.
+> Managed by **DropdownManagerView**; Admin/SuperAdmin can add/reorder; updates should bump `dropdownSchemaVersion`.
 
+This file defines the dropdown and checkbox field options used in `NewWorkOrderView` and `AddWOItemFormView`.
+> **Note (QR Position Labels):** Admins may optionally define a small preset list for QR **Position Labels** (e.g., A/B/C, Left/Right, Rod/Cap). The UI must still allow free-text entry when a preset doesn’t apply.
 ---
 
 ## 🧩 Dropdown Fields
@@ -21,14 +23,14 @@ List each dropdown field as a section, followed by its available options.
 - 24" - 36"
 - > 36"
 
-### color (I want to show the corresponding hex in the dropdown)
+### color (display **name + hex**; “Other” opens a color picker)
 - Black|#000000
 - Red|#FF0000
 - Yellow|#FFC500
 - White|#FFFFFF
 - Gray|#808080
 - Orange|#F7941D
-- Other 🙏🏻 Can we make this a color picker?
+- Other (opens color picker)
 
 ### machineType
 - Forklift
@@ -51,14 +53,6 @@ List each dropdown field as a section, followed by its available options.
 - Takeuchi
 - Terex
 - Vermeer
-- Other
-
-### machineType
-- Forklift
-- Skid Steer
-- Tractor
-- Truck
-- Trailer
 - Other
 
 ### waitTime
@@ -87,4 +81,4 @@ This field supports **multi-select**. List all options here.
 - Fittings - Replace
 - Hard Lines - Repair
 - Hard Lines - Replace
-- Other (opens Service Notes)
+- Other (**requires** `reasonNotes` — saved in the item’s dedicated reasonNotes field)

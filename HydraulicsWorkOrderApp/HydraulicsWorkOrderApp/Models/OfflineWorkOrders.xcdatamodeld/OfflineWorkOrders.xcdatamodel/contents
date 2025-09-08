@@ -7,4 +7,102 @@
         <attribute name="pendingChanges" optional="YES" attributeType="Binary"/>
         <attribute name="woNumber" optional="YES" attributeType="String"/>
     </entity>
+    <entity name="CDCustomer" representedClassName="CDCustomer" syncable="YES" codeGenerationType="class">
+        <attribute name="company" optional="YES" attributeType="String"/>
+        <attribute name="email" optional="YES" attributeType="String"/>
+        <attribute name="id" optional="NO" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="lastModified" optional="NO" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="lastSyncDate" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="name" optional="NO" attributeType="String"/>
+        <attribute name="phoneNumber" optional="NO" attributeType="String"/>
+        <attribute name="syncStatus" optional="NO" attributeType="String" defaultValueString="pending"/>
+        <attribute name="taxExempt" optional="NO" attributeType="Boolean" usesScalarValueType="YES"/>
+        <relationship name="workOrders" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="CDWorkOrder" inverseName="customer" inverseEntity="CDWorkOrder"/>
+    </entity>
+    <entity name="CDTagReplacement" representedClassName="CDTagReplacement" syncable="YES" codeGenerationType="class">
+        <attribute name="id" optional="NO" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="newTagId" optional="YES" attributeType="String"/>
+        <attribute name="oldTagId" optional="YES" attributeType="String"/>
+        <attribute name="reason" optional="YES" attributeType="String"/>
+        <attribute name="replacedBy" optional="YES" attributeType="String"/>
+        <attribute name="timestamp" optional="NO" attributeType="Date" usesScalarValueType="NO"/>
+        <relationship name="woItem" optional="NO" maxCount="1" deletionRule="Nullify" destinationEntity="CDWOItem" inverseName="tagReplacementHistory" inverseEntity="CDWOItem"/>
+    </entity>
+    <entity name="CDWONote" representedClassName="CDWONote" syncable="YES" codeGenerationType="class">
+        <attribute name="id" optional="NO" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="itemId" optional="YES" attributeType="String"/>
+        <attribute name="text" optional="NO" attributeType="String"/>
+        <attribute name="timestamp" optional="NO" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="user" optional="NO" attributeType="String"/>
+        <attribute name="workOrderId" optional="NO" attributeType="String"/>
+        <relationship name="workOrder" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="CDWorkOrder" inverseName="notes" inverseEntity="CDWorkOrder"/>
+        <relationship name="woItem" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="CDWOItem" inverseName="notes" inverseEntity="CDWOItem"/>
+    </entity>
+    <entity name="CDWOItem" representedClassName="CDWOItem" syncable="YES" codeGenerationType="class">
+        <attribute name="assignedTo" optional="YES" attributeType="String"/>
+        <attribute name="completedReasons" optional="YES" attributeType="Transformable" valueTransformerName="NSSecureUnarchiveFromData" customClassName="[String]"/>
+        <attribute name="cost" optional="YES" attributeType="Decimal" usesScalarValueType="NO"/>
+        <attribute name="dropdowns" optional="YES" attributeType="Transformable" valueTransformerName="NSSecureUnarchiveFromData" customClassName="[String : String]"/>
+        <attribute name="dropdownSchemaVersion" optional="NO" attributeType="Integer 32" defaultValueString="1" usesScalarValueType="YES"/>
+        <attribute name="estimatedCost" optional="YES" attributeType="Decimal" usesScalarValueType="NO"/>
+        <attribute name="finalCost" optional="YES" attributeType="Decimal" usesScalarValueType="NO"/>
+        <attribute name="hoursWorked" optional="YES" attributeType="String"/>
+        <attribute name="id" optional="NO" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="imageUrls" optional="YES" attributeType="Transformable" valueTransformerName="NSSecureUnarchiveFromData" customClassName="[String]"/>
+        <attribute name="isDeleted" optional="NO" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
+        <attribute name="isFlagged" optional="NO" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
+        <attribute name="itemNumber" optional="YES" attributeType="String"/>
+        <attribute name="lastModified" optional="NO" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="lastModifiedBy" optional="YES" attributeType="String"/>
+        <attribute name="lastSyncDate" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="partsUsed" optional="YES" attributeType="String"/>
+        <attribute name="reasonNotes" optional="YES" attributeType="String"/>
+        <attribute name="reasonsForService" optional="YES" attributeType="Transformable" valueTransformerName="NSSecureUnarchiveFromData" customClassName="[String]"/>
+        <attribute name="statusHistory" optional="YES" attributeType="Transformable" valueTransformerName="NSSecureUnarchiveFromData" customClassName="[CDWOStatus]"/>
+        <attribute name="syncStatus" optional="NO" attributeType="String" defaultValueString="pending"/>
+        <attribute name="tagBypassReason" optional="YES" attributeType="String"/>
+        <attribute name="testResult" optional="YES" attributeType="String"/>
+        <attribute name="thumbUrls" optional="YES" attributeType="Transformable" valueTransformerName="NSSecureUnarchiveFromData" customClassName="[String]"/>
+        <attribute name="type" optional="NO" attributeType="String"/>
+        <relationship name="notes" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="CDWONote" inverseName="woItem" inverseEntity="CDWONote"/>
+        <relationship name="tagReplacementHistory" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="CDTagReplacement" inverseName="woItem" inverseEntity="CDWOItem"/>
+        <relationship name="workOrder" optional="NO" maxCount="1" deletionRule="Nullify" destinationEntity="CDWorkOrder" inverseName="items" inverseEntity="CDWorkOrder"/>
+    </entity>
+    <entity name="CDWOStatus" representedClassName="CDWOStatus" syncable="YES" codeGenerationType="class">
+        <attribute name="id" optional="NO" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="notes" optional="YES" attributeType="String"/>
+        <attribute name="status" optional="NO" attributeType="String"/>
+        <attribute name="timestamp" optional="NO" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="user" optional="NO" attributeType="String"/>
+        <relationship name="woItem" optional="NO" maxCount="1" deletionRule="Nullify" destinationEntity="CDWOItem" inverseName="statusHistory" inverseEntity="CDWOItem"/>
+    </entity>
+    <entity name="CDWorkOrder" representedClassName="CDWorkOrder" syncable="YES" codeGenerationType="class">
+        <attribute name="createdBy" optional="NO" attributeType="String"/>
+        <attribute name="customerCompany" optional="YES" attributeType="String"/>
+        <attribute name="customerEmail" optional="YES" attributeType="String"/>
+        <attribute name="customerId" optional="NO" attributeType="String"/>
+        <attribute name="customerName" optional="NO" attributeType="String"/>
+        <attribute name="customerPhone" optional="NO" attributeType="String"/>
+        <attribute name="customerTaxExempt" optional="NO" attributeType="Boolean" usesScalarValueType="YES"/>
+        <attribute name="dropdowns" optional="YES" attributeType="Transformable" valueTransformerName="NSSecureUnarchiveFromData" customClassName="[String : String]"/>
+        <attribute name="dropdownSchemaVersion" optional="NO" attributeType="Integer 32" defaultValueString="1" usesScalarValueType="YES"/>
+        <attribute name="estimatedCost" optional="YES" attributeType="String"/>
+        <attribute name="finalCost" optional="YES" attributeType="String"/>
+        <attribute name="flagged" optional="NO" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
+        <attribute name="id" optional="NO" attributeType="String"/>
+        <attribute name="lastModified" optional="NO" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="lastModifiedBy" optional="NO" attributeType="String"/>
+        <attribute name="lastSyncDate" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="primaryImageURL" optional="YES" attributeType="String"/>
+        <attribute name="status" optional="NO" attributeType="String"/>
+        <attribute name="syncStatus" optional="NO" attributeType="String" defaultValueString="pending"/>
+        <attribute name="tagBypassReason" optional="YES" attributeType="String"/>
+        <attribute name="tagId" optional="YES" attributeType="String"/>
+        <attribute name="timestamp" optional="NO" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="workOrderNumber" optional="NO" attributeType="String"/>
+        <attribute name="workOrderType" optional="NO" attributeType="String"/>
+        <relationship name="customer" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="CDCustomer" inverseName="workOrders" inverseEntity="CDCustomer"/>
+        <relationship name="items" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="CDWOItem" inverseName="workOrder" inverseEntity="CDWOItem"/>
+        <relationship name="notes" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="CDWONote" inverseName="workOrder" inverseEntity="CDWONote"/>
+    </entity>
 </model>

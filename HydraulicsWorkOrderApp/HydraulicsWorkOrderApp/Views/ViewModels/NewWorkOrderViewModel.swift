@@ -1,6 +1,6 @@
 import SwiftUI
 import Combine
-import FirebaseFirestore
+import Foundation
 
 @MainActor
 class NewWorkOrderViewModel: ObservableObject {
@@ -16,6 +16,10 @@ class NewWorkOrderViewModel: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
     private let workOrdersDB = WorkOrdersDatabase.shared
     private let customerDB = CustomerDatabase.shared
+    private let imageService = ImageManagementService.shared
+    private let validationService = ValidationService.shared
+    private let stateService = StateManagementService.shared
+    private let versionService = DropdownVersionService.shared
     
     // MARK: - Computed Properties
     var workOrderNumber: String {
@@ -27,10 +31,9 @@ class NewWorkOrderViewModel: ObservableObject {
     }
     
     var hasValidItems: Bool {
-        !items.isEmpty && items.allSatisfy { item in
-            itemHasType(item) && 
-            itemHasPhoto(item) && 
-            !item.reasonsForService.isEmpty
+        let nonBlankItems = items.filter { !isBlankItem($0) }
+        return !nonBlankItems.isEmpty && nonBlankItems.allSatisfy { item in
+            validationService.validateItem(item).isValid
         }
     }
     
@@ -63,8 +66,10 @@ class NewWorkOrderViewModel: ObservableObject {
     
     // MARK: - Initialization
     init() {
+        print("🔍 DEBUG: NewWorkOrderViewModel initializing")
         setupBindings()
         addInitialItem()
+        print("🔍 DEBUG: NewWorkOrderViewModel initialized with \(items.count) items")
     }
     
     // MARK: - Setup
@@ -88,11 +93,24 @@ class NewWorkOrderViewModel: ObservableObject {
         .assign(to: &$canCheckIn)
     }
     
+    /// Add initial blank item when view model is created
+    private func addInitialItem() {
+        print("🔍 DEBUG: addInitialItem called, items.count = \(items.count)")
+        if items.isEmpty {
+            print("🔍 DEBUG: Adding initial item")
+            addItem()
+            print("🔍 DEBUG: After adding initial item, items.count = \(items.count)")
+        } else {
+            print("🔍 DEBUG: Items already exist, skipping initial item")
+        }
+    }
+    
     // MARK: - Public Methods
     
     /// Add a new blank item to the work order
     func addItem() {
-        let newItem = WO_Item.blank()
+        var newItem = WO_Item.create()
+        newItem.dropdownSchemaVersion = DropdownSchema.currentVersion
         items.append(newItem)
     }
     
@@ -113,7 +131,53 @@ class NewWorkOrderViewModel: ObservableObject {
         items[index] = item
     }
     
-    /// Save the work order to Firebase
+    // MARK: - Image Management
+    
+    /// Upload images for a specific item
+    func uploadImages(_ images: [UIImage], for itemIndex: Int) async {
+        guard itemIndex >= 0 && itemIndex < items.count else { return }
+        
+        do {
+            let workOrderId = UUID().uuidString // Generate temporary ID
+            let itemId = items[itemIndex].id
+            
+            var uploadedURLs: [String] = []
+            var uploadedThumbURLs: [String] = []
+            
+            for image in images {
+                let imageURL = try await imageService.uploadSingleImage(image, for: workOrderId, itemId: itemId)
+                uploadedURLs.append(imageURL)
+            }
+            
+            // Get thumbnail URLs after all images are uploaded
+            uploadedThumbURLs = try await imageService.getThumbnailURLs(for: workOrderId, itemId: itemId)
+            
+            // Update the item with uploaded URLs
+            items[itemIndex].imageUrls.append(contentsOf: uploadedURLs)
+            items[itemIndex].thumbUrls.append(contentsOf: uploadedThumbURLs)
+            
+        } catch {
+            setError("Failed to upload images: \(error.localizedDescription)")
+        }
+    }
+    
+    /// Delete an image from a specific item
+    func deleteImage(_ imageURL: String, from itemIndex: Int) async {
+        guard itemIndex >= 0 && itemIndex < items.count else { return }
+        
+        do {
+            try await imageService.deleteImage(imageURL)
+            
+            // Remove from local arrays
+            items[itemIndex].imageUrls.removeAll { $0 == imageURL }
+            items[itemIndex].thumbUrls.removeAll { $0 == imageURL }
+            
+        } catch {
+            setError("Failed to delete image: \(error.localizedDescription)")
+        }
+    }
+    
+    /// Save the work order to Core Data
     func saveWorkOrder() async {
         // ───── Required Field Validation ─────
         guard let customer = selectedCustomer else {
@@ -121,18 +185,25 @@ class NewWorkOrderViewModel: ObservableObject {
             return
         }
         
-        // ───── Discard Blank Items; Block on Partials ─────
-        // 1) Drop items with neither type nor photo (true blanks)
+        // ───── Use ValidationService for comprehensive validation ─────
         let nonBlankItems = items.filter { !isBlankItem($0) }
         
-        // 2) If any partially filled item remains, bump user to finish it
-        if let firstPartialIdx = nonBlankItems.firstIndex(where: { isPartiallyFilledItem($0) }) {
-            setError("Please finish the highlighted WO_Item. Each item needs a Type and at least one Photo.")
+        // Validate customer
+        let customerValidation = validationService.validateCustomer(customer)
+        if !customerValidation.isValid {
+            setError("Customer validation failed: \(customerValidation.errors.joined(separator: ", "))")
             return
         }
         
-        // 3) Must have at least one complete item to proceed
-        guard !nonBlankItems.isEmpty, nonBlankItems.contains(where: { isCompleteItem($0) }) else {
+        // Validate items
+        let itemsValidation = validationService.validateItems(nonBlankItems)
+        if !itemsValidation.isValid {
+            setError("Item validation failed: \(itemsValidation.errors.joined(separator: ", "))")
+            return
+        }
+        
+        // Must have at least one complete item to proceed
+        guard !nonBlankItems.isEmpty else {
             setError("Add at least one WO_Item with a Type and Photo before checking in.")
             return
         }
@@ -143,7 +214,7 @@ class NewWorkOrderViewModel: ObservableObject {
         do {
             // ───── DEBUG LOG ─────
             print("🔍 SAVING: Starting work order save")
-            print("Customer: \(customer.name) – \(customer.phone)")
+            print("Customer: \(customer.name) – \(customer.phoneNumber)")
             print("WO_Items count: \(items.count)")
             for (i, item) in items.enumerated() {
                 print("  Item[\(i)] id=\(item.id) type=\(item.type) " +
@@ -154,24 +225,36 @@ class NewWorkOrderViewModel: ObservableObject {
             let itemsSnapshot = nonBlankItems
             let builtItems: [WO_Item] = itemsSnapshot.map { $0 }
             
+            #if DEBUG
+            print("🔍 BUILDING: WorkOrder with \(builtItems.count) items")
+            for (i, item) in builtItems.enumerated() {
+                print("  Built Item[\(i)]: type='\(item.type)', dropdowns[type]='\(item.dropdowns["type"] ?? "nil")'")
+                print("    imageUrls: \(item.imageUrls), thumbUrls: \(item.thumbUrls)")
+                print("    reasons: \(item.reasonsForService)")
+                print("    dropdowns: \(item.dropdowns)")
+                print("    statusHistory: \(item.statusHistory.count)")
+                print("    notes: \(item.notes.count)")
+            }
+            #endif
+            
             // ───── Build WorkOrder (ALL required fields) ─────
             let workOrder = WorkOrder(
-                id: nil,                                   // @DocumentID → Firestore assigns; don't seed this
+                id: UUID().uuidString,                    // Generate new UUID for Core Data
                 createdBy: "Tech",
                 customerId: customer.id.uuidString,
                 customerName: customer.name,
                 customerCompany: customer.company,
                 customerEmail: customer.email,
                 customerTaxExempt: customer.taxExempt,
-                customerPhone: customer.phone,
-                WO_Type: "Intake",
-                imageURL: nil,                             // Will be set when images are uploaded
-                imageURLs: [],                             // Initialize as empty array instead of nil
+                customerPhone: customer.phoneNumber,       // Updated to use phoneNumber
+                customerEmojiTag: customer.emojiTag,      // Include customer emoji tag
+                workOrderType: "Intake",                  // Updated field name
+                primaryImageURL: nil,                     // Will be set when images are uploaded
                 timestamp: Date(),
                 status: "Checked In",
-                WO_Number: workOrderNumber,
+                workOrderNumber: workOrderNumber,         // Updated field name
                 flagged: false,
-                tagId: nil,
+                assetTagId: nil,
                 estimatedCost: nil,
                 finalCost: nil,
                 dropdowns: [:],
@@ -180,19 +263,21 @@ class NewWorkOrderViewModel: ObservableObject {
                 lastModifiedBy: "Tech",
                 tagBypassReason: nil,
                 isDeleted: false,
+                syncStatus: "pending",                    // Mark as pending sync
+                lastSyncDate: nil,                        // No sync date yet
                 notes: [],
                 items: builtItems
             )
             
             // ───── Persist via WorkOrdersDatabase ─────
             #if DEBUG
-            print("🚀 Attempting to save WorkOrder: \(workOrder.WO_Number)")
+            print("🚀 Attempting to save WorkOrder: \(workOrder.workOrderNumber)")
             #endif
             
             try await workOrdersDB.addWorkOrder(workOrder)
             
             #if DEBUG
-            print("✅ WorkOrder saved successfully: \(workOrder.WO_Number)")
+            print("✅ WorkOrder saved successfully: \(workOrder.workOrderNumber)")
             #endif
             
         } catch {
@@ -212,12 +297,6 @@ class NewWorkOrderViewModel: ObservableObject {
     }
     
     // MARK: - Private Methods
-    
-    private func addInitialItem() {
-        if items.isEmpty {
-            items.append(WO_Item())
-        }
-    }
     
     private func setError(_ message: String) {
         errorMessage = message

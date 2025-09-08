@@ -1,6 +1,7 @@
 import SwiftUI
 import Combine
 import FirebaseFirestore
+import Foundation
 
 @MainActor
 class WorkOrderDetailViewModel: ObservableObject {
@@ -16,30 +17,33 @@ class WorkOrderDetailViewModel: ObservableObject {
     // MARK: - Private Properties
     private var cancellables = Set<AnyCancellable>()
     private let workOrdersDB = WorkOrdersDatabase.shared
+    private let imageService = ImageManagementService.shared
+    private let validationService = ValidationService.shared
+    private let stateService = StateManagementService.shared
     
     // MARK: - Computed Properties
     var customerName: String {
-        workOrder.customer.name
+        workOrder.customerName
     }
     
     var customerCompany: String? {
-        workOrder.customer.company
+        workOrder.customerCompany
     }
     
     var customerEmail: String? {
-        workOrder.customer.email
+        workOrder.customerEmail
     }
     
     var customerPhone: String {
-        workOrder.customer.phone
+        workOrder.customerPhone
     }
     
     var isTaxExempt: Bool {
-        workOrder.customer.isTaxExempt
+        workOrder.customerTaxExempt
     }
     
-    var currentStatus: WO_Status {
-        workOrder.statusHistory.last ?? WO_Status(status: .checkedIn, timestamp: workOrder.createdDate, note: "Work order checked in")
+    var currentStatus: String {
+        workOrder.status
     }
     
     // MARK: - Initialization
@@ -61,9 +65,9 @@ class WorkOrderDetailViewModel: ObservableObject {
         NotificationCenter.default.publisher(for: .WorkOrderSaved)
             .sink { [weak self] notification in
                 guard let self = self,
-                      let woId = notification.object as? String,
+                      let _ = notification.object as? String,
                       let woNumber = notification.userInfo?["WO_Number"] as? String,
-                      woNumber == self.workOrder.WO_Number else { return }
+                      woNumber == self.workOrder.workOrderNumber else { return }
                 
                 // Update the work order from the database
                 Task { @MainActor in
@@ -76,7 +80,7 @@ class WorkOrderDetailViewModel: ObservableObject {
     // MARK: - Public Methods
     
     /// Update the status of a specific item
-    func updateItemStatus(_ status: WorkOrderStatus, for itemIndex: Int, note: String? = nil) async {
+    func updateItemStatus(_ status: String, for itemIndex: Int, note: String? = nil) async {
         guard itemIndex >= 0 && itemIndex < workOrder.items.count else {
             setError("Invalid item index")
             return
@@ -89,9 +93,9 @@ class WorkOrderDetailViewModel: ObservableObject {
             // Create new status entry
             let newStatus = WO_Status(
                 status: status,
+                user: "current_user", // TODO: Get from auth
                 timestamp: Date(),
-                note: note ?? "Status updated to \(status.rawValue)",
-                itemId: workOrder.items[itemIndex].id
+                notes: note ?? "Status updated to \(status)"
             )
             
             // Update the work order
@@ -126,10 +130,12 @@ class WorkOrderDetailViewModel: ObservableObject {
         
         do {
             let newNote = WO_Note(
+                workOrderId: workOrder.id,
+                itemId: workOrder.items[itemIndex].id.uuidString,
+                user: "current_user",
                 text: noteText,
                 timestamp: Date(),
-                author: "current_user", // TODO: Get from auth
-                imageURL: imageURL
+                imageUrls: imageURL != nil ? [imageURL!] : []
             )
             
             // Add note to the item
@@ -191,11 +197,11 @@ class WorkOrderDetailViewModel: ObservableObject {
         isLoading = true
         errorMessage = nil
         
-        print("🔄 WorkOrderDetailViewModel: Starting refresh for \(workOrder.WO_Number)")
+        print("🔄 WorkOrderDetailViewModel: Starting refresh for \(workOrder.workOrderNumber)")
         
         do {
             let updatedWorkOrder = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<WorkOrder, Error>) in
-                workOrdersDB.fetchWorkOrder(woId: workOrder.id ?? "") { result in
+                workOrdersDB.fetchWorkOrder(woId: workOrder.id) { result in
                     switch result {
                     case .success(let wo):
                         continuation.resume(returning: wo)
@@ -210,7 +216,7 @@ class WorkOrderDetailViewModel: ObservableObject {
                 let newImageCount = updatedWorkOrder.items.first?.imageUrls.count ?? 0
                 
                 self.workOrder = updatedWorkOrder
-                print("🔄 WorkOrderDetailViewModel: Refreshed work order \(workOrder.WO_Number)")
+                print("🔄 WorkOrderDetailViewModel: Refreshed work order \(workOrder.workOrderNumber)")
                 print("  - Old image count: \(oldImageCount)")
                 print("  - New image count: \(newImageCount)")
                 print("  - Items updated: \(updatedWorkOrder.items.count)")
@@ -234,6 +240,123 @@ class WorkOrderDetailViewModel: ObservableObject {
         item.completedReasons.contains(reason)
     }
     
+    /// Replace a tag for a work order item
+    func replaceTag(_ replacement: TagReplacement, for item: WO_Item) async {
+        isLoading = true
+        errorMessage = nil
+        
+        do {
+            // Find the item index
+            guard let itemIndex = workOrder.items.firstIndex(where: { $0.id == item.id }) else {
+                setError("Item not found in work order")
+                return
+            }
+            
+            // Update the item's tag ID
+            workOrder.items[itemIndex].assetTagId = replacement.newTagId
+            
+            // Add the replacement to the history
+            if workOrder.items[itemIndex].tagReplacementHistory == nil {
+                workOrder.items[itemIndex].tagReplacementHistory = []
+            }
+            workOrder.items[itemIndex].tagReplacementHistory?.append(replacement)
+            
+            // Update last modified info
+            workOrder.items[itemIndex].lastModified = Date()
+            workOrder.items[itemIndex].lastModifiedBy = "current_user" // TODO: Get from auth
+            workOrder.lastModified = Date()
+            workOrder.lastModifiedBy = "current_user" // TODO: Get from auth
+            
+            // Save to database
+            try await workOrdersDB.updateWorkOrder(workOrder)
+            
+            print("✅ WorkOrderDetailViewModel: Tag replaced from '\(replacement.oldTagId)' to '\(replacement.newTagId)'")
+            
+        } catch {
+            print("❌ WorkOrderDetailViewModel: Error replacing tag: \(error)")
+            setError("Failed to replace tag: \(error.localizedDescription)")
+        }
+        
+        isLoading = false
+    }
+    
+    /// Toggle the flagged status of the work order
+    func toggleFlagged() async {
+        isLoading = true
+        errorMessage = nil
+        
+        do {
+            workOrder.flagged.toggle()
+            workOrder.lastModified = Date()
+            workOrder.lastModifiedBy = "current_user" // TODO: Get from auth
+            
+            try await workOrdersDB.updateWorkOrder(workOrder)
+            
+        } catch {
+            setError("Failed to toggle flag: \(error.localizedDescription)")
+        }
+        
+        isLoading = false
+    }
+    
+    /// Mark the work order as completed
+    func markCompleted() async {
+        isLoading = true
+        errorMessage = nil
+        
+        do {
+            workOrder.status = "Completed"
+            workOrder.lastModified = Date()
+            workOrder.lastModifiedBy = "current_user" // TODO: Get from auth
+            
+            try await workOrdersDB.updateWorkOrder(workOrder)
+            
+        } catch {
+            setError("Failed to mark as completed: \(error.localizedDescription)")
+        }
+        
+        isLoading = false
+    }
+    
+    /// Mark the work order as closed
+    func markClosed() async {
+        isLoading = true
+        errorMessage = nil
+        
+        do {
+            workOrder.status = "Closed"
+            workOrder.lastModified = Date()
+            workOrder.lastModifiedBy = "current_user" // TODO: Get from auth
+            
+            try await workOrdersDB.updateWorkOrder(workOrder)
+            
+        } catch {
+            setError("Failed to mark as closed: \(error.localizedDescription)")
+        }
+        
+        isLoading = false
+    }
+    
+    /// Delete the work order
+    func deleteWorkOrder() async {
+        isLoading = true
+        errorMessage = nil
+        
+        do {
+            try await workOrdersDB.deleteWorkOrder(workOrder.id)
+            
+        } catch {
+            setError("Failed to delete work order: \(error.localizedDescription)")
+        }
+        
+        isLoading = false
+    }
+    
+    /// Add a note to a specific item (simplified version)
+    func addItemNote(_ note: WO_Note, to itemIndex: Int) async {
+        await addNote(note.text, to: itemIndex)
+    }
+    
     // MARK: - Private Methods
     
     private func setError(_ message: String) {
@@ -244,37 +367,41 @@ class WorkOrderDetailViewModel: ObservableObject {
 
 // MARK: - Helper Extensions
 extension WorkOrderDetailViewModel {
-    func getStatusColor(_ status: WorkOrderStatus) -> Color {
-        switch status {
-        case .checkedIn:
+    func getStatusColor(_ status: String) -> Color {
+        switch status.lowercased() {
+        case "checked in":
             return .blue
-        case .disassembly:
+        case "disassembly":
             return .teal
-        case .inProgress:
+        case "in progress":
             return .yellow
-        case .testFailed:
+        case "test failed":
             return .red
-        case .complete:
+        case "complete", "done":
             return .green
-        case .closed:
+        case "closed":
+            return .gray
+        default:
             return .gray
         }
     }
     
-    func getStatusDisplayName(_ status: WorkOrderStatus) -> String {
-        switch status {
-        case .checkedIn:
+    func getStatusDisplayName(_ status: String) -> String {
+        switch status.lowercased() {
+        case "checked in":
             return "Checked In"
-        case .disassembly:
+        case "disassembly":
             return "Disassembly"
-        case .inProgress:
+        case "in progress":
             return "In Progress"
-        case .testFailed:
+        case "test failed":
             return "Test Failed"
-        case .complete:
+        case "complete", "done":
             return "Complete"
-        case .closed:
+        case "closed":
             return "Closed"
+        default:
+            return status
         }
     }
 }

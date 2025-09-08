@@ -93,14 +93,10 @@ struct AddWOItemFormView: View {
             Text("Photos")
                 .font(.headline)
             PhotoCaptureUploadView(
-                imageURLs: $item.imageUrls,
-                thumbURLs: $item.thumbUrls,
+                localImages: .constant([]),
+                imageURLs: item.imageUrls,
                 woId: woId,
-                woItemId: item.id,
-                showQR: true,
-                onScanQR: {
-                    print("Scan QR Code tapped for item \(item.id)")
-                },
+                woItemId: item.id.uuidString,
                 onImagesChanged: {
                     hasTouchedRequired = true
                 }
