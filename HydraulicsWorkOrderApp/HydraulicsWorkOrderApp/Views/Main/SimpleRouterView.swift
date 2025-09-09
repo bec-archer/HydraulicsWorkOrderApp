@@ -42,13 +42,12 @@ struct SimpleRouterView: View {
                         .font(.subheadline)
                         .foregroundColor(.secondary)
                     
-                    Button {
-                        print("🔍 DEBUG: Logout button tapped")
-                        // Reset user state
-                        appState.currentUserRole = .tech
-                        appState.currentUserName = "Guest"
-                        appState.currentView = .login
-                    } label: {
+                            Button {
+                                print("🔍 DEBUG: Logout button tapped")
+                                // Reset user state
+                                appState.currentUser = nil
+                                appState.currentView = .login
+                            } label: {
                         Image(systemName: "rectangle.portrait.and.arrow.right")
                             .font(.title2)
                             .foregroundColor(.red)
@@ -114,13 +113,21 @@ struct SimpleRouterView: View {
                                 onTap: { isSidebarVisible = false }
                             )
                             
-                            NavigationButton(
-                                title: "Settings",
-                                icon: "gearshape.fill",
-                                targetView: .settings,
-                                currentView: appState.currentView,
-                                onTap: { isSidebarVisible = false }
-                            )
+                                    NavigationButton(
+                                        title: "My Login Info",
+                                        icon: "person.circle",
+                                        targetView: .myLoginInfo,
+                                        currentView: appState.currentView,
+                                        onTap: { isSidebarVisible = false }
+                                    )
+                                    
+                                    NavigationButton(
+                                        title: "Settings",
+                                        icon: "gearshape.fill",
+                                        targetView: .settings,
+                                        currentView: appState.currentView,
+                                        onTap: { isSidebarVisible = false }
+                                    )
                             
                             if appState.isAdmin || appState.isSuperAdmin {
                                 NavigationButton(
@@ -175,6 +182,9 @@ struct SimpleRouterView: View {
                                 .navigationTitle("Dropdown Manager")
                         case .customers:
                             CustomersView()
+                        case .myLoginInfo:
+                            MyLoginInfoView()
+                                .environmentObject(appState)
                         @unknown default:
                             Text("⚠️ Unknown AppScreen state")
                     }
@@ -185,9 +195,19 @@ struct SimpleRouterView: View {
         .onAppear {
             // If dev bypass is enabled, ensure we have dev user credentials
             if DevSettingsManager.shared.skipLogin {
-                if appState.currentUserName.isEmpty || appState.currentUserName == "Guest" {
-                    appState.currentUserRole = .superadmin
-                    appState.currentUserName = "Dev User"
+                if appState.currentUser == nil {
+                    appState.currentUser = User(
+                        id: "dev-user-id",
+                        displayName: "Dev User",
+                        phoneE164: nil,
+                        role: .superadmin,
+                        isActive: true,
+                        pin: nil,
+                        createdAt: Date(),
+                        updatedAt: Date(),
+                        createdByUserId: nil,
+                        updatedByUserId: nil
+                    )
                     appState.currentView = .activeWorkOrders
                 }
             }
@@ -212,9 +232,7 @@ struct NavigationButton: View {
             print("🔍 DEBUG: Navigation button '\(title)' tapped")
             print("🔍 DEBUG: Navigating from \(currentView) to \(targetView)")
             // Update AppState directly
-            if let appState = AppState.shared as? AppState {
-                appState.currentView = targetView
-            }
+            AppState.shared.currentView = targetView
             // Call the onTap callback if provided
             onTap?()
         } label: {

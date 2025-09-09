@@ -11,6 +11,7 @@ class ValidationService {
     // MARK: - Work Order Validation
     
     /// Validate a complete work order
+    @MainActor
     func validateWorkOrder(_ workOrder: WorkOrder) -> ValidationResult {
         var errors: [String] = []
         
@@ -73,6 +74,7 @@ class ValidationService {
     }
     
     /// Validate work order items
+    @MainActor
     func validateItems(_ items: [WO_Item]) -> ValidationResult {
         var errors: [String] = []
         
@@ -93,6 +95,7 @@ class ValidationService {
     }
     
     /// Validate a single work order item
+    @MainActor
     func validateItem(_ item: WO_Item, at index: Int? = nil) -> ValidationResult {
         var errors: [String] = []
         let itemPrefix = index != nil ? "Item \(index! + 1): " : ""
@@ -112,10 +115,24 @@ class ValidationService {
             errors.append("\(itemPrefix)At least one reason for service is required")
         }
         
-        // Validate tag ID if provided
-        if let tagId = item.assetTagId, !tagId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            if !isValidTagId(tagId) {
-                errors.append("\(itemPrefix)Invalid tag ID format")
+        // Validate tag ID - check if tag scan enforcement is enabled
+        let isTagScanEnforced = !DevSettingsManager.shared.skipTagScan
+        
+        if isTagScanEnforced {
+            // Tag scan enforcement is enabled - asset tag is required
+            if let tagId = item.assetTagId, !tagId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                if !isValidTagId(tagId) {
+                    errors.append("\(itemPrefix)Invalid tag ID format")
+                }
+            } else {
+                errors.append("\(itemPrefix)Asset tag ID is required")
+            }
+        } else {
+            // Tag scan enforcement is bypassed - only validate format if provided
+            if let tagId = item.assetTagId, !tagId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                if !isValidTagId(tagId) {
+                    errors.append("\(itemPrefix)Invalid tag ID format")
+                }
             }
         }
         
@@ -151,6 +168,7 @@ class ValidationService {
     // MARK: - Form Validation
     
     /// Validate new work order form
+    @MainActor
     func validateNewWorkOrderForm(customer: Customer?, items: [WO_Item]) -> ValidationResult {
         var errors: [String] = []
         
@@ -173,6 +191,7 @@ class ValidationService {
     }
     
     /// Check if work order can be checked in
+    @MainActor
     func canCheckInWorkOrder(customer: Customer?, items: [WO_Item]) -> Bool {
         let validation = validateNewWorkOrderForm(customer: customer, items: items)
         return validation.isValid

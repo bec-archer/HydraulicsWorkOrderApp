@@ -15,6 +15,7 @@ enum AppScreen {
     case newWorkOrder
     case myWorkOrderItems
     case customers
+    case myLoginInfo
     case settings
     case userManager
     case dropdownManager
@@ -31,8 +32,15 @@ class AppState: ObservableObject {
     @Published var currentView: AppScreen = .activeWorkOrders
 
     // ───── Current Logged-in User Info ─────
-    @Published var currentUserName: String = "Admin User"  // Default name for testing
-    @Published var currentUserRole: UserRole = .admin      // Default to admin for testing (bypasses login)
+    @Published var currentUser: User? = nil  // The actual logged-in user from database
+    
+    // Computed properties for backward compatibility
+    var currentUserName: String { 
+        currentUser?.displayName ?? "Guest"
+    }
+    var currentUserRole: UserRole { 
+        currentUser?.role ?? .tech
+    }
     
     // ───── Current User Helpers (Role Gates) ─────
     /// Convenience gates used throughout Admin/Users views.
@@ -45,8 +53,18 @@ class AppState: ObservableObject {
     /// Example: `let appState = AppState.previewLoggedIn(role: .admin)`
     static func previewLoggedIn(role: UserRole) -> AppState {
         let s = AppState()
-        s.currentUserRole = role
-        s.currentUserName = "Preview \(role.rawValue.capitalized)"
+        s.currentUser = User(
+            id: "preview-user-id",
+            displayName: "Preview \(role.rawValue.capitalized)",
+            phoneE164: nil,
+            role: role,
+            isActive: true,
+            pin: nil,
+            createdAt: Date(),
+            updatedAt: Date(),
+            createdByUserId: nil,
+            updatedByUserId: nil
+        )
         return s
     }
     // END role helpers
@@ -124,8 +142,7 @@ class AppState: ObservableObject {
         print("🔍 DEBUG: Performing inactivity logout")
         // Reset to login screen
         currentView = .login
-        currentUserName = ""
-        currentUserRole = .tech // Reset to default role
+        currentUser = nil // Clear the logged-in user
     }
     
 

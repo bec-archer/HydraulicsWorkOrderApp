@@ -15,6 +15,7 @@ struct AddWOItemFormView: View {
     @State private var reasonNotes = ""
     @State private var reasonOptionsSnapshot: [DropdownOption] = []    // stable per-render snapshot
     @State private var selectedReasons: Set<String> = []               // local buffer for toggles
+    @State private var showQRScanner = false
 
     // Used for Firebase Storage pathing; parent passes draft WO id / WO_Number
     var woId: String = "DRAFT"
@@ -82,6 +83,15 @@ struct AddWOItemFormView: View {
             item.reasonsForService = Array(newValue)
             item.lastModified = Date()
         }
+        .sheet(isPresented: $showQRScanner) {
+            QRScannerView(
+                isPresented: $showQRScanner,
+                onCodeScanned: { scannedCode in
+                    item.assetTagId = scannedCode
+                    item.lastModified = Date()
+                }
+            )
+        }
         .id(item.id) // stabilize identity across multiple AddWOItemFormView instances
         .padding(12)
     }
@@ -92,15 +102,57 @@ struct AddWOItemFormView: View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Photos")
                 .font(.headline)
-            PhotoCaptureUploadView(
-                localImages: .constant([]),
-                imageURLs: item.imageUrls,
-                woId: woId,
-                woItemId: item.id.uuidString,
-                onImagesChanged: {
-                    hasTouchedRequired = true
+            
+            HStack(alignment: .top, spacing: 12) {
+                // Image capture on the left
+                ImageCaptureServiceView(
+                    imageURLs: Binding(
+                        get: { item.imageUrls },
+                        set: { item.imageUrls = $0; DispatchQueue.main.async { item.lastModified = Date() } }
+                    ),
+                    thumbURLs: Binding(
+                        get: { item.thumbUrls },
+                        set: { item.thumbUrls = $0; DispatchQueue.main.async { item.lastModified = Date() } }
+                    ),
+                    workOrderId: woId,
+                    itemId: item.id,
+                    onImagesChanged: {
+                        hasTouchedRequired = true
+                    },
+                    showQR: false, // We'll handle QR scanning separately for asset tag
+                    onScanQR: nil
+                )
+                
+                // Asset tag field on the right
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 4) {
+                        Text("Asset Tag ID")
+                            .font(.headline)
+                        if !DevSettingsManager.shared.skipTagScan {
+                            Text("*")
+                                .foregroundColor(.red)
+                                .font(.headline)
+                        }
+                    }
+                    
+                    HStack(spacing: 8) {
+                        TextField("Scan or enter tag ID", text: assetTagBinding)
+                            .textFieldStyle(.roundedBorder)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled(true)
+                        
+                        Button {
+                            showQRScanner = true
+                        } label: {
+                            Image(systemName: "qrcode.viewfinder")
+                                .foregroundColor(.blue)
+                                .imageScale(.large)
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
-            )
+                .frame(maxWidth: 200)
+            }
         }
         .padding(.bottom, 8)
     }
@@ -119,6 +171,7 @@ struct AddWOItemFormView: View {
             }
         )
     }
+    
 
     @ViewBuilder private var requiredNudge: some View {
         if showValidationNudge && isPartiallyFilled {
@@ -129,7 +182,7 @@ struct AddWOItemFormView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Finish Required Fields")
                         .font(.headline)
-                    Text("Each WO_Item needs a **Type** and at least **one Photo** before check-in. Add the missing field to continue.")
+                    Text("Each WO_Item needs a **Type** and at least **one Photo**\(!DevSettingsManager.shared.skipTagScan ? " and an **Asset Tag ID**" : "") before check-in. Add the missing field to continue.")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
@@ -261,6 +314,12 @@ struct AddWOItemFormView: View {
         Binding<String?>(
             get: { item.type.isEmpty ? nil : item.type },
             set: { item.type = $0 ?? ""; DispatchQueue.main.async { item.lastModified = Date() } }
+        )
+    }
+    private var assetTagBinding: Binding<String> {
+        Binding<String>(
+            get: { item.assetTagId ?? "" },
+            set: { item.assetTagId = $0.isEmpty ? nil : $0; DispatchQueue.main.async { item.lastModified = Date() } }
         )
     }
     private var sizeBinding: Binding<String?> {

@@ -59,7 +59,8 @@ struct LoginView: View {
 
         .onAppear {
             // LoginView only shows when dev bypass is disabled
-            // No auto-login needed here
+            // Load users database for authentication
+            UsersDatabase.shared.loadInitial()
         }
         .padding()
         // END .body
@@ -67,35 +68,40 @@ struct LoginView: View {
 
     // ───── PIN Matching Logic ─────
     func handleLogin() {
-        var userRole: UserRole?
-        var userName: String
-        
-        switch pin {
-        case "1234":
-            userRole = .tech
-            userName = "Tech User"
-        case "2345":
-            userRole = .manager
-            userName = "Manager User"
-        case "5678":
-            userRole = .admin
-            userName = "Admin User"
-        case "0000":
-            userRole = .superadmin
-            userName = "Super Admin"
-        default:
-            loginError = "Invalid PIN"
-            return
+        // Authenticate against real users in database
+        UsersDatabase.shared.authenticateUser(pin: pin) { result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success(let user):
+                    if let user = user {
+                        // Successful login with real user
+                        appState.currentUser = user
+                        appState.currentView = .activeWorkOrders
+                        loginError = nil
+                        isLoggedIn = true
+                    } else {
+                        // No user found with this PIN
+                        loginError = "Invalid PIN"
+                    }
+                case .failure(let error):
+                    // Database error
+                    loginError = "Login failed: \(error.localizedDescription)"
+                }
+            }
         }
-
-        // Update AppState with user info
-        if let role = userRole {
-            appState.currentUserRole = role
-            appState.currentUserName = userName
-            appState.currentView = .activeWorkOrders
-            
-            loginError = nil
-            isLoggedIn = true
+    }
+    
+    // ───── Helper: Get Default PIN for Role ─────
+    private func getDefaultPin(for role: UserRole) -> String {
+        switch role {
+        case .tech:
+            return "1234"
+        case .manager:
+            return "2345"
+        case .admin:
+            return "5678"
+        case .superadmin:
+            return "0000"
         }
     }
 

@@ -35,7 +35,10 @@ struct SettingsView: View {
                             get: { DevSettingsManager.shared.skipLogin },
                             set: { DevSettingsManager.shared.skipLogin = $0 }
                         ))
-                        Toggle("Bypass Tag Scan Enforcement", isOn: .constant(false))
+                        Toggle("Bypass Tag Scan Enforcement", isOn: Binding(
+                            get: { DevSettingsManager.shared.skipTagScan },
+                            set: { DevSettingsManager.shared.skipTagScan = $0 }
+                        ))
                         Button("Reload Sample Data") {
                             // TODO: wire sample data loader
                         }

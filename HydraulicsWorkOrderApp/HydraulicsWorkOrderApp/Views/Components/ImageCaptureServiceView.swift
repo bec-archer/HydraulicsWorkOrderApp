@@ -20,6 +20,7 @@ struct ImageCaptureServiceView: View {
     @Binding var imageURLs: [String]
     @Binding var thumbURLs: [String]
     
+    let workOrderId: String
     let itemId: UUID
     let onImagesChanged: (() -> Void)?
     
@@ -183,33 +184,57 @@ struct ImageCaptureServiceView: View {
     // MARK: - Methods
     
     private func uploadImages(_ images: [UIImage]) async {
-        guard !images.isEmpty else { return }
+        guard !images.isEmpty else { 
+            print("🔍 DEBUG: uploadImages called with empty images array")
+            return 
+        }
+        
+        print("🔍 DEBUG: Starting image upload for \(images.count) images")
+        print("🔍 DEBUG: workOrderId: \(workOrderId)")
+        print("🔍 DEBUG: itemId: \(itemId)")
         
         isUploading = true
         uploadProgress = 0.0
         
         do {
+            print("🔍 DEBUG: Calling imageService.uploadImages...")
             // Upload images using the service
-            let uploadedURLs = try await imageService.uploadImages(images, for: itemId)
+            let uploadedURLs = try await imageService.uploadImages(images, for: workOrderId, itemId: itemId)
+            
+            print("🔍 DEBUG: Upload successful! Got \(uploadedURLs.count) URLs:")
+            for (index, url) in uploadedURLs.enumerated() {
+                print("🔍 DEBUG:   URL[\(index)]: \(url)")
+            }
             
             // Update the bindings
+            let previousCount = imageURLs.count
             imageURLs.append(contentsOf: uploadedURLs)
+            print("🔍 DEBUG: Updated imageURLs from \(previousCount) to \(imageURLs.count) items")
             
+            print("🔍 DEBUG: Getting thumbnail URLs...")
             // Get updated thumbnail URLs
-            let thumbnailURLs = try await imageService.getThumbnailURLs(for: itemId)
+            let thumbnailURLs = try await imageService.getThumbnailURLs(for: workOrderId, itemId: itemId)
+            print("🔍 DEBUG: Got \(thumbnailURLs.count) thumbnail URLs:")
+            for (index, url) in thumbnailURLs.enumerated() {
+                print("🔍 DEBUG:   Thumb[\(index)]: \(url)")
+            }
             thumbURLs = thumbnailURLs
             
             // Notify parent
+            print("🔍 DEBUG: Calling onImagesChanged callback")
             onImagesChanged?()
             
             uploadProgress = 1.0
+            print("🔍 DEBUG: Image upload completed successfully")
             
         } catch {
             print("❌ Failed to upload images: \(error.localizedDescription)")
+            print("❌ Error details: \(error)")
         }
         
         isUploading = false
         selectedImages = []
+        print("🔍 DEBUG: Upload process finished, isUploading = false")
     }
     
     private func deleteImage(_ imageURL: String) async {
@@ -220,7 +245,7 @@ struct ImageCaptureServiceView: View {
             imageURLs.removeAll { $0 == imageURL }
             
             // Get updated thumbnail URLs
-            let thumbnailURLs = try await imageService.getThumbnailURLs(for: itemId)
+            let thumbnailURLs = try await imageService.getThumbnailURLs(for: workOrderId, itemId: itemId)
             thumbURLs = thumbnailURLs
             
             // Notify parent
@@ -331,6 +356,7 @@ struct PhotoLibraryPicker: UIViewControllerRepresentable {
     ImageCaptureServiceView(
         imageURLs: .constant([]),
         thumbURLs: .constant([]),
+        workOrderId: "preview-wo",
         itemId: UUID(),
         onImagesChanged: nil
     )

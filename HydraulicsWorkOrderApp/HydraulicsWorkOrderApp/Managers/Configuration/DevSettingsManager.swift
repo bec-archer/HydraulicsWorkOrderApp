@@ -40,8 +40,8 @@ final class DevSettingsManager: ObservableObject {
         set { skipLogin = newValue }
     }
 
-    // Toggle tag-scan enforcement
-    @Published var skipTagScan: Bool = UserDefaults.standard.object(forKey: Keys.enforceTagScan) as? Bool ?? true {
+    // Toggle tag-scan enforcement (false = enforce tag scan, true = bypass tag scan)
+    @Published var skipTagScan: Bool = UserDefaults.standard.object(forKey: Keys.enforceTagScan) as? Bool ?? false {
         didSet { UserDefaults.standard.set(skipTagScan, forKey: Keys.enforceTagScan) }
     }
 
@@ -70,7 +70,7 @@ final class DevSettingsManager: ObservableObject {
         let defaults = UserDefaults.standard
         if defaults.object(forKey: Keys.enableAnonAuth) == nil { defaults.set(true,  forKey: Keys.enableAnonAuth) }
         if defaults.object(forKey: Keys.bypassLogin)    == nil { defaults.set(false, forKey: Keys.bypassLogin) }
-        if defaults.object(forKey: Keys.enforceTagScan) == nil { defaults.set(true,  forKey: Keys.enforceTagScan) }
+        if defaults.object(forKey: Keys.enforceTagScan) == nil { defaults.set(false, forKey: Keys.enforceTagScan) }
         if defaults.object(forKey: Keys.sampleData)     == nil { defaults.set(false, forKey: Keys.sampleData) }
 
         // Ensure published values reflect stored defaults on launch

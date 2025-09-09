@@ -15,6 +15,7 @@ public struct User: Identifiable, Codable, Equatable {
     public var phoneE164: String?        // +15551234567 (optional for now)
     public var role: UserRole            // tech/manager/admin/superadmin
     public var isActive: Bool            // soft deactivate
+    public var pin: String?              // 4-8 digit PIN for login (optional, defaults to role-based)
     public var createdAt: Date
     public var updatedAt: Date
     public var createdByUserId: String?
@@ -27,6 +28,7 @@ public struct User: Identifiable, Codable, Equatable {
         phoneE164: String?,
         role: UserRole,
         isActive: Bool,
+        pin: String? = nil,
         createdAt: Date,
         updatedAt: Date,
         createdByUserId: String?,
@@ -37,6 +39,7 @@ public struct User: Identifiable, Codable, Equatable {
         self.phoneE164 = phoneE164
         self.role = role
         self.isActive = isActive
+        self.pin = pin
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.createdByUserId = createdByUserId

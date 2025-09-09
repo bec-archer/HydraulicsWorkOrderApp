@@ -200,6 +200,10 @@ struct RouterView: View {
                         case .customers:
                             CustomersView()
                                 .onAppear { print("🔍 DEBUG: RouterView switching to CustomersView") }
+                        case .myLoginInfo:
+                            MyLoginInfoView()
+                                .environmentObject(appState)
+                                .onAppear { print("🔍 DEBUG: RouterView switching to MyLoginInfoView") }
                         @unknown default:
                             Text("⚠️ Unknown AppScreen state")
                                 .onAppear { print("🔍 DEBUG: RouterView switching to Unknown state") }
