@@ -47,6 +47,8 @@ class ImageManagementService: ObservableObject {
     
     /// Upload a single image and return the URL
     func uploadSingleImage(_ image: UIImage, for workOrderId: String, itemId: UUID) async throws -> String {
+        print("🔍 DEBUG: uploadSingleImage called - Size: \(image.size)")
+        
         isUploading = true
         uploadProgress = 0.0
         errorMessage = nil
@@ -68,10 +70,17 @@ class ImageManagementService: ObservableObject {
                 throw ImageError.thumbnailCreationFailed
             }
             
-            // Generate unique filename
-            let filename = "\(UUID().uuidString).jpg"
+            // Generate timestamp-based filename for proper ordering
+            let dateFormatter = DateFormatter()
+            dateFormatter.dateFormat = "yyyyMMdd_HHmmss_SSS"
+            let timestamp = dateFormatter.string(from: Date())
+            let filename = "\(timestamp).jpg"
             let imagePath = "workOrders/\(workOrderId)/items/\(itemId)/images/\(filename)"
             let thumbnailPath = "workOrders/\(workOrderId)/items/\(itemId)/thumbnails/\(filename)"
+            
+            print("🔍 DEBUG: Generated filename: \(filename)")
+            print("🔍 DEBUG: Image path: \(imagePath)")
+            print("🔍 DEBUG: Thumbnail path: \(thumbnailPath)")
             
             // Upload main image
             let imageRef = storage.reference().child(imagePath)
@@ -114,7 +123,11 @@ class ImageManagementService: ObservableObject {
             
             // Get download URLs
             let imageURL = try await imageRef.downloadURL().absoluteString
-            _ = try await thumbnailRef.downloadURL().absoluteString
+            let thumbnailURL = try await thumbnailRef.downloadURL().absoluteString
+            
+            print("🔍 DEBUG: Upload completed successfully!")
+            print("🔍 DEBUG: Image URL: \(imageURL)")
+            print("🔍 DEBUG: Thumbnail URL: \(thumbnailURL)")
             
             return imageURL
             
@@ -126,6 +139,9 @@ class ImageManagementService: ObservableObject {
     
     /// Upload multiple images and return URLs
     func uploadImages(_ images: [UIImage], for workOrderId: String, itemId: UUID) async throws -> [String] {
+        print("🔍 DEBUG: ImageManagementService.uploadImages called with \(images.count) images")
+        print("🔍 DEBUG: workOrderId: \(workOrderId), itemId: \(itemId)")
+        
         isUploading = true
         uploadProgress = 0.0
         errorMessage = nil
@@ -139,17 +155,25 @@ class ImageManagementService: ObservableObject {
         let totalImages = images.count
         
         for (index, image) in images.enumerated() {
+            print("🔍 DEBUG: Processing image[\(index)] - Size: \(image.size)")
             do {
                 let imageURL = try await uploadSingleImage(image, for: workOrderId, itemId: itemId)
                 uploadedURLs.append(imageURL)
+                print("🔍 DEBUG: Image[\(index)] uploaded successfully: \(imageURL)")
                 
                 // Update progress
                 uploadProgress = Double(index + 1) / Double(totalImages)
                 
             } catch {
+                print("🔍 DEBUG: Image[\(index)] upload failed: \(error.localizedDescription)")
                 setError("Failed to upload image \(index + 1): \(error.localizedDescription)")
                 throw error
             }
+        }
+        
+        print("🔍 DEBUG: All images uploaded. Final order:")
+        for (index, url) in uploadedURLs.enumerated() {
+            print("🔍 DEBUG:   Final[\(index)]: \(url)")
         }
         
         return uploadedURLs
@@ -190,6 +214,11 @@ class ImageManagementService: ObservableObject {
                 imageURLs.append(url)
             }
             
+            // Sort by timestamp in filename to maintain upload order
+            imageURLs.sort { url1, url2 in
+                return extractTimestampFromURL(url1) < extractTimestampFromURL(url2)
+            }
+            
             return imageURLs
             
         } catch {
@@ -200,19 +229,31 @@ class ImageManagementService: ObservableObject {
     
     /// Get thumbnail URLs for a work order item
     func getThumbnailURLs(for workOrderId: String, itemId: UUID) async throws -> [String] {
+        print("🔍 DEBUG: getThumbnailURLs called for workOrderId: \(workOrderId), itemId: \(itemId)")
+        
         do {
             let thumbnailRef = storage.reference().child("workOrders/\(workOrderId)/items/\(itemId)/thumbnails")
             let result = try await thumbnailRef.listAll()
             
+            print("🔍 DEBUG: Found \(result.items.count) thumbnail files in Firebase Storage")
+            
             var thumbnailURLs: [String] = []
-            for item in result.items {
+            for (index, item) in result.items.enumerated() {
                 let url = try await item.downloadURL().absoluteString
                 thumbnailURLs.append(url)
+                print("🔍 DEBUG: Thumbnail[\(index)]: \(item.name) -> \(url)")
             }
             
+            // Sort by timestamp in filename to maintain upload order
+            thumbnailURLs.sort { url1, url2 in
+                return extractTimestampFromURL(url1) < extractTimestampFromURL(url2)
+            }
+            
+            print("🔍 DEBUG: Returning \(thumbnailURLs.count) thumbnail URLs (sorted by timestamp)")
             return thumbnailURLs
             
         } catch {
+            print("🔍 DEBUG: getThumbnailURLs failed: \(error.localizedDescription)")
             setError("Failed to get thumbnail URLs: \(error.localizedDescription)")
             throw error
         }
@@ -223,6 +264,21 @@ class ImageManagementService: ObservableObject {
     private func setError(_ message: String) {
         errorMessage = message
         showError = true
+    }
+    
+    /// Extract timestamp from Firebase Storage URL for sorting
+    private func extractTimestampFromURL(_ url: String) -> String {
+        // Extract filename from URL and get the timestamp part
+        // URL format: .../workOrders/.../items/.../images/YYYYMMDD_HHMMSS_SSS.jpg
+        if let lastSlash = url.lastIndex(of: "/") {
+            let filename = String(url[url.index(after: lastSlash)...])
+            // Remove .jpg extension and return the timestamp part
+            if let dotIndex = filename.lastIndex(of: ".") {
+                return String(filename[..<dotIndex])
+            }
+        }
+        // Fallback: return the full URL if we can't extract timestamp
+        return url
     }
 }
 

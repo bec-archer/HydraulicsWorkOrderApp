@@ -189,9 +189,17 @@ struct ImageCaptureServiceView: View {
             return 
         }
         
+        print("🔍 DEBUG: ===== UPLOAD ORDER DEBUG START =====")
         print("🔍 DEBUG: Starting image upload for \(images.count) images")
         print("🔍 DEBUG: workOrderId: \(workOrderId)")
         print("🔍 DEBUG: itemId: \(itemId)")
+        print("🔍 DEBUG: Current imageURLs count before upload: \(imageURLs.count)")
+        print("🔍 DEBUG: Current thumbURLs count before upload: \(thumbURLs.count)")
+        
+        // Log the order of images being uploaded
+        for (index, image) in images.enumerated() {
+            print("🔍 DEBUG: Image[\(index)] - Size: \(image.size), Scale: \(image.scale)")
+        }
         
         isUploading = true
         uploadProgress = 0.0
@@ -208,6 +216,7 @@ struct ImageCaptureServiceView: View {
             
             // Update the bindings
             let previousCount = imageURLs.count
+            print("🔍 DEBUG: Appending \(uploadedURLs.count) URLs to imageURLs (was \(previousCount))")
             imageURLs.append(contentsOf: uploadedURLs)
             print("🔍 DEBUG: Updated imageURLs from \(previousCount) to \(imageURLs.count) items")
             
@@ -219,6 +228,17 @@ struct ImageCaptureServiceView: View {
                 print("🔍 DEBUG:   Thumb[\(index)]: \(url)")
             }
             thumbURLs = thumbnailURLs
+            
+            print("🔍 DEBUG: ===== FINAL ARRAY STATE =====")
+            print("🔍 DEBUG: imageURLs final count: \(imageURLs.count)")
+            for (index, url) in imageURLs.enumerated() {
+                print("🔍 DEBUG:   imageURLs[\(index)]: \(url)")
+            }
+            print("🔍 DEBUG: thumbURLs final count: \(thumbURLs.count)")
+            for (index, url) in thumbURLs.enumerated() {
+                print("🔍 DEBUG:   thumbURLs[\(index)]: \(url)")
+            }
+            print("🔍 DEBUG: ===== UPLOAD ORDER DEBUG END =====")
             
             // Notify parent
             print("🔍 DEBUG: Calling onImagesChanged callback")

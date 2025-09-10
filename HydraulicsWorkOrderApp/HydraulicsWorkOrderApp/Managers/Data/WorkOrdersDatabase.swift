@@ -381,8 +381,14 @@ final class WorkOrdersDatabase: ObservableObject {
     private func decodeWOItemFromFirestore(_ data: [String: Any]) throws -> WO_Item {
         let id = UUID(uuidString: data["id"] as? String ?? "") ?? UUID()
         let type = data["type"] as? String ?? ""
-        let imageUrls = data["imageUrls"] as? [String] ?? []
-        let thumbUrls = data["thumbUrls"] as? [String] ?? []
+        let imageUrls = (data["imageUrls"] as? [String] ?? []).sorted { url1, url2 in
+            // Sort by timestamp in filename to maintain upload order
+            return extractTimestampFromURL(url1) < extractTimestampFromURL(url2)
+        }
+        let thumbUrls = (data["thumbUrls"] as? [String] ?? []).sorted { url1, url2 in
+            // Sort by timestamp in filename to maintain upload order
+            return extractTimestampFromURL(url1) < extractTimestampFromURL(url2)
+        }
         let reasonsForService = data["reasonsForService"] as? [String] ?? []
         let completedReasons = data["completedReasons"] as? [String] ?? []
         let reasonNotes = data["reasonNotes"] as? String
@@ -463,5 +469,20 @@ final class WorkOrdersDatabase: ObservableObject {
         let timestamp = (data["timestamp"] as? Timestamp)?.dateValue() ?? Date()
         
         return WO_Note(workOrderId: workOrderId, itemId: itemId, user: user, text: text, timestamp: timestamp)
+    }
+    
+    /// Extract timestamp from Firebase Storage URL for sorting
+    private func extractTimestampFromURL(_ url: String) -> String {
+        // Extract filename from URL and get the timestamp part
+        // URL format: .../workOrders/.../items/.../images/YYYYMMDD_HHMMSS_SSS.jpg
+        if let lastSlash = url.lastIndex(of: "/") {
+            let filename = String(url[url.index(after: lastSlash)...])
+            // Remove .jpg extension and return the timestamp part
+            if let dotIndex = filename.lastIndex(of: ".") {
+                return String(filename[..<dotIndex])
+            }
+        }
+        // Fallback: return the full URL if we can't extract timestamp
+        return url
     }
 }

@@ -426,14 +426,14 @@ private struct SquareThumb: View {
                     case .success(let image):
                         image
                             .resizable()
-                            .aspectRatio(contentMode: .fill)  // ⬅️ fill area, crop from center
+                            .aspectRatio(contentMode: .fill)  // ⬅️ fill area, crop from center (like WorkOrderDetailView)
                     case .failure:
                         Rectangle().fill(Color.red.opacity(0.25)).overlay(Text("❌"))
                     @unknown default:
                         Rectangle().fill(ThemeManager.shared.border.opacity(0.25))
                     }
                 }
-                .frame(width: geo.size.width, height: geo.size.width) // ⬅️ square
+                .frame(width: geo.size.width, height: geo.size.width) // ⬅️ fixed square frame (like WorkOrderDetailView)
                 .clipped()
                 .cornerRadius(ThemeManager.shared.cardCornerRadius - 2)
 
@@ -492,7 +492,7 @@ private struct FullWidthThumb: View {
                 case .success(let image):
                     image
                         .resizable()
-                        .aspectRatio(contentMode: .fill)  // ⬅️ fill area, crop from center
+                        .aspectRatio(contentMode: .fill)  // ⬅️ fill area, crop from center (like WorkOrderDetailView)
                         .onAppear {
                             print("✅ DEBUG: FullWidthThumb AsyncImage SUCCESS for URL: \(url?.absoluteString ?? "nil")")
                         }
@@ -575,7 +575,7 @@ private struct GridThumb: View {
                 case .success(let image):
                     image
                         .resizable()
-                        .aspectRatio(contentMode: .fill)  // ⬅️ fill area, crop from center
+                        .aspectRatio(contentMode: .fill)  // ⬅️ fill area, crop from center (like WorkOrderDetailView)
                         .onAppear {
                             print("✅ DEBUG: GridThumb AsyncImage SUCCESS for URL: \(url?.absoluteString ?? "nil")")
                         }
