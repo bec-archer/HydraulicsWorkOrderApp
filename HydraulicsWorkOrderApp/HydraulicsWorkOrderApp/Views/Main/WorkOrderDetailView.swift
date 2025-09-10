@@ -187,9 +187,6 @@ struct WorkOrderDetailView: View {
                     
                     // Items Section
                     itemsSection
-                    
-                    // Notes Timeline
-                    notesTimelineSection
                 }
                 .padding()
             }
@@ -326,6 +323,12 @@ struct WorkOrderDetailView: View {
     }
     
     // MARK: - Work Order Header Banner
+    /*  ────────────────────────────────────────────────────────────────────────────
+        GUARDRAIL: DO NOT MODIFY HEADER LAYOUT
+        The header layout, spacing, font sizes, and positioning are finalized and approved.
+        DO NOT change, refactor, or alter any aspect of this header without explicit approval.
+        Current state: Compact design with proper spacing, tappable phone with action sheet.
+        ──────────────────────────────────────────────────────────────────────────── */
     private var workOrderHeaderBanner: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
@@ -832,21 +835,7 @@ struct WorkOrderDetailView: View {
             }
         }
     }
-    
-    // MARK: - Notes Timeline Section
-    private var notesTimelineSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("Notes & Status History")
-                        .font(.headline)
-                                                .foregroundColor(.primary)
-                Spacer()
-            }
-            
-            NotesTimelineView(notes: viewModel.workOrder.notes)
-        }
-        .card()
-    }
+
     
     // MARK: - Helper Methods
     
