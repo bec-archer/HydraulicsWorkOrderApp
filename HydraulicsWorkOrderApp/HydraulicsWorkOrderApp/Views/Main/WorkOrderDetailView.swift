@@ -612,6 +612,14 @@ struct WorkOrderDetailView: View {
                                 await viewModel.toggleServicePerformedStatus(for: index, reason: reason)
                                 print("🔍 DEBUG: toggleServicePerformedStatus completed")
                             }
+                        },
+                        onStatusChanged: { newStatus in
+                            print("🔍 DEBUG: Status changed to: '\(newStatus)' for item index: \(index)")
+                            Task { @MainActor in
+                                print("🔍 DEBUG: About to call updateItemStatus")
+                                await viewModel.updateItemStatus(newStatus, for: index)
+                                print("🔍 DEBUG: updateItemStatus completed")
+                            }
                         }
                     )
                 }
@@ -626,10 +634,12 @@ struct WorkOrderDetailView: View {
         let itemIndex: Int
         let onImageTap: (String) -> Void
         let onReasonToggled: (String) -> Void
+        let onStatusChanged: (String) -> Void
         
         @State private var showImageViewer = false
         @State private var selectedImageURL: URL?
         @State private var showGallery = false
+        @State private var showStatusSelection = false
         
         var body: some View {
             VStack(alignment: .leading, spacing: 12) {
@@ -672,8 +682,13 @@ struct WorkOrderDetailView: View {
                         }
                     }
                     
-                    // Right: StatusBadge
-                    StatusBadge(status: item.statusHistory.last?.status ?? "Checked In")
+                    // Right: StatusBadge (tappable)
+                    Button(action: {
+                        showStatusSelection = true
+                    }) {
+                        StatusBadge(status: item.statusHistory.last?.status ?? "Checked In")
+                    }
+                    .buttonStyle(PlainButtonStyle())
                 }
                 
                 // Type line
@@ -931,6 +946,15 @@ struct WorkOrderDetailView: View {
             )
             .sheet(isPresented: $showGallery) {
                 ImageGalleryView(images: item.imageUrls, title: "\(workOrder.workOrderNumber)-\(String(format: "%03d", itemIndex + 1))")
+            }
+            .sheet(isPresented: $showStatusSelection) {
+                StatusSelectionView(
+                    currentStatus: item.statusHistory.last?.status ?? "Checked In",
+                    onStatusSelected: { newStatus in
+                        onStatusChanged(newStatus)
+                        showStatusSelection = false
+                    }
+                )
             }
         }
         
@@ -1340,4 +1364,96 @@ struct ImageGalleryView: View {
         )
     }
     .environmentObject(AppState.shared)
+}
+
+// MARK: - StatusSelectionView
+struct StatusSelectionView: View {
+    let currentStatus: String
+    let onStatusSelected: (String) -> Void
+    @Environment(\.dismiss) private var dismiss
+    
+    // Status options with colors
+    private let statusOptions = [
+        ("Checked In", Color.blue),
+        ("In Progress", Color.orange),
+        ("Test Failed", Color.red),
+        ("Completed", Color.green),
+        ("Closed", Color.gray)
+    ]
+    
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 0) {
+                // Header
+                VStack(spacing: 8) {
+                    Text("Change Status")
+                        .font(.title2)
+                        .fontWeight(.semibold)
+                        .foregroundColor(ThemeManager.shared.textPrimary)
+                    
+                    Text("Current: \(currentStatus)")
+                        .font(.subheadline)
+                        .foregroundColor(ThemeManager.shared.textSecondary)
+                }
+                .padding(.top, 20)
+                .padding(.bottom, 30)
+                
+                // Status options
+                VStack(spacing: 12) {
+                    ForEach(statusOptions, id: \.0) { status, color in
+                        Button(action: {
+                            onStatusSelected(status)
+                        }) {
+                            HStack {
+                                // Status color indicator
+                                Circle()
+                                    .fill(color)
+                                    .frame(width: 12, height: 12)
+                                
+                                Text(status)
+                                    .font(.body)
+                                    .foregroundColor(ThemeManager.shared.textPrimary)
+                                
+                                Spacer()
+                                
+                                // Current status indicator
+                                if status == currentStatus {
+                                    Image(systemName: "checkmark")
+                                        .foregroundColor(ThemeManager.shared.linkColor)
+                                        .fontWeight(.semibold)
+                                }
+                            }
+                            .padding(.horizontal, 20)
+                            .padding(.vertical, 16)
+                            .background(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .fill(ThemeManager.shared.cardBackground)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 12)
+                                            .stroke(
+                                                status == currentStatus ? ThemeManager.shared.linkColor : ThemeManager.shared.border,
+                                                lineWidth: status == currentStatus ? 2 : 1
+                                            )
+                                    )
+                            )
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                    }
+                }
+                .padding(.horizontal, 20)
+                
+                Spacer()
+            }
+            .background(ThemeManager.shared.background)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                    .foregroundColor(ThemeManager.shared.linkColor)
+                }
+            }
+        }
+    }
 }
