@@ -55,8 +55,24 @@ final class WorkOrdersDatabase: ObservableObject {
     }
     
     func updateWorkOrder(_ workOrder: WorkOrder) async throws {
-        if let index = workOrders.firstIndex(where: { $0.id == workOrder.id }) {
-            workOrders[index] = workOrder
+        print("🔍 DEBUG: updateWorkOrder called for WO: \(workOrder.workOrderNumber)")
+        
+        do {
+            // Save to Firebase Firestore
+            print("🔍 DEBUG: Saving work order to Firebase Firestore...")
+            let data = try encodeWorkOrderToFirestore(workOrder)
+            try await db.collection(collectionName).document(workOrder.id).setData(data)
+            print("✅ DEBUG: Successfully saved work order to Firebase Firestore")
+            
+            // Update local array
+            if let index = workOrders.firstIndex(where: { $0.id == workOrder.id }) {
+                workOrders[index] = workOrder
+                print("🔍 DEBUG: Updated local workOrders array")
+            }
+            
+        } catch {
+            print("❌ DEBUG: Failed to save work order to Firebase: \(error)")
+            throw error
         }
     }
     

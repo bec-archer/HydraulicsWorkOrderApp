@@ -144,6 +144,7 @@ struct WorkOrderDetailView: View {
     // MARK: - Dependencies
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var appState: AppState
+    @StateObject private var workOrdersDB = WorkOrdersDatabase.shared
     
     // MARK: - Callbacks
     private let onDelete: ((WorkOrder) -> Void)?
@@ -319,6 +320,31 @@ struct WorkOrderDetailView: View {
         }
         .sheet(isPresented: $showingPhoneActions) {
             PhoneActionSheet(phoneNumber: viewModel.workOrder.customerPhone, customerName: viewModel.workOrder.customerName)
+        }
+        .onAppear {
+            print("🔍 DEBUG: WorkOrderDetailView onAppear - refreshing work order data from Firebase")
+            Task {
+                await refreshWorkOrderFromFirebase()
+            }
+        }
+    }
+    
+    // MARK: - Data Refresh
+    private func refreshWorkOrderFromFirebase() async {
+        print("🔍 DEBUG: refreshWorkOrderFromFirebase called for WO: \(viewModel.workOrder.workOrderNumber)")
+        
+        // Use the completion-based method to get fresh work order data
+        workOrdersDB.fetchWorkOrder(woId: viewModel.workOrder.id) { result in
+            Task { @MainActor in
+                switch result {
+                case .success(let freshWorkOrder):
+                    print("🔍 DEBUG: Got fresh work order from Firebase with \(freshWorkOrder.items.count) items")
+                    viewModel.updateWorkOrder(freshWorkOrder)
+                    print("🔍 DEBUG: Updated viewModel with fresh work order data")
+                case .failure(let error):
+                    print("❌ DEBUG: Failed to refresh work order from Firebase: \(error)")
+                }
+            }
         }
     }
     
@@ -579,9 +605,12 @@ struct WorkOrderDetailView: View {
                                 showImageViewer = true
                             }
                         },
-                        onReasonChecked: { reason in
-                            Task {
-                                await viewModel.addServicePerformedStatus(for: index, reason: reason)
+                        onReasonToggled: { reason in
+                            print("🔍 DEBUG: Checkbox toggled for reason: '\(reason)' on item index: \(index)")
+                            Task { @MainActor in
+                                print("🔍 DEBUG: About to call toggleServicePerformedStatus")
+                                await viewModel.toggleServicePerformedStatus(for: index, reason: reason)
+                                print("🔍 DEBUG: toggleServicePerformedStatus completed")
                             }
                         }
                     )
@@ -596,7 +625,7 @@ struct WorkOrderDetailView: View {
         let item: WO_Item
         let itemIndex: Int
         let onImageTap: (String) -> Void
-        let onReasonChecked: (String) -> Void
+        let onReasonToggled: (String) -> Void
         
         @State private var showImageViewer = false
         @State private var selectedImageURL: URL?
@@ -620,12 +649,11 @@ struct WorkOrderDetailView: View {
                         ForEach(item.reasonsForService, id: \.self) { reason in
                             HStack(spacing: 8) {
                                 Button(action: {
-                                    onReasonChecked(reason)
+                                    onReasonToggled(reason)
                                 }) {
                                     Image(systemName: isReasonPerformed(reason) ? "checkmark.square.fill" : "square")
-                                        .foregroundColor(isReasonPerformed(reason) ? ThemeManager.shared.linkColor : ThemeManager.shared.textSecondary)
+                                        .foregroundColor(isReasonPerformed(reason) ? .green : ThemeManager.shared.textSecondary)
                                 }
-                                .disabled(isReasonPerformed(reason))
                                 
                                 Text(reason)
                                     .font(.subheadline)
@@ -907,8 +935,9 @@ struct WorkOrderDetailView: View {
         }
         
         private func isReasonPerformed(_ reason: String) -> Bool {
+            let expectedStatus = "Service Performed — \(reason)"
             return item.statusHistory.contains { status in
-                status.status == "Service Performed — \(reason)"
+                status.status == expectedStatus
             }
         }
 

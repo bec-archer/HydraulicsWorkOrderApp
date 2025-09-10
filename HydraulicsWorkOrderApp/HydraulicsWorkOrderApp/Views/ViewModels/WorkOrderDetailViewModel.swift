@@ -81,12 +81,13 @@ class WorkOrderDetailViewModel: ObservableObject {
     
     /// Update the status of a specific item
     func updateItemStatus(_ status: String, for itemIndex: Int, note: String? = nil) async {
+        print("🔍 DEBUG: updateItemStatus called with status: '\(status)', itemIndex: \(itemIndex)")
         guard itemIndex >= 0 && itemIndex < workOrder.items.count else {
+            print("❌ DEBUG: Invalid item index: \(itemIndex), total items: \(workOrder.items.count)")
             setError("Invalid item index")
             return
         }
         
-        isLoading = true
         errorMessage = nil
         
         do {
@@ -98,19 +99,24 @@ class WorkOrderDetailViewModel: ObservableObject {
                 notes: note ?? "Status updated to \(status)"
             )
             
+            print("🔍 DEBUG: Created new status: '\(newStatus.status)'")
+            
             // Update the work order
             workOrder.items[itemIndex].statusHistory.append(newStatus)
             workOrder.lastModified = Date()
             workOrder.lastModifiedBy = "current_user" // TODO: Get from auth
             
+            print("🔍 DEBUG: Added status to history. Total statuses now: \(workOrder.items[itemIndex].statusHistory.count)")
+            
             // Save to Firebase
+            print("🔍 DEBUG: Saving to Firebase...")
             try await workOrdersDB.updateWorkOrder(workOrder)
+            print("✅ DEBUG: Successfully saved to Firebase")
             
         } catch {
+            print("❌ DEBUG: Failed to save to Firebase: \(error)")
             setError("Failed to update status: \(error.localizedDescription)")
         }
-        
-        isLoading = false
     }
     
     /// Add a note to a specific item
@@ -358,13 +364,81 @@ class WorkOrderDetailViewModel: ObservableObject {
     }
     
     func addServicePerformedStatus(for itemIndex: Int, reason: String) async {
+        print("🔍 DEBUG: addServicePerformedStatus called for itemIndex: \(itemIndex), reason: '\(reason)'")
         guard itemIndex >= 0 && itemIndex < workOrder.items.count else {
+            print("❌ DEBUG: Invalid item index: \(itemIndex), total items: \(workOrder.items.count)")
             setError("Invalid item index")
             return
         }
         
         let statusText = "Service Performed — \(reason)"
+        print("🔍 DEBUG: Calling updateItemStatus with: '\(statusText)'")
         await updateItemStatus(statusText, for: itemIndex)
+        print("🔍 DEBUG: updateItemStatus completed")
+    }
+    
+    func toggleServicePerformedStatus(for itemIndex: Int, reason: String) async {
+        print("🔍 DEBUG: toggleServicePerformedStatus called for itemIndex: \(itemIndex), reason: '\(reason)'")
+        guard itemIndex >= 0 && itemIndex < workOrder.items.count else {
+            print("❌ DEBUG: Invalid item index: \(itemIndex), total items: \(workOrder.items.count)")
+            setError("Invalid item index")
+            return
+        }
+        
+        let statusText = "Service Performed — \(reason)"
+        let isCurrentlyPerformed = workOrder.items[itemIndex].statusHistory.contains { status in
+            status.status == statusText
+        }
+        
+        if isCurrentlyPerformed {
+            print("🔍 DEBUG: Reason is currently performed, removing status")
+            await removeServicePerformedStatus(for: itemIndex, reason: reason)
+        } else {
+            print("🔍 DEBUG: Reason is not performed, adding status")
+            await addServicePerformedStatus(for: itemIndex, reason: reason)
+        }
+    }
+    
+    func removeServicePerformedStatus(for itemIndex: Int, reason: String) async {
+        print("🔍 DEBUG: removeServicePerformedStatus called for itemIndex: \(itemIndex), reason: '\(reason)'")
+        guard itemIndex >= 0 && itemIndex < workOrder.items.count else {
+            print("❌ DEBUG: Invalid item index: \(itemIndex), total items: \(workOrder.items.count)")
+            setError("Invalid item index")
+            return
+        }
+        
+        let statusText = "Service Performed — \(reason)"
+        
+        errorMessage = nil
+        
+        do {
+            // Remove the status entry
+            workOrder.items[itemIndex].statusHistory.removeAll { status in
+                status.status == statusText
+            }
+            workOrder.lastModified = Date()
+            workOrder.lastModifiedBy = "current_user" // TODO: Get from auth
+            
+            print("🔍 DEBUG: Removed status from history. Total statuses now: \(workOrder.items[itemIndex].statusHistory.count)")
+            
+            // Save to Firebase
+            print("🔍 DEBUG: Saving to Firebase...")
+            try await workOrdersDB.updateWorkOrder(workOrder)
+            print("✅ DEBUG: Successfully saved to Firebase")
+            
+        } catch {
+            print("❌ DEBUG: Failed to save to Firebase: \(error)")
+            setError("Failed to remove status: \(error.localizedDescription)")
+        }
+    }
+    
+    /// Update the work order with fresh data from Firebase
+    func updateWorkOrder(_ freshWorkOrder: WorkOrder) {
+        // Update the work order
+        workOrder = freshWorkOrder
+        
+        // Trigger UI update
+        objectWillChange.send()
     }
     
     // MARK: - Private Methods
