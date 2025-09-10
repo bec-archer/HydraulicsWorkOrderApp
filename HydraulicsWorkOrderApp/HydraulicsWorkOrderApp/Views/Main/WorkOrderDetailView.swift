@@ -182,11 +182,8 @@ struct WorkOrderDetailView: View {
                     VersionMismatchBanner(items: viewModel.workOrder.items)
                         .padding(.horizontal)
                     
-                    // Customer Information Card
-                    customerInfoCard
-                    
-                    // Work Order Header Card
-                    workOrderHeaderCard
+                    // New Work Order Header Banner
+                    workOrderHeaderBanner
                     
                     // Items Section
                     itemsSection
@@ -323,6 +320,70 @@ struct WorkOrderDetailView: View {
         .onChange(of: selectedImageURL) { oldValue, newValue in
             print("🔍 DEBUG: WorkOrderDetailView selectedImageURL changed from: \(oldValue?.absoluteString ?? "nil") to: \(newValue?.absoluteString ?? "nil")")
         }
+        .sheet(isPresented: $showingPhoneActions) {
+            PhoneActionSheet(phoneNumber: viewModel.workOrder.customerPhone, customerName: viewModel.workOrder.customerName)
+        }
+    }
+    
+    // MARK: - Work Order Header Banner
+    private var workOrderHeaderBanner: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                // Left side: Work Order title and timestamp
+                VStack(alignment: .leading, spacing: 0) {
+                    Text("Work Order #\(viewModel.workOrder.workOrderNumber)")
+                        .font(ThemeManager.shared.titleFont)
+                        .foregroundColor(ThemeManager.shared.textPrimary)
+                    
+                    Text(viewModel.workOrder.timestamp, style: .date)
+                        .font(.caption)
+                        .foregroundColor(ThemeManager.shared.textSecondary)
+                    +
+                    Text(" at ")
+                        .font(.caption)
+                        .foregroundColor(ThemeManager.shared.textSecondary)
+                    +
+                    Text(viewModel.workOrder.timestamp, style: .time)
+                        .font(.caption)
+                        .foregroundColor(ThemeManager.shared.textSecondary)
+                }
+                
+                Spacer()
+                
+                // Right side: Customer name and phone
+                VStack(alignment: .trailing, spacing: 0) {
+                    Text(viewModel.workOrder.customerName)
+                        .font(.system(size: 20 * 0.8 * 1.5)) // 80% of title font size, then 50% larger
+                        .fontWeight(.bold)
+                        .foregroundColor(ThemeManager.shared.textPrimary)
+                    
+                    Button(action: {
+                        showingPhoneActions = true
+                    }) {
+                        HStack(spacing: 2) {
+                            Image(systemName: "phone.fill")
+                                .font(.system(size: 12 * 1.5)) // 50% larger than caption
+                            Text(formatPhoneNumber(viewModel.workOrder.customerPhone))
+                                .font(.system(size: 12 * 1.5)) // 50% larger than caption
+                                .fontWeight(.bold)
+                        }
+                        .foregroundColor(ThemeManager.shared.linkColor)
+                    }
+                }
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 12)
+        .background(ThemeManager.shared.cardBackground)
+        .cornerRadius(ThemeManager.shared.cardCornerRadius)
+        .shadow(
+            color: ThemeManager.shared.cardShadowColor.opacity(ThemeManager.shared.cardShadowOpacity),
+            radius: 8,
+            x: 0,
+            y: 4
+        )
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Work Order \(viewModel.workOrder.workOrderNumber), created \(viewModel.workOrder.timestamp, style: .date), customer \(viewModel.workOrder.customerName)")
     }
     
     // MARK: - Customer Info Card
@@ -788,6 +849,31 @@ struct WorkOrderDetailView: View {
     }
     
     // MARK: - Helper Methods
+    
+    private func formatPhoneNumber(_ phoneNumber: String) -> String {
+        // Remove all non-digit characters
+        let digits = phoneNumber.replacingOccurrences(of: "[^0-9]", with: "", options: .regularExpression)
+        
+        // Format with dashes based on length
+        if digits.count == 10 {
+            // Format as XXX-XXX-XXXX
+            let areaCode = String(digits.prefix(3))
+            let firstThree = String(digits.dropFirst(3).prefix(3))
+            let lastFour = String(digits.suffix(4))
+            return "\(areaCode)-\(firstThree)-\(lastFour)"
+        } else if digits.count == 11 && digits.hasPrefix("1") {
+            // Format as 1-XXX-XXX-XXXX
+            let countryCode = String(digits.prefix(1))
+            let areaCode = String(digits.dropFirst(1).prefix(3))
+            let firstThree = String(digits.dropFirst(4).prefix(3))
+            let lastFour = String(digits.suffix(4))
+            return "\(countryCode)-\(areaCode)-\(firstThree)-\(lastFour)"
+        } else {
+            // Return original if not a standard format
+            return phoneNumber
+        }
+    }
+    
     private func statusColor(_ status: String) -> Color {
         switch status.lowercased() {
         case "checked in":
@@ -807,65 +893,82 @@ struct WorkOrderDetailView: View {
 // MARK: - PhoneActionSheet
 struct PhoneActionSheet: View {
     let phoneNumber: String
+    let customerName: String
+    @Environment(\.dismiss) private var dismiss
     
     var body: some View {
-        VStack(spacing: 20) {
-            Text("Phone Actions")
-                        .font(.headline)
+        NavigationView {
+            VStack(spacing: 20) {
+                Text("Contact \(customerName)")
+                    .font(.headline)
+                
+                Text(phoneNumber)
+                    .font(.title2)
+                    .fontWeight(.medium)
             
-            Text(phoneNumber)
-                .font(.title2)
-                .fontWeight(.medium)
-            
-            VStack(spacing: 12) {
-                Button(action: {
-                    if let url = URL(string: "tel:\(phoneNumber)") {
-                        UIApplication.shared.open(url)
-                    }
-                }) {
+                VStack(spacing: 12) {
+                    Button(action: {
+                        if let url = URL(string: "tel:\(phoneNumber)") {
+                            UIApplication.shared.open(url)
+                        }
+                        dismiss()
+                    }) {
                         HStack {
                             Image(systemName: "phone.fill")
-                        Text("Call")
+                            Text("Call")
                         }
                         .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color.blue)
+                        .padding()
+                        .background(Color.blue)
                         .foregroundColor(.white)
-                    .cornerRadius(10)
-                }
-                
-                Button(action: {
-                    if let url = URL(string: "sms:\(phoneNumber)") {
-                        UIApplication.shared.open(url)
+                        .cornerRadius(10)
                     }
-                }) {
+                    
+                    Button(action: {
+                        if let url = URL(string: "sms:\(phoneNumber)") {
+                            UIApplication.shared.open(url)
+                        }
+                        dismiss()
+                    }) {
                         HStack {
                             Image(systemName: "message.fill")
-                        Text("Text")
+                            Text("Text")
                         }
                         .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color.green)
+                        .padding()
+                        .background(Color.green)
                         .foregroundColor(.white)
-                    .cornerRadius(10)
-                }
-                
-                Button(action: {
-                    UIPasteboard.general.string = phoneNumber
-                }) {
+                        .cornerRadius(10)
+                    }
+                    
+                    Button(action: {
+                        UIPasteboard.general.string = phoneNumber
+                        dismiss()
+                    }) {
                         HStack {
                             Image(systemName: "doc.on.doc.fill")
-                        Text("Copy")
+                            Text("Copy")
                         }
                         .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color.gray)
-                    .foregroundColor(.white)
-                    .cornerRadius(10)
+                        .padding()
+                        .background(Color.gray)
+                        .foregroundColor(.white)
+                        .cornerRadius(10)
+                    }
+                }
+            }
+            .padding()
+            .navigationTitle("Phone Actions")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") {
+                        dismiss()
+                    }
                 }
             }
         }
-        .padding()
+        .frame(maxWidth: UIScreen.main.bounds.width * 0.6, maxHeight: UIScreen.main.bounds.height * 0.6)
         .presentationDragIndicator(.visible)
     }
 }
