@@ -101,6 +101,7 @@ struct FullScreenImageViewer: View {
         ))
         .onAppear {
             print("🧩 FullScreenImageViewer launched with imageURL: \(imageURL.absoluteString)")
+            print("🧩 FullScreenImageViewer isPresented: \(isPresented)")
 
 #if DEBUG
             // Show a quick placeholder, but still fetch the real image

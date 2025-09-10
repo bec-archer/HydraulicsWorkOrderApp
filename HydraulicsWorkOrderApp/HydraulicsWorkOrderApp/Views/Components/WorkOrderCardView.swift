@@ -145,6 +145,9 @@ struct WorkOrderCardView: View {
     let workOrder: WorkOrder
     let customerTag: String?
     
+    @State private var isFullScreenImagePresented = false
+    @State private var selectedImageURL: URL?
+    
     init(workOrder: WorkOrder, customerTag: String? = nil) {
         self.workOrder = workOrder
         self.customerTag = customerTag
@@ -159,7 +162,16 @@ struct WorkOrderCardView: View {
         VStack(spacing: 0) {
             // Thumbnail Grid (computed directly from WO_Items)
             WorkOrderCardThumbnailGrid(
-                workOrder: workOrder
+                workOrder: workOrder,
+                onImageLongPress: { imageURL in
+                    print("🔍 DEBUG: Long-press detected on image: \(imageURL.absoluteString)")
+                    print("🔍 DEBUG: Setting selectedImageURL to: \(imageURL.absoluteString)")
+                    selectedImageURL = imageURL
+                    print("🔍 DEBUG: selectedImageURL is now: \(selectedImageURL?.absoluteString ?? "nil")")
+                    isFullScreenImagePresented = true
+                    print("🔍 DEBUG: isFullScreenImagePresented set to: \(isFullScreenImagePresented)")
+                    print("🔍 DEBUG: Full-screen viewer should now be presented")
+                }
             )
             
             // Main content
@@ -179,6 +191,32 @@ struct WorkOrderCardView: View {
             print("🔍 DEBUG: WorkOrder items count: \(workOrder.items.count)")
             for (index, item) in workOrder.items.enumerated() {
                 print("🔍 DEBUG: Item \(index): \(item.type) - imageUrls: \(item.imageUrls.count), thumbUrls: \(item.thumbUrls.count)")
+            }
+        }
+        .onChange(of: selectedImageURL) { oldValue, newValue in
+            print("🔍 DEBUG: selectedImageURL changed from: \(oldValue?.absoluteString ?? "nil") to: \(newValue?.absoluteString ?? "nil")")
+        }
+        .onChange(of: isFullScreenImagePresented) { oldValue, newValue in
+            print("🔍 DEBUG: isFullScreenImagePresented changed from: \(oldValue) to: \(newValue)")
+        }
+        .fullScreenCover(isPresented: $isFullScreenImagePresented) {
+            if let imageURL = selectedImageURL {
+                FullScreenImageViewer(
+                    imageURL: imageURL,
+                    isPresented: $isFullScreenImagePresented
+                )
+                .onAppear {
+                    print("🔍 DEBUG: FullScreenCover presenting with URL: \(imageURL.absoluteString)")
+                }
+            } else {
+                Text("No image selected")
+                    .foregroundColor(.white)
+                    .background(Color.black)
+                    .onAppear {
+                        print("🔍 DEBUG: FullScreenCover triggered but no selectedImageURL")
+                        print("🔍 DEBUG: selectedImageURL at fullScreenCover: \(selectedImageURL?.absoluteString ?? "nil")")
+                        print("🔍 DEBUG: isFullScreenImagePresented at fullScreenCover: \(isFullScreenImagePresented)")
+                    }
             }
         }
     }
@@ -287,6 +325,7 @@ struct WorkOrderCardContent: View {
 
 struct WorkOrderCardThumbnailGrid: View {
     let workOrder: WorkOrder
+    let onImageLongPress: (URL) -> Void
 
     // Layout dimensions
     private let singleHeight: CGFloat = 140      // unchanged (square path uses SquareThumb)
@@ -308,7 +347,8 @@ struct WorkOrderCardThumbnailGrid: View {
                     SquareThumb(
                         url: info.url,
                         itemStatus: StatusMapping.ItemStatus(for: info.item),
-                        typeQtyLabel: "\(info.item.type.isEmpty ? "Item" : info.item.type) × 1"
+                        typeQtyLabel: "\(info.item.type.isEmpty ? "Item" : info.item.type) × 1",
+                        onLongPress: onImageLongPress
                     )
                 }
             } else if displayCount == 2 {
@@ -319,7 +359,8 @@ struct WorkOrderCardThumbnailGrid: View {
                             url: info.url,
                             height: doubleHeight,
                             itemStatus: StatusMapping.ItemStatus(for: info.item),
-                            typeQtyLabel: "\(info.item.type.isEmpty ? "Item" : info.item.type) × 1"
+                            typeQtyLabel: "\(info.item.type.isEmpty ? "Item" : info.item.type) × 1",
+                            onLongPress: onImageLongPress
                         )
                     }
                 }
@@ -335,7 +376,8 @@ struct WorkOrderCardThumbnailGrid: View {
                             size: gridCell,
                             itemStatus: StatusMapping.ItemStatus(for: info.item),
                             showPlusBadge: (idx == 3 && totalItems > 4) ? (totalItems - 3) : nil,
-                            typeQtyLabel: "\(info.item.type.isEmpty ? "Item" : info.item.type) × 1"
+                            typeQtyLabel: "\(info.item.type.isEmpty ? "Item" : info.item.type) × 1",
+                            onLongPress: onImageLongPress
                         )
                     }
                 }
@@ -370,6 +412,7 @@ private struct SquareThumb: View {
     let url: URL?
     let itemStatus: StatusMapping.ItemStatus
     var typeQtyLabel: String = ""
+    let onLongPress: (URL) -> Void
 
     var body: some View {
         GeometryReader { geo in
@@ -416,6 +459,15 @@ private struct SquareThumb: View {
             }
         }
         .aspectRatio(1, contentMode: .fit) // ⬅️ reserve square space in the card
+        .onLongPressGesture {
+            print("🔍 DEBUG: SquareThumb long-press gesture triggered")
+            if let imageURL = url {
+                print("🔍 DEBUG: SquareThumb calling onLongPress with URL: \(imageURL.absoluteString)")
+                onLongPress(imageURL)
+            } else {
+                print("🔍 DEBUG: SquareThumb long-press but no URL available")
+            }
+        }
     }
 }
 
@@ -424,6 +476,7 @@ private struct FullWidthThumb: View {
     let height: CGFloat
     let itemStatus: StatusMapping.ItemStatus
     var typeQtyLabel: String = ""
+    let onLongPress: (URL) -> Void
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
@@ -487,6 +540,15 @@ private struct FullWidthThumb: View {
         .onAppear {
             print("🔍 DEBUG: FullWidthThumb appeared for URL: \(url?.absoluteString ?? "nil")")
         }
+        .onLongPressGesture {
+            print("🔍 DEBUG: FullWidthThumb long-press gesture triggered")
+            if let imageURL = url {
+                print("🔍 DEBUG: FullWidthThumb calling onLongPress with URL: \(imageURL.absoluteString)")
+                onLongPress(imageURL)
+            } else {
+                print("🔍 DEBUG: FullWidthThumb long-press but no URL available")
+            }
+        }
     }
 }
 
@@ -497,6 +559,7 @@ private struct GridThumb: View {
     /// If not nil, show a "+Qty" badge centered (used when total items > 4)
     let showPlusBadge: Int?
     var typeQtyLabel: String = ""
+    let onLongPress: (URL) -> Void
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
@@ -571,6 +634,15 @@ private struct GridThumb: View {
         }
         .onAppear {
             print("🔍 DEBUG: GridThumb appeared for URL: \(url?.absoluteString ?? "nil"), showPlusBadge: \(showPlusBadge ?? 0)")
+        }
+        .onLongPressGesture {
+            print("🔍 DEBUG: GridThumb long-press gesture triggered")
+            if let imageURL = url {
+                print("🔍 DEBUG: GridThumb calling onLongPress with URL: \(imageURL.absoluteString)")
+                onLongPress(imageURL)
+            } else {
+                print("🔍 DEBUG: GridThumb long-press but no URL available")
+            }
         }
     }
 }

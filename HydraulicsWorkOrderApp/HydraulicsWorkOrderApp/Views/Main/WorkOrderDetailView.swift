@@ -304,7 +304,24 @@ struct WorkOrderDetailView: View {
         .fullScreenCover(isPresented: $showImageViewer) {
             if let imageURL = selectedImageURL {
                 FullScreenImageViewer(imageURL: imageURL, isPresented: $showImageViewer)
+                    .onAppear {
+                        print("🔍 DEBUG: WorkOrderDetailView FullScreenCover presenting with URL: \(imageURL.absoluteString)")
+                    }
+            } else {
+                Text("No image selected")
+                    .foregroundColor(.white)
+                    .background(Color.black)
+                    .onAppear {
+                        print("🔍 DEBUG: WorkOrderDetailView FullScreenCover triggered but no selectedImageURL")
+                        print("🔍 DEBUG: showImageViewer: \(showImageViewer), selectedImageURL: \(selectedImageURL?.absoluteString ?? "nil")")
+                    }
             }
+        }
+        .onChange(of: showImageViewer) { oldValue, newValue in
+            print("🔍 DEBUG: WorkOrderDetailView showImageViewer changed from: \(oldValue) to: \(newValue)")
+        }
+        .onChange(of: selectedImageURL) { oldValue, newValue in
+            print("🔍 DEBUG: WorkOrderDetailView selectedImageURL changed from: \(oldValue?.absoluteString ?? "nil") to: \(newValue?.absoluteString ?? "nil")")
         }
     }
     
@@ -501,11 +518,24 @@ struct WorkOrderDetailView: View {
                                                 .clipped()
                                                 .cornerRadius(8)
                                                 .onTapGesture {
+                                                    print("🔍 DEBUG: WorkOrderDetailView tap detected on image: \(imageURL)")
                                                     if let url = URL(string: imageURL) {
                                                         selectedImageURL = url
                                                         showImageViewer = true
+                                                        print("🔍 DEBUG: WorkOrderDetailView tap - full-screen viewer should now be presented")
                                                     }
                                                 }
+                                                .simultaneousGesture(
+                                                    LongPressGesture(minimumDuration: 0.5)
+                                                        .onEnded { _ in
+                                                            print("🔍 DEBUG: WorkOrderDetailView long-press detected on image: \(imageURL)")
+                                                            if let url = URL(string: imageURL) {
+                                                                selectedImageURL = url
+                                                                showImageViewer = true
+                                                                print("🔍 DEBUG: WorkOrderDetailView long-press - full-screen viewer should now be presented")
+                                                            }
+                                                        }
+                                                )
                                         } placeholder: {
                                             Rectangle()
                                                 .fill(Color.gray.opacity(0.3))
