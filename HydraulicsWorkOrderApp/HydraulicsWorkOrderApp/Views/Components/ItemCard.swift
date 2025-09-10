@@ -85,7 +85,132 @@ struct ItemCard: View {
     ]
 
     var body: some View {
-        Text("Item Card Placeholder")
+        // Large primary (1:1) above a 2×2 grid of thumbs (2, 3, 4, +Qty)
+        GeometryReader { geo in
+            // Container paddings/spacings
+            let horizontalPadding: CGFloat = 0          // parent can add its own
+            let gridSpacing: CGFloat = 8
+            let maxPrimary: CGFloat = 640               // cap per spec (600–700pt guard)
+            let available = geo.size.width - horizontalPadding
+            let primarySize = min(available, maxPrimary)
+            let thumbSize = (primarySize - gridSpacing) / 2.0
+
+            VStack(alignment: .leading, spacing: 10) {
+                // PRIMARY 1:1 IMAGE (first imageURLs)
+                if let first = imageURLs.first, !first.isEmpty, let url = URL(string: first) {
+                    AsyncImage(url: url) { phase in
+                        switch phase {
+                        case .empty:
+                            placeholderPrimary(size: primarySize)
+                        case .success(let image):
+                            image
+                                .resizable()
+                                .scaledToFill()                // crop, do not stretch
+                                .frame(width: primarySize, height: primarySize)
+                                .clipped()
+                                .cornerRadius(12)              // slightly inside card radius
+                        case .failure(_):
+                            placeholderPrimary(size: primarySize)
+                        @unknown default:
+                            placeholderPrimary(size: primarySize)
+                        }
+                    }
+                } else {
+                    // No images — show primary placeholder
+                    placeholderPrimary(size: primarySize)
+                }
+
+                // THUMBNAIL GRID (2×2 under primary)
+                let extra = Array(imageURLs.dropFirst())
+                if !extra.isEmpty {
+                    LazyVGrid(
+                        columns: [GridItem(.fixed(thumbSize), spacing: gridSpacing),
+                                  GridItem(.fixed(thumbSize), spacing: gridSpacing)],
+                        spacing: gridSpacing
+                    ) {
+                        // up to next three real thumbs (2,3,4 is handled by +Qty as needed)
+                        ForEach(Array(extra.prefix(3).enumerated()), id: \.offset) { _, urlStr in
+                            if let url = URL(string: urlStr) {
+                                AsyncImage(url: url) { phase in
+                                    switch phase {
+                                    case .empty:
+                                        placeholderThumb(size: thumbSize)
+                                    case .success(let img):
+                                        img.resizable()
+                                            .scaledToFill()
+                                            .frame(width: thumbSize, height: thumbSize)
+                                            .clipped()
+                                            .cornerRadius(10)
+                                    case .failure(_):
+                                        placeholderThumb(size: thumbSize)
+                                    @unknown default:
+                                        placeholderThumb(size: thumbSize)
+                                    }
+                                }
+                            } else {
+                                placeholderThumb(size: thumbSize)
+                            }
+                        }
+
+                        // If more than 4 total images, show +Qty on the final cell
+                        if imageURLs.count > 4 {
+                            ZStack {
+                                Rectangle()
+                                    .fill(Color.gray.opacity(0.2))
+                                    .frame(width: thumbSize, height: thumbSize)
+                                    .cornerRadius(10)
+                                Text("+\(imageURLs.count - 4)")
+                                    .font(.headline)
+                                    .foregroundColor(.primary)
+                            }
+                        } else if extra.count >= 2 {
+                            // Fill the 4th cell when exactly 3 extras exist
+                            if extra.count == 3 {
+                                // already filled 3 cells above; add a 4th empty to keep grid shape
+                                Rectangle()
+                                    .fill(Color.gray.opacity(0.08))
+                                    .frame(width: thumbSize, height: thumbSize)
+                                    .cornerRadius(10)
+                                    .overlay(
+                                        Image(systemName: "photo")
+                                            .font(.system(size: 18, weight: .regular))
+                                            .foregroundColor(.secondary)
+                                    )
+                            }
+                        }
+                    }
+                    .frame(width: primarySize, alignment: .leading) // grid width == primary width
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .frame(maxWidth: .infinity, minHeight: 0) // allow parent to size vertically
+    }
+    
+    @ViewBuilder
+    private func placeholderPrimary(size: CGFloat) -> some View {
+        Rectangle()
+            .fill(Color.gray.opacity(0.12))
+            .frame(width: size, height: size)
+            .overlay(
+                Image(systemName: "photo")
+                    .font(.system(size: size * 0.12, weight: .regular))
+                    .foregroundColor(.secondary)
+            )
+            .cornerRadius(12)
+    }
+
+    @ViewBuilder
+    private func placeholderThumb(size: CGFloat) -> some View {
+        Rectangle()
+            .fill(Color.gray.opacity(0.12))
+            .frame(width: size, height: size)
+            .overlay(
+                Image(systemName: "photo")
+                    .font(.system(size: 16, weight: .regular))
+                    .foregroundColor(.secondary)
+            )
+            .cornerRadius(10)
     }
 }
 

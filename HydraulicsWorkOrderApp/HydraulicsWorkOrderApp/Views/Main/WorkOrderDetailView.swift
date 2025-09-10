@@ -338,45 +338,52 @@ struct WorkOrderDetailView: View {
                         .font(ThemeManager.shared.titleFont)
                         .foregroundColor(ThemeManager.shared.textPrimary)
                     
-                    Text(viewModel.workOrder.timestamp, style: .date)
-                        .font(.caption)
-                        .foregroundColor(ThemeManager.shared.textSecondary)
-                    +
-                    Text(" at ")
-                        .font(.caption)
-                        .foregroundColor(ThemeManager.shared.textSecondary)
-                    +
-                    Text(viewModel.workOrder.timestamp, style: .time)
+                    Text(viewModel.workOrder.timestamp, format: .dateTime.month(.abbreviated).day().year().hour().minute())
                         .font(.caption)
                         .foregroundColor(ThemeManager.shared.textSecondary)
                 }
                 
                 Spacer()
                 
-                // Right side: Customer name and phone
-                VStack(alignment: .trailing, spacing: 0) {
-                    Text(viewModel.workOrder.customerName)
-                        .font(.system(size: 20 * 0.8 * 1.5)) // 80% of title font size, then 50% larger
-                        .fontWeight(.bold)
-                        .foregroundColor(ThemeManager.shared.textPrimary)
-                    
-                    Button(action: {
-                        showingPhoneActions = true
-                    }) {
-                        HStack(spacing: 2) {
+                // Right side: Customer name (with optional emoji), Flag toggle, and phone link
+                VStack(alignment: .trailing, spacing: 4) {
+                    HStack(spacing: 6) {
+                        if let emoji = viewModel.workOrder.customerEmojiTag, !emoji.isEmpty {
+                            Text(emoji)
+                                .font(ThemeManager.shared.labelFont)
+                        }
+                        Text(viewModel.workOrder.customerName)
+                            .font(ThemeManager.shared.labelFont)
+                            .foregroundColor(ThemeManager.shared.textPrimary)
+
+                        // Small flag toggle to match header affordance
+                        Button(action: {
+                            Task { await viewModel.toggleFlagged() }
+                        }) {
+                            Image(systemName: viewModel.workOrder.flagged ? "flag.fill" : "flag")
+                                .font(.caption)
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundColor(ThemeManager.shared.linkColor)
+                        .accessibilityLabel(viewModel.workOrder.flagged ? "Unflag work order" : "Flag work order")
+                    }
+
+                    Button(action: { showingPhoneActions = true }) {
+                        HStack(spacing: 4) {
                             Image(systemName: "phone.fill")
-                                .font(.system(size: 12 * 1.5)) // 50% larger than caption
+                                .font(.caption)
                             Text(formatPhoneNumber(viewModel.workOrder.customerPhone))
-                                .font(.system(size: 12 * 1.5)) // 50% larger than caption
-                                .fontWeight(.bold)
+                                .font(.caption)
+                                .fontWeight(.semibold)
                         }
                         .foregroundColor(ThemeManager.shared.linkColor)
                     }
+                    .buttonStyle(.plain)
                 }
             }
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 12)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 16)
         .background(ThemeManager.shared.cardBackground)
         .cornerRadius(ThemeManager.shared.cardCornerRadius)
         .shadow(
@@ -386,7 +393,9 @@ struct WorkOrderDetailView: View {
             y: 4
         )
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Work Order \(viewModel.workOrder.workOrderNumber), created \(viewModel.workOrder.timestamp, style: .date), customer \(viewModel.workOrder.customerName)")
+        .accessibilityLabel(
+            "Work Order \(viewModel.workOrder.workOrderNumber), created \(viewModel.workOrder.timestamp, format: .dateTime.month(.abbreviated).day().year().hour().minute()), customer \(viewModel.workOrder.customerName), phone \(formatPhoneNumber(viewModel.workOrder.customerPhone))\(viewModel.workOrder.flagged ? ", flagged" : "")"
+        )
     }
     
     // MARK: - Customer Info Card
@@ -591,122 +600,169 @@ struct WorkOrderDetailView: View {
         
         @State private var showImageViewer = false
         @State private var selectedImageURL: URL?
+        @State private var showGallery = false
         
         var body: some View {
             VStack(alignment: .leading, spacing: 12) {
-                // Header row: Composite item number, Reasons checkboxes, StatusBadge
-                HStack {
+                // Header row: Composite item number • Reasons (checkboxes) • StatusBadge
+                HStack(alignment: .top, spacing: 12) {
+                    // Left: Composite WO_Number-ItemIndex (e.g., 250826-001-003)
                     Text("\(workOrder.workOrderNumber)-\(String(format: "%03d", itemIndex + 1))")
                         .font(.headline)
                         .foregroundColor(ThemeManager.shared.textPrimary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.9)
                     
-                    Spacer()
+                    Spacer(minLength: 8)
                     
-                    // StatusBadge for individual item
+                    // Middle: Reasons for Service (chosen at intake) — check to log "Service Performed — <Reason>"
+                    VStack(alignment: .leading, spacing: 6) {
+                        ForEach(item.reasonsForService, id: \.self) { reason in
+                            HStack(spacing: 8) {
+                                Button(action: {
+                                    onReasonChecked(reason)
+                                }) {
+                                    Image(systemName: isReasonPerformed(reason) ? "checkmark.square.fill" : "square")
+                                        .foregroundColor(isReasonPerformed(reason) ? ThemeManager.shared.linkColor : ThemeManager.shared.textSecondary)
+                                }
+                                .disabled(isReasonPerformed(reason))
+                                
+                                Text(reason)
+                                    .font(.subheadline)
+                                    .foregroundColor(ThemeManager.shared.textPrimary)
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.9)
+                            }
+                            
+                            // Show reason notes if "Other" has notes
+                            if reason.lowercased().contains("other") && !(item.reasonNotes?.isEmpty ?? true) {
+                                Text(item.reasonNotes ?? "")
+                                    .font(.caption)
+                                    .foregroundColor(ThemeManager.shared.textSecondary)
+                                    .padding(.leading, 24)
+                            }
+                        }
+                    }
+                    
+                    // Right: StatusBadge
                     StatusBadge(status: item.statusHistory.last?.status ?? "Checked In")
                 }
                 
                 // Type line
-                Text(item.type)
+                Text(item.type.isEmpty ? "Item" : item.type)
                     .font(.subheadline)
                     .foregroundColor(ThemeManager.shared.textSecondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
                 
-                // Reasons for Service checkboxes
-                VStack(alignment: .leading, spacing: 8) {
-                    ForEach(item.reasonsForService, id: \.self) { reason in
-                        HStack {
-                            Button(action: {
-                                onReasonChecked(reason)
-                            }) {
-                                Image(systemName: isReasonPerformed(reason) ? "checkmark.square.fill" : "square")
-                                    .foregroundColor(isReasonPerformed(reason) ? ThemeManager.shared.linkColor : ThemeManager.shared.textSecondary)
-                            }
-                            .disabled(isReasonPerformed(reason))
-                            
-                            Text(reason)
-                                .font(.subheadline)
-                                .foregroundColor(ThemeManager.shared.textPrimary)
-                            
-                            Spacer()
-                        }
-                        
-                        // Show reason notes if "Other" and has notes
-                        if reason.lowercased().contains("other") && !(item.reasonNotes?.isEmpty ?? true) {
-                            Text(item.reasonNotes ?? "")
-                                .font(.caption)
-                                .foregroundColor(ThemeManager.shared.textSecondary)
-                                .padding(.leading, 24)
-                        }
-                    }
+                // Size / Color / Machine / Brand / Wait summary (muted), with inline "Other" note if present
+                if !summaryLineForItem(item).isEmpty {
+                    Text(summaryLineForItem(item))
+                        .font(.caption)
+                        .foregroundColor(ThemeManager.shared.textSecondary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
                 }
                 
                 // Main body split: Left (images) + Right (notes & status)
                 HStack(alignment: .top, spacing: 16) {
-                    // Left: Primary image + 2x2 thumbnails
+                    // Left: Primary image (large, 1:1) + responsive 2×2 thumbnails beneath
                     VStack(spacing: 8) {
-                        // Primary 1:1 image
-                        if let firstImageURL = item.imageUrls.first {
-                            AsyncImage(url: URL(string: firstImageURL)) { image in
-                                image
-                                    .resizable()
-                                    .aspectRatio(contentMode: .fill)
-                                    .frame(width: 120, height: 120)
-                                    .clipped()
-                                    .cornerRadius(ThemeManager.shared.cardCornerRadius - 2)
-                                    .onTapGesture {
-                                        onImageTap(firstImageURL)
-                                    }
-                            } placeholder: {
-                                Rectangle()
-                                    .fill(ThemeManager.shared.border.opacity(0.3))
-                                    .frame(width: 120, height: 120)
-                                    .cornerRadius(ThemeManager.shared.cardCornerRadius - 2)
-                            }
-                        }
+                        // Use a fixed size that allows cards to expand
+                        let primarySize: CGFloat = 300
+                        let gridSpacing: CGFloat = 8
+                        let thumbSize = (primarySize - gridSpacing) / 2.0
                         
-                        // 2x2 thumbnail grid
-                        if item.imageUrls.count > 1 {
-                            LazyVGrid(columns: [
-                                GridItem(.fixed(50), spacing: 4),
-                                GridItem(.fixed(50), spacing: 4)
-                            ], spacing: 4) {
-                                ForEach(Array(item.imageUrls.dropFirst().prefix(3).enumerated()), id: \.offset) { thumbIndex, imageURL in
-                                    AsyncImage(url: URL(string: imageURL)) { image in
+                        VStack(spacing: 8) {
+                                // PRIMARY 1:1 image
+                                if let firstImageURL = item.imageUrls.first {
+                                    AsyncImage(url: URL(string: firstImageURL)) { image in
                                         image
                                             .resizable()
-                                            .aspectRatio(contentMode: .fill)
-                                            .frame(width: 50, height: 50)
+                                            .scaledToFill() // crop, do not stretch
+                                            .frame(width: primarySize, height: primarySize)
                                             .clipped()
-                                            .cornerRadius(6)
-                                            .onTapGesture {
-                                                onImageTap(imageURL)
-                                            }
+                                            .cornerRadius(ThemeManager.shared.cardCornerRadius - 2)
+                                            .onTapGesture { onImageTap(firstImageURL) }
                                     } placeholder: {
                                         Rectangle()
                                             .fill(ThemeManager.shared.border.opacity(0.3))
-                                            .frame(width: 50, height: 50)
-                                            .cornerRadius(6)
+                                            .frame(width: primarySize, height: primarySize)
+                                            .cornerRadius(ThemeManager.shared.cardCornerRadius - 2)
                                     }
+                                } else {
+                                    // No images: placeholder primary
+                                    Rectangle()
+                                        .fill(ThemeManager.shared.border.opacity(0.2))
+                                        .frame(width: primarySize, height: primarySize)
+                                        .cornerRadius(ThemeManager.shared.cardCornerRadius - 2)
+                                        .overlay(
+                                            Image(systemName: "photo")
+                                                .font(.system(size: primarySize * 0.12, weight: .regular))
+                                                .foregroundColor(ThemeManager.shared.textSecondary)
+                                        )
                                 }
                                 
-                                // Show +Qty if more than 4 images total
-                                if item.imageUrls.count > 4 {
-                                    ZStack {
-                                        Rectangle()
-                                            .fill(ThemeManager.shared.border.opacity(0.3))
-                                            .frame(width: 50, height: 50)
-                                            .cornerRadius(6)
+                                // 2×2 thumbnails directly beneath primary (images 2,3,4, +Qty)
+                                if item.imageUrls.count > 1 {
+                                    let extras = Array(item.imageUrls.dropFirst())
+                                    LazyVGrid(
+                                        columns: [
+                                            GridItem(.fixed(thumbSize), spacing: gridSpacing),
+                                            GridItem(.fixed(thumbSize), spacing: gridSpacing)
+                                        ],
+                                        spacing: gridSpacing
+                                    ) {
+                                        ForEach(Array(extras.prefix(3).enumerated()), id: \.offset) { _, imageURL in
+                                            AsyncImage(url: URL(string: imageURL)) { img in
+                                                img.resizable()
+                                                    .scaledToFill()
+                                                    .frame(width: thumbSize, height: thumbSize)
+                                                    .clipped()
+                                                    .cornerRadius(ThemeManager.shared.cardCornerRadius - 6)
+                                                    .onTapGesture { onImageTap(imageURL) }
+                                            } placeholder: {
+                                                Rectangle()
+                                                    .fill(ThemeManager.shared.border.opacity(0.3))
+                                                    .frame(width: thumbSize, height: thumbSize)
+                                                    .cornerRadius(ThemeManager.shared.cardCornerRadius - 6)
+                                            }
+                                        }
                                         
-                                        Text("+\(item.imageUrls.count - 4)")
-                                            .font(.caption)
-                                            .fontWeight(.bold)
-                                            .foregroundColor(ThemeManager.shared.textPrimary)
+                                        // +Qty tile if there are more than 4 total images
+                                        if item.imageUrls.count > 4 {
+                                            Button(action: {
+                                                // Show gallery for all images
+                                                showGallery = true
+                                            }) {
+                                                ZStack {
+                                                    Rectangle()
+                                                        .fill(ThemeManager.shared.border.opacity(0.3))
+                                                        .frame(width: thumbSize, height: thumbSize)
+                                                        .cornerRadius(ThemeManager.shared.cardCornerRadius - 6)
+                                                    Text("+\(item.imageUrls.count - 4)")
+                                                        .font(.headline)
+                                                        .foregroundColor(ThemeManager.shared.textPrimary)
+                                                }
+                                            }
+                                            .buttonStyle(PlainButtonStyle())
+                                        } else if item.imageUrls.count == 4 {
+                                            // Keep 2×2 shape when exactly 3 extras (add a subtle filler)
+                                            Rectangle()
+                                                .fill(ThemeManager.shared.border.opacity(0.08))
+                                                .frame(width: thumbSize, height: thumbSize)
+                                                .cornerRadius(ThemeManager.shared.cardCornerRadius - 6)
+                                                .overlay(
+                                                    Image(systemName: "photo")
+                                                        .font(.system(size: 18, weight: .regular))
+                                                        .foregroundColor(ThemeManager.shared.textSecondary)
+                                                )
+                                        }
                                     }
+                                    .frame(width: primarySize, alignment: .leading) // grid width matches primary
                                 }
-                            }
                         }
                     }
-                    .frame(width: 120)
                     
                     // Right: Notes & Status timeline
                     VStack(alignment: .leading, spacing: 8) {
@@ -827,6 +883,9 @@ struct WorkOrderDetailView: View {
                 x: 0,
                 y: 4
             )
+            .sheet(isPresented: $showGallery) {
+                ImageGalleryView(images: item.imageUrls, title: "\(workOrder.workOrderNumber)-\(String(format: "%03d", itemIndex + 1))")
+            }
         }
         
         private func isReasonPerformed(_ reason: String) -> Bool {
@@ -834,8 +893,23 @@ struct WorkOrderDetailView: View {
                 status.status == "Service Performed — \(reason)"
             }
         }
-    }
 
+        private func summaryLineForItem(_ item: WO_Item) -> String {
+            // Builds: Size / Color / Machine / Brand / Wait (skip empties)
+            let size = item.dropdowns["size"]
+            let color = item.dropdowns["color"]
+            let machineType = item.dropdowns["machineType"]
+            let brand = item.dropdowns["machineBrand"]
+            let wait = item.dropdowns["waitTime"]
+            
+            let parts = [size, color, machineType, brand, wait].compactMap { v -> String? in
+                guard let s = v?.trimmingCharacters(in: .whitespacesAndNewlines), !s.isEmpty else { return nil }
+                return s
+            }
+            return parts.joined(separator: " • ")
+        }
+    }
+    
     
     // MARK: - Helper Methods
     
@@ -1122,6 +1196,63 @@ struct ImagePicker: UIViewControllerRepresentable {
         
         func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
             parent.dismiss()
+        }
+    }
+}
+
+// MARK: - ImageGalleryView
+struct ImageGalleryView: View {
+    let images: [String]
+    let title: String
+    @Environment(\.dismiss) private var dismiss
+    @State private var showFullScreen = false
+    @State private var selectedImageURL: URL?
+    
+    var body: some View {
+        NavigationView {
+            ScrollView {
+                LazyVGrid(columns: [
+                    GridItem(.adaptive(minimum: 100), spacing: 8)
+                ], spacing: 8) {
+                    ForEach(Array(images.enumerated()), id: \.offset) { index, imageURL in
+                        Button(action: {
+                            selectedImageURL = URL(string: imageURL)
+                            showFullScreen = true
+                        }) {
+                            AsyncImage(url: URL(string: imageURL)) { image in
+                                image
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fill)
+                                    .frame(width: 100, height: 100)
+                                    .clipped()
+                                    .cornerRadius(8)
+                            } placeholder: {
+                                Rectangle()
+                                    .fill(ThemeManager.shared.border.opacity(0.3))
+                                    .frame(width: 100, height: 100)
+                                    .cornerRadius(8)
+                                    .overlay(ProgressView())
+                            }
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                    }
+                }
+                .padding()
+            }
+            .navigationTitle(title)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                }
+            }
+        }
+        .fullScreenCover(isPresented: $showFullScreen) {
+            if let imageURL = selectedImageURL {
+                FullScreenImageViewer(imageURL: imageURL, isPresented: $showFullScreen)
+            }
         }
     }
 }
