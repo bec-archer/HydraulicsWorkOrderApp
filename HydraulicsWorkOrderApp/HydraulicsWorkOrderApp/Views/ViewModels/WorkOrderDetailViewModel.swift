@@ -357,6 +357,16 @@ class WorkOrderDetailViewModel: ObservableObject {
         await addNote(note.text, to: itemIndex)
     }
     
+    func addServicePerformedStatus(for itemIndex: Int, reason: String) async {
+        guard itemIndex >= 0 && itemIndex < workOrder.items.count else {
+            setError("Invalid item index")
+            return
+        }
+        
+        let statusText = "Service Performed — \(reason)"
+        await updateItemStatus(statusText, for: itemIndex)
+    }
+    
     // MARK: - Private Methods
     
     private func setError(_ message: String) {

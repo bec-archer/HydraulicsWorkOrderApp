@@ -266,7 +266,21 @@ class NewWorkOrderViewModel: ObservableObject {
             
             // ───── Snapshot items to avoid mutation during iteration ─────
             let itemsSnapshot = nonBlankItems
-            let builtItems: [WO_Item] = itemsSnapshot.map { $0 }
+            let builtItems: [WO_Item] = itemsSnapshot.map { item in
+                var updatedItem = item
+                // Add initial "Checked In" status to each item's statusHistory
+                if updatedItem.statusHistory.isEmpty {
+                    updatedItem.statusHistory = [
+                        WO_Status(
+                            status: "Checked In",
+                            user: "Tech",
+                            timestamp: Date(),
+                            notes: nil
+                        )
+                    ]
+                }
+                return updatedItem
+            }
             
             #if DEBUG
             print("🔍 BUILDING: WorkOrder with \(builtItems.count) items")
@@ -275,7 +289,7 @@ class NewWorkOrderViewModel: ObservableObject {
                 print("    imageUrls: \(item.imageUrls), thumbUrls: \(item.thumbUrls)")
                 print("    reasons: \(item.reasonsForService)")
                 print("    dropdowns: \(item.dropdowns)")
-                print("    statusHistory: \(item.statusHistory.count)")
+                print("    statusHistory: \(item.statusHistory.count) - \(item.statusHistory.map { $0.status })")
                 print("    notes: \(item.notes.count)")
             }
             #endif

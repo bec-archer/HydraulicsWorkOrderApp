@@ -483,94 +483,293 @@ struct WorkOrderDetailView: View {
     
     // MARK: - Items Section
     private var itemsSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 16) {
             HStack {
                 Text("Work Order Items")
                     .font(.headline)
-                    .foregroundColor(.primary)
+                    .foregroundColor(ThemeManager.shared.textPrimary)
                 Spacer()
                 Text("\(viewModel.workOrder.items.count) items")
-                        .font(.subheadline)
-                    .foregroundColor(.secondary)
+                    .font(.subheadline)
+                    .foregroundColor(ThemeManager.shared.textSecondary)
             }
             
-            LazyVStack(spacing: 12) {
+            LazyVStack(spacing: 14) {
                 ForEach(Array(viewModel.workOrder.items.enumerated()), id: \.element.id) { index, item in
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack {
-                            Text(item.type)
-                                .font(.headline)
-                            Spacer()
-                            Text(item.assetTagId ?? "No Tag")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                        
-                        if !item.imageUrls.isEmpty {
-                            ScrollView(.horizontal, showsIndicators: false) {
-                                HStack(spacing: 8) {
-                                    ForEach(item.imageUrls, id: \.self) { imageURL in
-                                        AsyncImage(url: URL(string: imageURL)) { image in
-                                            image
-                                                .resizable()
-                                                .aspectRatio(contentMode: .fill)
-                                                .frame(width: 80, height: 80)
-                                                .clipped()
-                                                .cornerRadius(8)
-                                                .onTapGesture {
-                                                    print("🔍 DEBUG: WorkOrderDetailView tap detected on image: \(imageURL)")
-                                                    if let url = URL(string: imageURL) {
-                                                        selectedImageURL = url
-                                                        showImageViewer = true
-                                                        print("🔍 DEBUG: WorkOrderDetailView tap - full-screen viewer should now be presented")
-                                                    }
-                                                }
-                                                .simultaneousGesture(
-                                                    LongPressGesture(minimumDuration: 0.5)
-                                                        .onEnded { _ in
-                                                            print("🔍 DEBUG: WorkOrderDetailView long-press detected on image: \(imageURL)")
-                                                            if let url = URL(string: imageURL) {
-                                                                selectedImageURL = url
-                                                                showImageViewer = true
-                                                                print("🔍 DEBUG: WorkOrderDetailView long-press - full-screen viewer should now be presented")
-                                                            }
-                                                        }
-                                                )
-                                        } placeholder: {
-                                            Rectangle()
-                                                .fill(Color.gray.opacity(0.3))
-                                                .frame(width: 80, height: 80)
-                                                .cornerRadius(8)
-                                        }
-                                    }
-                                }
-                                .padding(.horizontal)
+                    WOItemCard(
+                        workOrder: viewModel.workOrder,
+                        item: item,
+                        itemIndex: index,
+                        onImageTap: { imageURL in
+                            if let url = URL(string: imageURL) {
+                                selectedImageURL = url
+                                showImageViewer = true
+                            }
+                        },
+                        onReasonChecked: { reason in
+                            Task {
+                                await viewModel.addServicePerformedStatus(for: index, reason: reason)
                             }
                         }
-                        
-                        HStack {
-                            Button("Update Status") {
-                                viewModel.selectedItemIndex = index
-                                viewModel.showStatusPickerSheet = true
-                            }
-                            .buttonStyle(.bordered)
-                            
-                            Button("Add Note") {
-                                viewModel.selectedItemIndex = index
-                                viewModel.showAddNoteSheet = true
-                            }
-                            .buttonStyle(.bordered)
-                            
-                            Spacer()
-                        }
-                    }
-                    .padding()
-                    .background(Color(.systemGray6))
-                    .cornerRadius(12)
+                    )
                 }
             }
         }
-        .card()
+    }
+    
+    // MARK: - WO Item Card Component
+    private struct WOItemCard: View {
+        let workOrder: WorkOrder
+        let item: WO_Item
+        let itemIndex: Int
+        let onImageTap: (String) -> Void
+        let onReasonChecked: (String) -> Void
+        
+        @State private var showImageViewer = false
+        @State private var selectedImageURL: URL?
+        
+        var body: some View {
+            VStack(alignment: .leading, spacing: 12) {
+                // Header row: Composite item number, Reasons checkboxes, StatusBadge
+                HStack {
+                    Text("\(workOrder.workOrderNumber)-\(String(format: "%03d", itemIndex + 1))")
+                        .font(.headline)
+                        .foregroundColor(ThemeManager.shared.textPrimary)
+                    
+                    Spacer()
+                    
+                    // StatusBadge for individual item
+                    StatusBadge(status: item.statusHistory.last?.status ?? "Checked In")
+                }
+                
+                // Type line
+                Text(item.type)
+                    .font(.subheadline)
+                    .foregroundColor(ThemeManager.shared.textSecondary)
+                
+                // Reasons for Service checkboxes
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(item.reasonsForService, id: \.self) { reason in
+                        HStack {
+                            Button(action: {
+                                onReasonChecked(reason)
+                            }) {
+                                Image(systemName: isReasonPerformed(reason) ? "checkmark.square.fill" : "square")
+                                    .foregroundColor(isReasonPerformed(reason) ? ThemeManager.shared.linkColor : ThemeManager.shared.textSecondary)
+                            }
+                            .disabled(isReasonPerformed(reason))
+                            
+                            Text(reason)
+                                .font(.subheadline)
+                                .foregroundColor(ThemeManager.shared.textPrimary)
+                            
+                            Spacer()
+                        }
+                        
+                        // Show reason notes if "Other" and has notes
+                        if reason.lowercased().contains("other") && !(item.reasonNotes?.isEmpty ?? true) {
+                            Text(item.reasonNotes ?? "")
+                                .font(.caption)
+                                .foregroundColor(ThemeManager.shared.textSecondary)
+                                .padding(.leading, 24)
+                        }
+                    }
+                }
+                
+                // Main body split: Left (images) + Right (notes & status)
+                HStack(alignment: .top, spacing: 16) {
+                    // Left: Primary image + 2x2 thumbnails
+                    VStack(spacing: 8) {
+                        // Primary 1:1 image
+                        if let firstImageURL = item.imageUrls.first {
+                            AsyncImage(url: URL(string: firstImageURL)) { image in
+                                image
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fill)
+                                    .frame(width: 120, height: 120)
+                                    .clipped()
+                                    .cornerRadius(ThemeManager.shared.cardCornerRadius - 2)
+                                    .onTapGesture {
+                                        onImageTap(firstImageURL)
+                                    }
+                            } placeholder: {
+                                Rectangle()
+                                    .fill(ThemeManager.shared.border.opacity(0.3))
+                                    .frame(width: 120, height: 120)
+                                    .cornerRadius(ThemeManager.shared.cardCornerRadius - 2)
+                            }
+                        }
+                        
+                        // 2x2 thumbnail grid
+                        if item.imageUrls.count > 1 {
+                            LazyVGrid(columns: [
+                                GridItem(.fixed(50), spacing: 4),
+                                GridItem(.fixed(50), spacing: 4)
+                            ], spacing: 4) {
+                                ForEach(Array(item.imageUrls.dropFirst().prefix(3).enumerated()), id: \.offset) { thumbIndex, imageURL in
+                                    AsyncImage(url: URL(string: imageURL)) { image in
+                                        image
+                                            .resizable()
+                                            .aspectRatio(contentMode: .fill)
+                                            .frame(width: 50, height: 50)
+                                            .clipped()
+                                            .cornerRadius(6)
+                                            .onTapGesture {
+                                                onImageTap(imageURL)
+                                            }
+                                    } placeholder: {
+                                        Rectangle()
+                                            .fill(ThemeManager.shared.border.opacity(0.3))
+                                            .frame(width: 50, height: 50)
+                                            .cornerRadius(6)
+                                    }
+                                }
+                                
+                                // Show +Qty if more than 4 images total
+                                if item.imageUrls.count > 4 {
+                                    ZStack {
+                                        Rectangle()
+                                            .fill(ThemeManager.shared.border.opacity(0.3))
+                                            .frame(width: 50, height: 50)
+                                            .cornerRadius(6)
+                                        
+                                        Text("+\(item.imageUrls.count - 4)")
+                                            .font(.caption)
+                                            .fontWeight(.bold)
+                                            .foregroundColor(ThemeManager.shared.textPrimary)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    .frame(width: 120)
+                    
+                    // Right: Notes & Status timeline
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Notes & Status")
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                            .foregroundColor(ThemeManager.shared.textPrimary)
+                        
+                        // Item-specific notes and status history
+                        LazyVStack(alignment: .leading, spacing: 4) {
+                            // Show "Checked In" as default if no status history
+                            if item.statusHistory.isEmpty {
+                                HStack(alignment: .top, spacing: 8) {
+                                    Text("•")
+                                        .foregroundColor(ThemeManager.shared.textSecondary)
+                                    
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text("Checked In")
+                                            .font(.caption)
+                                            .foregroundColor(ThemeManager.shared.textPrimary)
+                                        
+                                        HStack {
+                                            Text("System")
+                                                .font(.caption2)
+                                                .foregroundColor(ThemeManager.shared.textSecondary)
+                                            
+                                            Text("•")
+                                                .font(.caption2)
+                                                .foregroundColor(ThemeManager.shared.textSecondary)
+                                            
+                                            Text("Initial Status")
+                                                .font(.caption2)
+                                                .foregroundColor(ThemeManager.shared.textSecondary)
+                                        }
+                                    }
+                                    
+                                    Spacer()
+                                }
+                            }
+                            
+                            ForEach(item.statusHistory.sorted(by: { $0.timestamp < $1.timestamp }), id: \.timestamp) { status in
+                                HStack(alignment: .top, spacing: 8) {
+                                    Text("•")
+                                        .foregroundColor(ThemeManager.shared.textSecondary)
+                                    
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(status.status)
+                                            .font(.caption)
+                                            .foregroundColor(ThemeManager.shared.textPrimary)
+                                        
+                                        HStack {
+                                            Text(status.user)
+                                                .font(.caption2)
+                                                .foregroundColor(ThemeManager.shared.textSecondary)
+                                            
+                                            Text("•")
+                                                .font(.caption2)
+                                                .foregroundColor(ThemeManager.shared.textSecondary)
+                                            
+                                            Text(status.timestamp, style: .time)
+                                                .font(.caption2)
+                                                .foregroundColor(ThemeManager.shared.textSecondary)
+                                        }
+                                        
+                                        if let notes = status.notes, !notes.isEmpty {
+                                            Text(notes)
+                                                .font(.caption2)
+                                                .foregroundColor(ThemeManager.shared.textSecondary)
+                                                .italic()
+                                        }
+                                    }
+                                    
+                                    Spacer()
+                                }
+                            }
+                            
+                            // Item-specific notes
+                            ForEach(item.notes.sorted(by: { $0.timestamp < $1.timestamp }), id: \.timestamp) { note in
+                                HStack(alignment: .top, spacing: 8) {
+                                    Text("•")
+                                        .foregroundColor(ThemeManager.shared.textSecondary)
+                                    
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(note.text)
+                                            .font(.caption)
+                                            .foregroundColor(ThemeManager.shared.textPrimary)
+                                        
+                                        HStack {
+                                            Text(note.user)
+                                                .font(.caption2)
+                                                .foregroundColor(ThemeManager.shared.textSecondary)
+                                            
+                                            Text("•")
+                                                .font(.caption2)
+                                                .foregroundColor(ThemeManager.shared.textSecondary)
+                                            
+                                            Text(note.timestamp, style: .time)
+                                                .font(.caption2)
+                                                .foregroundColor(ThemeManager.shared.textSecondary)
+                                        }
+                                    }
+                                    
+                                    Spacer()
+                                }
+                            }
+                        }
+                    }
+                    
+                    Spacer()
+                }
+            }
+            .padding(16)
+            .background(ThemeManager.shared.cardBackground)
+            .cornerRadius(ThemeManager.shared.cardCornerRadius)
+            .shadow(
+                color: ThemeManager.shared.cardShadowColor.opacity(ThemeManager.shared.cardShadowOpacity),
+                radius: 8,
+                x: 0,
+                y: 4
+            )
+        }
+        
+        private func isReasonPerformed(_ reason: String) -> Bool {
+            return item.statusHistory.contains { status in
+                status.status == "Service Performed — \(reason)"
+            }
+        }
     }
     
     // MARK: - Notes Timeline Section
