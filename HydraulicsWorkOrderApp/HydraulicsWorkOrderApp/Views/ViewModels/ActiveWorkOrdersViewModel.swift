@@ -20,10 +20,21 @@ class ActiveWorkOrdersViewModel: ObservableObject {
     var activeWorkOrders: [WorkOrder] {
         // Remove duplicates by WO_Number, keeping the most recent one
         var uniqueWorkOrders: [String: WorkOrder] = [:]
+        var duplicatesFound: [String: Int] = [:]
+        
+        print("🔍 DEBUG: Processing \(workOrders.count) work orders for deduplication")
+        
         for workOrder in workOrders {
+            print("🔍 DEBUG: Processing WO: \(workOrder.workOrderNumber) (ID: \(workOrder.id), Status: \(workOrder.status), Deleted: \(workOrder.isDeleted))")
+            
             if !workOrder.isDeleted && workOrder.status != "Closed" {
                 // If we already have this WO_Number, keep the one with the most recent lastModified
                 if let existing = uniqueWorkOrders[workOrder.workOrderNumber] {
+                    duplicatesFound[workOrder.workOrderNumber, default: 1] += 1
+                    print("⚠️ DEBUG: Duplicate WO_Number found: \(workOrder.workOrderNumber)")
+                    print("  - Existing: ID=\(existing.id), LastModified=\(existing.lastModified)")
+                    print("  - Current: ID=\(workOrder.id), LastModified=\(workOrder.lastModified)")
+                    
                     // Prefer work orders with non-empty IDs, then most recent
                     let existingHasId = !existing.id.isEmpty
                     let currentHasId = !workOrder.id.isEmpty
@@ -31,16 +42,31 @@ class ActiveWorkOrdersViewModel: ObservableObject {
                     if currentHasId && !existingHasId {
                         // Current has ID, existing doesn't - prefer current
                         uniqueWorkOrders[workOrder.workOrderNumber] = workOrder
+                        print("  - Keeping current (has ID)")
                     } else if !currentHasId && existingHasId {
                         // Existing has ID, current doesn't - keep existing
+                        print("  - Keeping existing (has ID)")
                         // Do nothing
                     } else if workOrder.lastModified > existing.lastModified {
                         // Both have same ID status, prefer most recent
                         uniqueWorkOrders[workOrder.workOrderNumber] = workOrder
+                        print("  - Keeping current (more recent)")
+                    } else {
+                        print("  - Keeping existing (more recent)")
                     }
                 } else {
                     uniqueWorkOrders[workOrder.workOrderNumber] = workOrder
+                    print("  - Adding new WO_Number")
                 }
+            } else {
+                print("  - Skipping (deleted or closed)")
+            }
+        }
+        
+        if !duplicatesFound.isEmpty {
+            print("⚠️ DEBUG: Found duplicate work order numbers:")
+            for (woNumber, count) in duplicatesFound {
+                print("  - \(woNumber): \(count) duplicates")
             }
         }
         

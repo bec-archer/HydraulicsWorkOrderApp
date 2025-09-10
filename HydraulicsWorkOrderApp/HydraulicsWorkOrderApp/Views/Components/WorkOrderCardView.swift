@@ -11,11 +11,11 @@ class ImageResolverViewModel: ObservableObject {
     @Published var resolvedImageURLs: [URL] = []
     @Published var isResolving = false
     
-    private let workOrderNumber: String
+    private let workOrder: WorkOrder
     private var cancellables = Set<AnyCancellable>()
     
-    init(workOrderNumber: String) {
-        self.workOrderNumber = workOrderNumber
+    init(workOrder: WorkOrder) {
+        self.workOrder = workOrder
         setupNotificationListener()
         
         // Resolve images immediately upon initialization
@@ -38,21 +38,15 @@ class ImageResolverViewModel: ObservableObject {
     func resolveImageURLs() {
         // Prevent multiple simultaneous resolutions
         if isResolving {
-            print("⚠️ IMAGE: Already resolving for WO \(workOrderNumber)")
+            print("⚠️ IMAGE: Already resolving for WO \(workOrder.workOrderNumber)")
             return
         }
         
         isResolving = true
-        print("🔄 IMAGE: Resolving images for WO \(workOrderNumber)")
+        print("🔄 IMAGE: Resolving images for WO \(workOrder.workOrderNumber)")
         
-        // Get the work order from cache on main actor
+        // Use the work order directly
         Task { @MainActor in
-            guard let workOrder = WorkOrdersDatabase.shared.workOrders.first(where: { $0.workOrderNumber == workOrderNumber }) else {
-                print("❌ IMAGE: WorkOrder not found for WO \(workOrderNumber)")
-                isResolving = false
-                return
-            }
-            
             print("✅ IMAGE: Found WO with \(workOrder.items.count) items")
             
             var candidateURLs: [URL] = []
@@ -137,7 +131,7 @@ class ImageResolverViewModel: ObservableObject {
             let finalURLs = Array(candidateURLs.prefix(4))
             
             print("🔄 ImageResolverViewModel: No pending resolutions, immediate update: resolvedImageURLs = \(finalURLs.count) URLs")
-            print("📋 Final URLs for WO \(workOrderNumber) (immediate):")
+            print("📋 Final URLs for WO \(workOrder.workOrderNumber) (immediate):")
             for (index, url) in finalURLs.enumerated() {
                 print("  [\(index)]: \(url.absoluteString)")
             }
@@ -151,29 +145,20 @@ struct WorkOrderCardView: View {
     let workOrder: WorkOrder
     let customerTag: String?
     
-    @StateObject private var imageResolver: ImageResolverViewModel
-    
     init(workOrder: WorkOrder, customerTag: String? = nil) {
         self.workOrder = workOrder
         self.customerTag = customerTag
-        self._imageResolver = StateObject(wrappedValue: ImageResolverViewModel(workOrderNumber: workOrder.workOrderNumber))
     }
     
     // Add a stable identifier to prevent unnecessary recreation
     private var stableId: String {
         workOrder.workOrderNumber
     }
-    
-    // Track work order changes to refresh images
-    private var workOrderImageCount: Int {
-        workOrder.items.reduce(0) { $0 + $1.imageUrls.count + $1.thumbUrls.count }
-    }
 
     var body: some View {
         VStack(spacing: 0) {
-            // Thumbnail Grid (2x2, up to 4 images)
+            // Thumbnail Grid (computed directly from WO_Items)
             WorkOrderCardThumbnailGrid(
-                imageURLs: imageResolver.resolvedImageURLs,
                 workOrder: workOrder
             )
             
@@ -189,8 +174,12 @@ struct WorkOrderCardView: View {
             y: 2
         )
         .id(stableId)
-        .onChange(of: workOrderImageCount) {
-            imageResolver.resolveImageURLs()
+        .onAppear {
+            print("🔍 DEBUG: WorkOrderCardView appeared for WO: \(workOrder.workOrderNumber)")
+            print("🔍 DEBUG: WorkOrder items count: \(workOrder.items.count)")
+            for (index, item) in workOrder.items.enumerated() {
+                print("🔍 DEBUG: Item \(index): \(item.type) - imageUrls: \(item.imageUrls.count), thumbUrls: \(item.thumbUrls.count)")
+            }
         }
     }
 }
@@ -273,91 +262,295 @@ struct WorkOrderCardContent: View {
 }
 
 struct WorkOrderCardThumbnailGrid: View {
-    let imageURLs: [URL]
     let workOrder: WorkOrder
-    
-    private let thumbSize: CGFloat = 60
-    private let spacing: CGFloat = 6
-    
+
+    // Layout dimensions
+    private let singleHeight: CGFloat = 140      // 1 item — full-width rect
+    private let doubleHeight: CGFloat = 100      // 2 items — stacked rects  
+    private let gridCell: CGFloat = 84           // 3–4 items — grid squares
+    private let spacing: CGFloat = 8
+
     var body: some View {
-        LazyVGrid(columns: [
-            GridItem(.fixed(thumbSize), spacing: spacing),
-            GridItem(.fixed(thumbSize), spacing: spacing)
-        ], spacing: spacing) {
-            ForEach(Array(imageURLs.prefix(4).enumerated()), id: \.offset) { index, url in
-                ThumbnailWithOverlayDot(
-                    url: url,
-                    size: thumbSize,
-                    itemStatus: getItemStatusForImage(index: index)
-                )
-            }
-            
-            // Fill remaining slots if less than 4 images
-            if imageURLs.count < 4 {
-                ForEach(imageURLs.count..<4, id: \.self) { _ in
-                    Rectangle()
-                        .fill(ThemeManager.shared.border.opacity(0.3))
-                        .frame(width: thumbSize, height: thumbSize)
-                        .cornerRadius(8)
+        let totalItems = workOrder.items.count
+        let displayCount = min(totalItems, 4)
+        let imageInfos: [(url: URL?, item: WO_Item)] = Array(workOrder.items.prefix(displayCount)).map { item in
+            (firstImageURL(for: item), item)
+        }
+
+        VStack(spacing: spacing) {
+            if displayCount == 1 {
+                // 1 item: ONE perfect square image
+                if let info = imageInfos.first {
+                    SquareThumb(
+                        url: info.url,
+                        itemStatus: StatusMapping.ItemStatus(for: info.item),
+                        typeQtyLabel: "\(info.item.type.isEmpty ? "Item" : info.item.type) × 1"
+                    )
+                }
+            } else if displayCount == 2 {
+                // 2 items: TWO full-width rectangular images stacked vertically
+                VStack(spacing: spacing) {
+                    ForEach(Array(imageInfos.enumerated()), id: \.offset) { _, info in
+                        FullWidthThumb(
+                            url: info.url,
+                            height: doubleHeight,
+                            itemStatus: StatusMapping.ItemStatus(for: info.item),
+                            typeQtyLabel: "\(info.item.type.isEmpty ? "Item" : info.item.type) × 1"
+                        )
+                    }
+                }
+            } else {
+                // 3–4 items: 2×2 grid of larger tiles
+                LazyVGrid(columns: [
+                    GridItem(.fixed(gridCell), spacing: spacing),
+                    GridItem(.fixed(gridCell), spacing: spacing)
+                ], spacing: spacing) {
+                    ForEach(Array(imageInfos.enumerated()), id: \.offset) { idx, info in
+                        GridThumb(
+                            url: info.url,
+                            size: gridCell,
+                            itemStatus: StatusMapping.ItemStatus(for: info.item),
+                            showPlusBadge: (idx == 3 && totalItems > 4) ? (totalItems - 3) : nil,
+                            typeQtyLabel: "\(info.item.type.isEmpty ? "Item" : info.item.type) × 1"
+                        )
+                    }
                 }
             }
         }
         .padding(.horizontal, 16)
         .padding(.top, 12)
-    }
-    
-    private func getItemStatusForImage(index: Int) -> StatusMapping.ItemStatus {
-        guard index < workOrder.items.count else {
-            // Create a fallback WO_Item with "Checked In" status
-            let fallbackItem = WO_Item(
-                id: UUID(),
-                type: "Unknown",
-                statusHistory: [
-                    WO_Status(status: "Checked In", user: "System", timestamp: Date(), notes: nil)
-                ]
-            )
-            return StatusMapping.ItemStatus(for: fallbackItem)
+        .onAppear {
+            print("🔍 DEBUG: WorkOrderCardThumbnailGrid - totalItems: \(totalItems), displayCount: \(displayCount)")
+            for (index, info) in imageInfos.enumerated() {
+                print("🔍 DEBUG: ImageInfo \(index): URL = \(info.url?.absoluteString ?? "nil"), Item = \(info.item.type)")
+            }
         }
-        return StatusMapping.ItemStatus(for: workOrder.items[index])
+    }
+
+    // Always use the first image (index 0) from thumbUrls or imageUrls
+    private func firstImageURL(for item: WO_Item) -> URL? {
+        // Prefer thumbUrls[0], fall back to imageUrls[0]
+        if !item.thumbUrls.isEmpty, let first = item.thumbUrls.first, let u = URL(string: first) { 
+            return u 
+        }
+        if !item.imageUrls.isEmpty, let first = item.imageUrls.first, let u = URL(string: first) { 
+            return u 
+        }
+        return nil
     }
 }
 
-struct ThumbnailWithOverlayDot: View {
-    let url: URL
-    let size: CGFloat
+// MARK: - Thumb Variants
+
+private struct SquareThumb: View {
+    let url: URL?
     let itemStatus: StatusMapping.ItemStatus
-    
+    var typeQtyLabel: String = ""
+
     var body: some View {
-        ZStack {
-            // Thumbnail image
-            AsyncImage(url: url) { image in
-                image
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-            } placeholder: {
-                Rectangle()
-                    .fill(ThemeManager.shared.border.opacity(0.3))
-                    .overlay(
-                        ProgressView()
-                            .scaleEffect(0.8)
-                    )
-            }
-            .frame(width: size, height: size)
-            .clipped()
-            .cornerRadius(8)
-            
-            // Overlay dot (top-right corner)
-            VStack {
-                HStack {
-                    Spacer()
-                    OverlayDot(color: itemStatus.color, size: 10)
-                        .offset(x: 4, y: -4)
+        GeometryReader { geo in
+            ZStack(alignment: .topTrailing) {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .empty:
+                        Rectangle()
+                            .fill(ThemeManager.shared.border.opacity(0.25))
+                            .overlay(ProgressView().scaleEffect(0.9))
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)  // ⬅️ fill area, crop from center
+                    case .failure:
+                        Rectangle().fill(Color.red.opacity(0.25)).overlay(Text("❌"))
+                    @unknown default:
+                        Rectangle().fill(ThemeManager.shared.border.opacity(0.25))
+                    }
                 }
-                Spacer()
+                .frame(width: geo.size.width, height: geo.size.width) // ⬅️ square
+                .clipped()
+                .cornerRadius(10)
+
+                // Indicator dot (inside)
+                OverlayDot(color: itemStatus.color, size: 10)
+                    .padding(6)
+
+                // Bottom-left "Type × Qty"
+                VStack {
+                    Spacer()
+                    HStack {
+                        Text(typeQtyLabel)
+                            .font(.caption2)
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 3)
+                            .background(Color.black.opacity(0.55))
+                            .cornerRadius(6)
+                            .padding(6)
+                        Spacer()
+                    }
+                }
             }
+        }
+        .aspectRatio(1, contentMode: .fit) // ⬅️ reserve square space in the card
+    }
+}
+
+private struct FullWidthThumb: View {
+    let url: URL?
+    let height: CGFloat
+    let itemStatus: StatusMapping.ItemStatus
+    var typeQtyLabel: String = ""
+
+    var body: some View {
+        ZStack(alignment: .topTrailing) {
+            AsyncImage(url: url) { phase in
+                switch phase {
+                case .empty:
+                    Rectangle()
+                        .fill(ThemeManager.shared.border.opacity(0.25))
+                        .overlay(ProgressView().scaleEffect(0.9))
+                        .onAppear {
+                            print("🔍 DEBUG: FullWidthThumb AsyncImage EMPTY for URL: \(url?.absoluteString ?? "nil")")
+                        }
+                case .success(let image):
+                    image
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)  // ⬅️ fill area, crop from center
+                        .onAppear {
+                            print("✅ DEBUG: FullWidthThumb AsyncImage SUCCESS for URL: \(url?.absoluteString ?? "nil")")
+                        }
+                case .failure(let error):
+                    Rectangle()
+                        .fill(Color.red.opacity(0.3))
+                        .overlay(Text("❌").font(.title))
+                        .onAppear {
+                            print("❌ DEBUG: FullWidthThumb AsyncImage FAILED for URL: \(url?.absoluteString ?? "nil") - Error: \(error)")
+                        }
+                @unknown default:
+                    Rectangle()
+                        .fill(ThemeManager.shared.border.opacity(0.25))
+                        .overlay(Text("?").font(.title))
+                        .onAppear {
+                            print("⚠️ DEBUG: FullWidthThumb AsyncImage UNKNOWN for URL: \(url?.absoluteString ?? "nil")")
+                        }
+                }
+            }
+            .frame(height: height)
+            .frame(maxWidth: .infinity)
+            .clipped()
+            .cornerRadius(10)
+
+            // Indicator dot (top-right, inside the image)
+            OverlayDot(color: itemStatus.color, size: 10)
+                .padding(6)
+
+            // Bottom-left "Type × Qty" label
+            VStack {
+                Spacer()
+                HStack {
+                    Text(typeQtyLabel)
+                        .font(.caption2)
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 3)
+                        .background(Color.black.opacity(0.55))
+                        .cornerRadius(6)
+                        .padding(6)
+                    Spacer()
+                }
+            }
+        }
+        .onAppear {
+            print("🔍 DEBUG: FullWidthThumb appeared for URL: \(url?.absoluteString ?? "nil")")
         }
     }
 }
+
+private struct GridThumb: View {
+    let url: URL?
+    let size: CGFloat
+    let itemStatus: StatusMapping.ItemStatus
+    /// If not nil, show a "+Qty" badge centered (used when total items > 4)
+    let showPlusBadge: Int?
+    var typeQtyLabel: String = ""
+
+    var body: some View {
+        ZStack(alignment: .topTrailing) {
+            AsyncImage(url: url) { phase in
+                switch phase {
+                case .empty:
+                    Rectangle()
+                        .fill(ThemeManager.shared.border.opacity(0.25))
+                        .overlay(ProgressView().scaleEffect(0.8))
+                        .onAppear {
+                            print("🔍 DEBUG: GridThumb AsyncImage EMPTY for URL: \(url?.absoluteString ?? "nil")")
+                        }
+                case .success(let image):
+                    image
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)  // ⬅️ fill area, crop from center
+                        .onAppear {
+                            print("✅ DEBUG: GridThumb AsyncImage SUCCESS for URL: \(url?.absoluteString ?? "nil")")
+                        }
+                case .failure(let error):
+                    Rectangle()
+                        .fill(Color.red.opacity(0.3))
+                        .overlay(Text("❌").font(.title))
+                        .onAppear {
+                            print("❌ DEBUG: GridThumb AsyncImage FAILED for URL: \(url?.absoluteString ?? "nil") - Error: \(error)")
+                        }
+                @unknown default:
+                    Rectangle()
+                        .fill(ThemeManager.shared.border.opacity(0.25))
+                        .overlay(Text("?").font(.title))
+                        .onAppear {
+                            print("⚠️ DEBUG: GridThumb AsyncImage UNKNOWN for URL: \(url?.absoluteString ?? "nil")")
+                        }
+                }
+            }
+            .frame(width: size, height: size)
+            .clipped()
+            .cornerRadius(10)
+
+            // "+Qty" badge for overflow (centered)
+            if let overflow = showPlusBadge, overflow > 0 {
+                ZStack {
+                    Color.black.opacity(0.6)
+                        .frame(width: size, height: size)
+                        .cornerRadius(10)
+                    Text("+\(overflow)")
+                        .font(.title2)
+                        .fontWeight(.bold)
+                        .foregroundColor(.white)
+                }
+            }
+
+            // Indicator dot (top-right, inside the image)
+            OverlayDot(color: itemStatus.color, size: 10)
+                .padding(6)
+
+            // Bottom-left "Type × Qty" label
+            VStack {
+                Spacer()
+                HStack {
+                    Text(typeQtyLabel)
+                        .font(.caption2)
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 3)
+                        .background(Color.black.opacity(0.55))
+                        .cornerRadius(6)
+                        .padding(6)
+                    Spacer()
+                }
+            }
+        }
+        .onAppear {
+            print("🔍 DEBUG: GridThumb appeared for URL: \(url?.absoluteString ?? "nil"), showPlusBadge: \(showPlusBadge ?? 0)")
+        }
+    }
+}
+
 
 // MARK: - Legacy Components (kept for compatibility)
 struct WorkOrderDetailHeader: View {

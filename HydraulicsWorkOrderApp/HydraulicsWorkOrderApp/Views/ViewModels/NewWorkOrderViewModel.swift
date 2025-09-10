@@ -21,9 +21,22 @@ class NewWorkOrderViewModel: ObservableObject {
     private let stateService = StateManagementService.shared
     private let versionService = DropdownVersionService.shared
     
+    // MARK: - Work Order Number (Generated at save time)
+    private var _workOrderNumber: String?
+    
+    // MARK: - Initialization
+    
+    init() {
+        print("🔍 DEBUG: NewWorkOrderViewModel initializing")
+        setupBindings()
+        addInitialItem()
+        print("🔍 DEBUG: NewWorkOrderViewModel initialized with \(items.count) items")
+    }
+    
     // MARK: - Computed Properties
+    
     var workOrderNumber: String {
-        WorkOrderNumberGenerator.generateWorkOrderNumber()
+        return _workOrderNumber ?? "Generating..."
     }
     
     var hasValidCustomer: Bool {
@@ -71,13 +84,6 @@ class NewWorkOrderViewModel: ObservableObject {
         return (hasType && !hasPhoto) || (!hasType && hasPhoto) || (hasType && hasPhoto && !hasReasons)
     }
     
-    // MARK: - Initialization
-    init() {
-        print("🔍 DEBUG: NewWorkOrderViewModel initializing")
-        setupBindings()
-        addInitialItem()
-        print("🔍 DEBUG: NewWorkOrderViewModel initialized with \(items.count) items")
-    }
     
     // MARK: - Setup
     private func setupBindings() {
@@ -274,6 +280,14 @@ class NewWorkOrderViewModel: ObservableObject {
             }
             #endif
             
+            // ───── Generate unique work order number (async) ─────
+            print("🔍 DEBUG: Generating unique work order number...")
+            let uniqueWorkOrderNumber = await WorkOrderNumberGenerator.generateWorkOrderNumberAsync()
+            print("🔍 DEBUG: Generated work order number: \(uniqueWorkOrderNumber)")
+            
+            // Store the generated number for later access
+            self._workOrderNumber = uniqueWorkOrderNumber
+            
             // ───── Build WorkOrder (ALL required fields) ─────
             print("🔍 DEBUG: Building WorkOrder with \(builtItems.count) items")
             let workOrder = WorkOrder(
@@ -290,7 +304,7 @@ class NewWorkOrderViewModel: ObservableObject {
                 primaryImageURL: nil,                     // Will be set when images are uploaded
                 timestamp: Date(),
                 status: "Checked In",
-                workOrderNumber: workOrderNumber,         // Updated field name
+                workOrderNumber: uniqueWorkOrderNumber,   // Use async-generated unique number
                 flagged: false,
                 assetTagId: nil,
                 estimatedCost: nil,
