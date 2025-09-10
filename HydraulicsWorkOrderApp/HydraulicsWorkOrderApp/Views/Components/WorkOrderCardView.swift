@@ -168,10 +168,10 @@ struct WorkOrderCardView: View {
         .background(ThemeManager.shared.cardBackground)
         .cornerRadius(ThemeManager.shared.cardCornerRadius)
         .shadow(
-            color: ThemeManager.shared.cardShadowColor.opacity(ThemeManager.shared.cardShadowOpacity),
-            radius: 4,
+            color: ThemeManager.shared.cardShadowColor.opacity(ThemeManager.shared.cardShadowOpacity * 2.5),
+            radius: 12,
             x: 0,
-            y: 2
+            y: 6
         )
         .id(stableId)
         .onAppear {
@@ -188,44 +188,51 @@ struct WorkOrderCardContent: View {
     let workOrder: WorkOrder
     let customerTag: String?
     
+    private var itemSummaryLine: String {
+        // First 3–4 items, "Type × Qty", joined with " • "
+        let parts = workOrder.items.prefix(4).map { item in
+            let t = item.type.isEmpty ? "Item" : item.type
+            let q = 1  // schema currently lacks quantity; default to 1
+            return "\(t) × \(q)"
+        }
+        return parts.joined(separator: " • ")
+    }
+    
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            // WO_Number with inline dots and timestamp
-            HStack {
+        VStack(alignment: .leading, spacing: 6) {
+            // WO_Number with inline dots (timestamp moved to its own line below)
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text(workOrder.workOrderNumber)
-                    .font(ThemeManager.shared.labelFont)
-                    .foregroundColor(ThemeManager.shared.textPrimary)
+                    .font(.system(size: 14.4, weight: .semibold)) // 80% of 18pt label font
+                    .foregroundColor(ThemeManager.shared.textSecondary.opacity(0.5)) // 50% gray
+                    .lineLimit(1)
+                    .allowsTightening(true)
+                    .minimumScaleFactor(0.95)
                 
                 // Inline dots (up to 4, one per WO_Item)
-                HStack(spacing: 4) {
+                HStack(spacing: 3) {
                     ForEach(Array(StatusMapping.itemStatusesWithColor(for: workOrder).enumerated()), id: \.offset) { _, itemStatus in
                         IndicatorDot(color: itemStatus.color, size: 6)
                     }
                 }
                 
-                Spacer()
-                
-                // Timestamp
-                Text(timeAgoString)
-                    .font(.caption)
-                    .foregroundColor(ThemeManager.shared.textSecondary)
+                Spacer(minLength: 0)
             }
             
-            // Customer name with emoji and flag
-            HStack {
-                // Customer emoji (if present)
+            // Customer name with emoji and flag — primary emphasis
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Text(workOrder.customerName)
+                    .font(ThemeManager.shared.labelFont)       // 18pt semibold per theme
+                    .foregroundColor(ThemeManager.shared.textPrimary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                
                 if let emoji = workOrder.customerEmojiTag {
-                    Text(emoji)
-                        .font(.title3)
+                    Text(emoji).font(.title3)
                 }
                 
-                Text(workOrder.customerName)
-                    .font(ThemeManager.shared.bodyFont)
-                    .foregroundColor(ThemeManager.shared.textPrimary)
+                Spacer(minLength: 0)
                 
-                Spacer()
-                
-                // Flag icon (if flagged)
                 if workOrder.flagged {
                     Image(systemName: "flag.fill")
                         .foregroundColor(ThemeManager.shared.linkColor)
@@ -234,23 +241,40 @@ struct WorkOrderCardContent: View {
             }
             
             // Phone number (tappable)
-            Button(action: {
-                callCustomer()
-            }) {
+            Button(action: { callCustomer() }) {
                 Text(workOrder.customerPhone)
-                    .font(.caption)
+                    .font(ThemeManager.shared.labelFont)       // same size as customer name
+                    .fontWeight(.bold)                         // bold
+                    .underline()                               // underlined
                     .foregroundColor(ThemeManager.shared.linkColor)
+                    .lineLimit(1)
             }
             .buttonStyle(PlainButtonStyle())
+
+            // Timestamp (own line, small, secondary)
+            Text(timeAgoString)
+                .font(.caption)
+                .foregroundColor(ThemeManager.shared.textSecondary.opacity(0.5)) // 50% gray
+                .lineLimit(1)
+            
+            // Type × Qty summary (muted footer, single line)
+            if !itemSummaryLine.isEmpty {
+                Text(itemSummaryLine)
+                    .font(.caption2)
+                    .foregroundColor(ThemeManager.shared.textSecondary.opacity(0.5)) // 50% gray
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 12)
+        .padding(.vertical, 10)   // slightly denser body
     }
     
     private var timeAgoString: String {
-        let formatter = RelativeDateTimeFormatter()
-        formatter.unitsStyle = .abbreviated
-        return formatter.localizedString(for: workOrder.timestamp, relativeTo: Date())
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        return formatter.string(from: workOrder.timestamp)
     }
     
     private func callCustomer() {
@@ -265,10 +289,10 @@ struct WorkOrderCardThumbnailGrid: View {
     let workOrder: WorkOrder
 
     // Layout dimensions
-    private let singleHeight: CGFloat = 140      // 1 item — full-width rect
-    private let doubleHeight: CGFloat = 100      // 2 items — stacked rects  
-    private let gridCell: CGFloat = 84           // 3–4 items — grid squares
-    private let spacing: CGFloat = 8
+    private let singleHeight: CGFloat = 140      // unchanged (square path uses SquareThumb)
+    private let doubleHeight: CGFloat = 112      // +12pt for better 2-up presence
+    private let gridCell: CGFloat = 100          // larger cells for better visual balance
+    private let spacing: CGFloat = 6             // tighter gutters per Notes style
 
     var body: some View {
         let totalItems = workOrder.items.count
@@ -318,7 +342,7 @@ struct WorkOrderCardThumbnailGrid: View {
             }
         }
         .padding(.horizontal, 16)
-        .padding(.top, 12)
+        .padding(.top, 8)     // tighter top margin
         .onAppear {
             print("🔍 DEBUG: WorkOrderCardThumbnailGrid - totalItems: \(totalItems), displayCount: \(displayCount)")
             for (index, info) in imageInfos.enumerated() {
@@ -368,7 +392,7 @@ private struct SquareThumb: View {
                 }
                 .frame(width: geo.size.width, height: geo.size.width) // ⬅️ square
                 .clipped()
-                .cornerRadius(10)
+                .cornerRadius(ThemeManager.shared.cardCornerRadius - 2)
 
                 // Indicator dot (inside)
                 OverlayDot(color: itemStatus.color, size: 10)
@@ -517,7 +541,7 @@ private struct GridThumb: View {
                 ZStack {
                     Color.black.opacity(0.6)
                         .frame(width: size, height: size)
-                        .cornerRadius(10)
+                        .cornerRadius(ThemeManager.shared.cardCornerRadius - 2)
                     Text("+\(overflow)")
                         .font(.title2)
                         .fontWeight(.bold)
