@@ -1,20 +1,11 @@
 import SwiftUI
 import Combine
 
-// WARNING (GUARDRAIL_TOKEN: DO_NOT_MODIFY_VIEW_LAYOUT):
-// Do not alter layout/UI/behavior. See header block for allowed edits & rationale.
-// This file contains critical UI components that must maintain exact visual consistency.
-// Only allowed modifications:
-// - Fix compilation errors
-// - Add missing imports
-// - Correct type mismatches
-// - Fix concurrency issues
-// - Update deprecated API calls
-// DO NOT modify:
-// - View layouts, spacing, colors, fonts
-// - UI component structure or hierarchy
-// - Animation behaviors
-// - User interaction patterns
+// ─────────────────────────────────────────────────────────────
+// 📄 WorkOrderCardView.swift
+// Rebuilt according to ActiveWorkOrdersView_Layout_Spec_09092025.md
+// Features: 2x2 thumbnail grid, indicator dots, theme integration
+// ─────────────────────────────────────────────────────────────
 
 class ImageResolverViewModel: ObservableObject {
     @Published var resolvedImageURLs: [URL] = []
@@ -156,9 +147,6 @@ class ImageResolverViewModel: ObservableObject {
     }
 }
 
-// WARNING (GUARDRAIL_TOKEN: DO_NOT_MODIFY_VIEW_LAYOUT):
-// Do not alter layout/UI/behavior. See header block for allowed edits & rationale.
-
 struct WorkOrderCardView: View {
     let workOrder: WorkOrder
     let customerTag: String?
@@ -183,164 +171,195 @@ struct WorkOrderCardView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            // Thumbnail Grid (2x2, up to 4 images)
+            WorkOrderCardThumbnailGrid(
+                imageURLs: imageResolver.resolvedImageURLs,
+                workOrder: workOrder
+            )
+            
             // Main content
             WorkOrderCardContent(workOrder: workOrder, customerTag: customerTag)
-            
-            // Image section
-            if !imageResolver.resolvedImageURLs.isEmpty {
-                WorkOrderCardThumbnails(
-                    imageURLs: imageResolver.resolvedImageURLs,
-                    workOrderNumber: workOrder.workOrderNumber
-                )
-            }
         }
-        .background(Color.white) // White background for all work order cards
-        .cornerRadius(16)
-        .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
-        .id(stableId) // Use stable ID instead of lastModified to prevent recreation
+        .background(ThemeManager.shared.cardBackground)
+        .cornerRadius(ThemeManager.shared.cardCornerRadius)
+        .shadow(
+            color: ThemeManager.shared.cardShadowColor.opacity(ThemeManager.shared.cardShadowOpacity),
+            radius: 4,
+            x: 0,
+            y: 2
+        )
+        .id(stableId)
         .onChange(of: workOrderImageCount) {
-            // Refresh images when work order image count changes
             imageResolver.resolveImageURLs()
         }
     }
-    // END
 }
-
-// WARNING (GUARDRAIL_TOKEN: DO_NOT_MODIFY_VIEW_LAYOUT):
-// Do not alter layout/UI/behavior. See header block for allowed edits & rationale.
 
 struct WorkOrderCardContent: View {
     let workOrder: WorkOrder
     let customerTag: String?
     
     var body: some View {
-        HStack(spacing: 12) {
-            // Status indicator
-            Circle()
-                .fill(statusColor)
-                .frame(width: 12, height: 12)
-            
-            // Main content
-            VStack(alignment: .leading, spacing: 4) {
-                // Work order number and customer
-                HStack {
-                    Text(workOrder.workOrderNumber)
-                        .font(.headline)
-                        .foregroundColor(.primary)
-                    
-                    Spacer()
-                    
-                    if let emoji = workOrder.customerEmojiTag {
-                        Text(emoji)
-                            .font(.title2)
+        VStack(alignment: .leading, spacing: 8) {
+            // WO_Number with inline dots and timestamp
+            HStack {
+                Text(workOrder.workOrderNumber)
+                    .font(ThemeManager.shared.labelFont)
+                    .foregroundColor(ThemeManager.shared.textPrimary)
+                
+                // Inline dots (up to 4, one per WO_Item)
+                HStack(spacing: 4) {
+                    ForEach(Array(StatusMapping.itemStatusesWithColor(for: workOrder).enumerated()), id: \.offset) { _, itemStatus in
+                        IndicatorDot(color: itemStatus.color, size: 6)
                     }
-                    
-                    Text(workOrder.customerName)
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
                 }
                 
-                // Item summary
-                Text(itemSummary)
+                Spacer()
+                
+                // Timestamp
+                Text(timeAgoString)
                     .font(.caption)
-                    .foregroundColor(.secondary)
-                    .lineLimit(2)
+                    .foregroundColor(ThemeManager.shared.textSecondary)
             }
             
-            // Arrow
-            Image(systemName: "chevron.right")
-                .foregroundColor(.gray)
+            // Customer name with emoji and flag
+            HStack {
+                // Customer emoji (if present)
+                if let emoji = workOrder.customerEmojiTag {
+                    Text(emoji)
+                        .font(.title3)
+                }
+                
+                Text(workOrder.customerName)
+                    .font(ThemeManager.shared.bodyFont)
+                    .foregroundColor(ThemeManager.shared.textPrimary)
+                
+                Spacer()
+                
+                // Flag icon (if flagged)
+                if workOrder.flagged {
+                    Image(systemName: "flag.fill")
+                        .foregroundColor(ThemeManager.shared.linkColor)
+                        .font(.caption)
+                }
+            }
+            
+            // Phone number (tappable)
+            Button(action: {
+                callCustomer()
+            }) {
+                Text(workOrder.customerPhone)
+                    .font(.caption)
+                    .foregroundColor(ThemeManager.shared.linkColor)
+            }
+            .buttonStyle(PlainButtonStyle())
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
     }
     
-    private var statusColor: Color {
-        switch workOrder.status {
-        case "Checked In": return UIConstants.StatusColors.checkedIn
-        case "Disassembly": return UIConstants.StatusColors.disassembly
-        case "In Progress": return UIConstants.StatusColors.inProgress
-        case "Closed": return UIConstants.StatusColors.closed
-        default: return UIConstants.StatusColors.fallback
-        }
+    private var timeAgoString: String {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .abbreviated
+        return formatter.localizedString(for: workOrder.timestamp, relativeTo: Date())
     }
     
-    private var itemSummary: String {
-        let itemCounts = getItemTypeCounts()
-        if itemCounts.isEmpty {
-            return "No items"
+    private func callCustomer() {
+        let phoneNumber = workOrder.customerPhone.replacingOccurrences(of: "[^0-9]", with: "", options: .regularExpression)
+        if let url = URL(string: "tel:\(phoneNumber)") {
+            UIApplication.shared.open(url)
         }
-        
-        let summary = itemCounts.map { "\($0.count) \($0.type)" }.joined(separator: ", ")
-        return summary
-    }
-    
-    private func getItemTypeCounts() -> [ItemTypeCount] {
-        var counts: [String: Int] = [:]
-        
-        for item in workOrder.items {
-            counts[item.type, default: 0] += 1
-        }
-        
-        let result = counts.map { ItemTypeCount(type: $0.key, count: $0.value) }
-            .sorted { $0.type < $1.type }
-        
-        return result
-    }
-    
-    private struct ItemTypeCount {
-        let type: String
-        let count: Int
     }
 }
 
-// WARNING (GUARDRAIL_TOKEN: DO_NOT_MODIFY_VIEW_LAYOUT):
-// Do not alter layout/UI/behavior. See header block for allowed edits & rationale.
-
-struct WorkOrderCardThumbnails: View {
+struct WorkOrderCardThumbnailGrid: View {
     let imageURLs: [URL]
-    let workOrderNumber: String
+    let workOrder: WorkOrder
     
-    private let thumbHeight: CGFloat = 60
+    private let thumbSize: CGFloat = 60
+    private let spacing: CGFloat = 6
     
     var body: some View {
-        HStack(spacing: 4) {
-            ForEach(Array(imageURLs.enumerated()), id: \.offset) { index, url in
-                AsyncImage(url: url) { image in
-                    image
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                } placeholder: {
-                    Rectangle()
-                        .fill(Color.gray.opacity(0.3))
-                        .overlay(
-                            ProgressView()
-                                .scaleEffect(0.8)
-                        )
-                }
-                .frame(width: thumbHeight, height: thumbHeight)
-                .clipped()
-                .cornerRadius(8)
+        LazyVGrid(columns: [
+            GridItem(.fixed(thumbSize), spacing: spacing),
+            GridItem(.fixed(thumbSize), spacing: spacing)
+        ], spacing: spacing) {
+            ForEach(Array(imageURLs.prefix(4).enumerated()), id: \.offset) { index, url in
+                ThumbnailWithOverlayDot(
+                    url: url,
+                    size: thumbSize,
+                    itemStatus: getItemStatusForImage(index: index)
+                )
             }
             
-            // Fill remaining space if less than 4 images
+            // Fill remaining slots if less than 4 images
             if imageURLs.count < 4 {
-                ForEach(0..<(4 - imageURLs.count), id: \.self) { _ in
+                ForEach(imageURLs.count..<4, id: \.self) { _ in
                     Rectangle()
-                        .fill(Color.gray.opacity(0.1))
-                        .frame(width: thumbHeight, height: thumbHeight)
+                        .fill(ThemeManager.shared.border.opacity(0.3))
+                        .frame(width: thumbSize, height: thumbSize)
                         .cornerRadius(8)
                 }
             }
         }
         .padding(.horizontal, 16)
-        .padding(.bottom, 12)
+        .padding(.top, 12)
+    }
+    
+    private func getItemStatusForImage(index: Int) -> StatusMapping.ItemStatus {
+        guard index < workOrder.items.count else {
+            // Create a fallback WO_Item with "Checked In" status
+            let fallbackItem = WO_Item(
+                id: UUID(),
+                type: "Unknown",
+                statusHistory: [
+                    WO_Status(status: "Checked In", user: "System", timestamp: Date(), notes: nil)
+                ]
+            )
+            return StatusMapping.ItemStatus(for: fallbackItem)
+        }
+        return StatusMapping.ItemStatus(for: workOrder.items[index])
     }
 }
 
-// WARNING (GUARDRAIL_TOKEN: DO_NOT_MODIFY_VIEW_LAYOUT):
-// Do not alter layout/UI/behavior. See header block for allowed edits & rationale.
+struct ThumbnailWithOverlayDot: View {
+    let url: URL
+    let size: CGFloat
+    let itemStatus: StatusMapping.ItemStatus
+    
+    var body: some View {
+        ZStack {
+            // Thumbnail image
+            AsyncImage(url: url) { image in
+                image
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+            } placeholder: {
+                Rectangle()
+                    .fill(ThemeManager.shared.border.opacity(0.3))
+                    .overlay(
+                        ProgressView()
+                            .scaleEffect(0.8)
+                    )
+            }
+            .frame(width: size, height: size)
+            .clipped()
+            .cornerRadius(8)
+            
+            // Overlay dot (top-right corner)
+            VStack {
+                HStack {
+                    Spacer()
+                    OverlayDot(color: itemStatus.color, size: 10)
+                        .offset(x: 4, y: -4)
+                }
+                Spacer()
+            }
+        }
+    }
+}
 
+// MARK: - Legacy Components (kept for compatibility)
 struct WorkOrderDetailHeader: View {
     let workOrder: WorkOrder
     let customerTag: String?
@@ -386,9 +405,6 @@ struct WorkOrderDetailHeader: View {
     }
 }
 
-// WARNING (GUARDRAIL_TOKEN: DO_NOT_MODIFY_VIEW_LAYOUT):
-// Do not alter layout/UI/behavior. See header block for allowed edits & rationale.
-
 struct WorkOrderContactSheet: View {
     let workOrder: WorkOrder
     @Environment(\.dismiss) private var dismiss
@@ -409,35 +425,7 @@ struct WorkOrderContactSheet: View {
             }
         }
     }
-    
-    // Helper function to get item type counts
-    private func getItemTypeCounts() -> [ItemTypeCount] {
-        var counts: [String: Int] = [:]
-        
-        for item in workOrder.items {
-            counts[item.type, default: 0] += 1
-        }
-        
-        let result = counts.map { ItemTypeCount(type: $0.key, count: $0.value) }
-            .sorted { $0.type < $1.type }
-        
-        return result
-    }
-    
-    private struct ItemTypeCount {
-        let type: String
-        let count: Int
-    }
-    
-    private func digitsOnly(_ s: String) -> String { s.filter(\.isNumber) }
 }
-
-// WARNING (GUARDRAIL_TOKEN: DO_NOT_MODIFY_VIEW_LAYOUT):
-// Do not alter layout/UI/behavior. See header block for allowed edits & rationale.
-
-
-// WARNING (GUARDRAIL_TOKEN: DO_NOT_MODIFY_VIEW_LAYOUT):
-// Do not alter layout/UI/behavior. See header block for allowed edits & rationale.
 
 #Preview(traits: .sizeThatFitsLayout) {
     let sampleWorkOrder = WorkOrder(

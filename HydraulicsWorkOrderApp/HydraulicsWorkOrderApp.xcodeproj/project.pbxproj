@@ -72,6 +72,8 @@
 				Utilities/Helpers/YellowAccentButtonStyle.swift,
 				Utilities/NetworkMonitor.swift,
 				Utilities/OfflineManager.swift,
+				Utilities/StatusMapping.swift,
+				Utilities/ThemeManager.swift,
 				Views/Admin/DataMigrationView.swift,
 				Views/Admin/DeletedWorkOrdersView.swift,
 				Views/Admin/MyWorkItemsView.swift,

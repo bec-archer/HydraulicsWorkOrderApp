@@ -41,6 +41,15 @@ struct ActiveWorkOrdersView: View {
     @EnvironmentObject private var appState: AppState
     @State private var navigationPath = NavigationPath()
     
+    // MARK: - Computed Properties
+    private var flaggedWorkOrders: [WorkOrder] {
+        viewModel.activeWorkOrders.filter { $0.flagged }
+    }
+    
+    private var unflaggedWorkOrders: [WorkOrder] {
+        viewModel.activeWorkOrders.filter { !$0.flagged }
+    }
+    
     // MARK: - Body
     var body: some View {
         let _ = print("🔍 DEBUG: ActiveWorkOrdersView body being recreated")
@@ -51,7 +60,7 @@ struct ActiveWorkOrdersView: View {
                     VStack(spacing: 12) {
                         ProgressView()
                         Text("Loading Active WorkOrders…")
-                            .foregroundStyle(.secondary)
+                            .foregroundColor(ThemeManager.shared.textSecondary)
                     }
                     .frame(maxWidth: .infinity, minHeight: 240)
                     .padding(.top, 32)
@@ -63,32 +72,101 @@ struct ActiveWorkOrdersView: View {
                         VStack(spacing: 8) {
                             Image(systemName: "tray")
                                 .font(.largeTitle)
-                                .foregroundStyle(.secondary)
+                                .foregroundColor(ThemeManager.shared.textSecondary)
                             Text("No Active WorkOrders")
-                                .font(.headline)
+                                .font(ThemeManager.shared.labelFont)
+                                .foregroundColor(ThemeManager.shared.textPrimary)
                             Text("Tap + New to check one in.")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
+                                .font(ThemeManager.shared.bodyFont)
+                                .foregroundColor(ThemeManager.shared.textSecondary)
                         }
                         .frame(maxWidth: .infinity, minHeight: 240)
                         .padding(.top, 32)
                     } else {
-                        // Work Order Grid
-                        LazyVGrid(columns: [
-                            GridItem(.flexible(), spacing: 16),
-                            GridItem(.flexible(), spacing: 16),
-                            GridItem(.flexible(), spacing: 16)
-                        ], spacing: 16) {
-                            ForEach(viewModel.activeWorkOrders, id: \.workOrderNumber) { workOrder in
-                                WorkOrderCardView(workOrder: workOrder)
-                                    .onTapGesture {
-                                        print("🔍 DEBUG: WorkOrderCardView tapped for WO: \(workOrder.workOrderNumber)")
-                                        // Navigate to work order detail using appState
-                                        appState.navigateToWorkOrderDetail(workOrder)
+                        // Work Order Grid with Flagged Sectioning
+                        VStack(alignment: .leading, spacing: 20) {
+                            // Flagged Section
+                            if !flaggedWorkOrders.isEmpty {
+                                VStack(alignment: .leading, spacing: 12) {
+                                    HStack {
+                                        Image(systemName: "flag.fill")
+                                            .foregroundColor(ThemeManager.shared.linkColor)
+                                            .font(.headline)
+                                        
+                                        Text("Flagged")
+                                            .font(ThemeManager.shared.labelFont)
+                                            .foregroundColor(ThemeManager.shared.textPrimary)
+                                        
+                                        Spacer()
+                                        
+                                        Text("\(flaggedWorkOrders.count)")
+                                            .font(.caption)
+                                            .foregroundColor(ThemeManager.shared.textSecondary)
+                                            .padding(.horizontal, 8)
+                                            .padding(.vertical, 4)
+                                            .background(ThemeManager.shared.border.opacity(0.3))
+                                            .cornerRadius(8)
                                     }
+                                    .padding(.horizontal)
+                                    
+                                    LazyVGrid(columns: [
+                                        GridItem(.flexible(), spacing: 16),
+                                        GridItem(.flexible(), spacing: 16),
+                                        GridItem(.flexible(), spacing: 16)
+                                    ], spacing: 16) {
+                                        ForEach(flaggedWorkOrders, id: \.workOrderNumber) { workOrder in
+                                            WorkOrderCardView(workOrder: workOrder)
+                                                .onTapGesture {
+                                                    print("🔍 DEBUG: WorkOrderCardView tapped for WO: \(workOrder.workOrderNumber)")
+                                                    appState.navigateToWorkOrderDetail(workOrder)
+                                                }
+                                        }
+                                    }
+                                    .padding(.horizontal)
+                                }
+                            }
+                            
+                            // All Active Section
+                            if !unflaggedWorkOrders.isEmpty {
+                                VStack(alignment: .leading, spacing: 12) {
+                                    HStack {
+                                        Image(systemName: "square.grid.2x2")
+                                            .foregroundColor(ThemeManager.shared.textSecondary)
+                                            .font(.headline)
+                                        
+                                        Text("All Active")
+                                            .font(ThemeManager.shared.labelFont)
+                                            .foregroundColor(ThemeManager.shared.textPrimary)
+                                        
+                                        Spacer()
+                                        
+                                        Text("\(unflaggedWorkOrders.count)")
+                                            .font(.caption)
+                                            .foregroundColor(ThemeManager.shared.textSecondary)
+                                            .padding(.horizontal, 8)
+                                            .padding(.vertical, 4)
+                                            .background(ThemeManager.shared.border.opacity(0.3))
+                                            .cornerRadius(8)
+                                    }
+                                    .padding(.horizontal)
+                                    
+                                    LazyVGrid(columns: [
+                                        GridItem(.flexible(), spacing: 16),
+                                        GridItem(.flexible(), spacing: 16),
+                                        GridItem(.flexible(), spacing: 16)
+                                    ], spacing: 16) {
+                                        ForEach(unflaggedWorkOrders, id: \.workOrderNumber) { workOrder in
+                                            WorkOrderCardView(workOrder: workOrder)
+                                                .onTapGesture {
+                                                    print("🔍 DEBUG: WorkOrderCardView tapped for WO: \(workOrder.workOrderNumber)")
+                                                    appState.navigateToWorkOrderDetail(workOrder)
+                                                }
+                                        }
+                                    }
+                                    .padding(.horizontal)
+                                }
                             }
                         }
-                        .padding(.horizontal)
                     }
                 }
             }
@@ -110,7 +188,7 @@ struct ActiveWorkOrdersView: View {
                     Image(systemName: "plus")
                         .font(.title2)
                         .fontWeight(.medium)
-                        .foregroundColor(.blue)
+                        .foregroundColor(ThemeManager.shared.linkColor)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Add Work Order")
