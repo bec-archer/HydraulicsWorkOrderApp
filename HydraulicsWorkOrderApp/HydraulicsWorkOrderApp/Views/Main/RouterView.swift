@@ -204,6 +204,21 @@ struct RouterView: View {
                             MyLoginInfoView()
                                 .environmentObject(appState)
                                 .onAppear { print("🔍 DEBUG: RouterView switching to MyLoginInfoView") }
+                        case .workOrderDetail:
+                            if let workOrder = appState.selectedWorkOrder {
+                                WorkOrderDetailView(
+                                    workOrder: workOrder,
+                                    onDelete: { deletedWorkOrder in
+                                        // Handle work order deletion
+                                        print("🔍 DEBUG: Work order deleted: \(deletedWorkOrder.workOrderNumber)")
+                                        appState.navigateToView(.activeWorkOrders)
+                                    }
+                                )
+                                .onAppear { print("🔍 DEBUG: RouterView switching to WorkOrderDetailView for WO: \(workOrder.workOrderNumber)") }
+                            } else {
+                                Text("No work order selected")
+                                    .onAppear { print("🔍 DEBUG: RouterView switching to WorkOrderDetailView but no work order selected") }
+                            }
                         @unknown default:
                             Text("⚠️ Unknown AppScreen state")
                                 .onAppear { print("🔍 DEBUG: RouterView switching to Unknown state") }
@@ -212,6 +227,7 @@ struct RouterView: View {
                 .id(appState.currentView) // Force recreation when app state changes
                 .onAppear {
                     print("🔍 RouterView detail area showing: \(appState.currentView)")
+                    print("🔍 RouterView selectedWorkOrder: \(appState.selectedWorkOrder?.workOrderNumber ?? "nil")")
                 }
                 .onChange(of: appState.currentView) { _, newView in
                     print("🔄 RouterView detail area switching to: \(newView)")

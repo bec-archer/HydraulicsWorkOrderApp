@@ -32,9 +32,16 @@ class NewWorkOrderViewModel: ObservableObject {
     
     var hasValidItems: Bool {
         let nonBlankItems = items.filter { !isBlankItem($0) }
-        return !nonBlankItems.isEmpty && nonBlankItems.allSatisfy { item in
-            validationService.validateItem(item).isValid
+        print("🔍 DEBUG: hasValidItems check - Total items: \(items.count), Non-blank: \(nonBlankItems.count)")
+        
+        let isValid = !nonBlankItems.isEmpty && nonBlankItems.allSatisfy { item in
+            let validation = validationService.validateItem(item)
+            print("🔍 DEBUG: Item \(item.id) validation: \(validation.isValid ? "✅" : "❌") - \(validation.errors)")
+            return validation.isValid
         }
+        
+        print("🔍 DEBUG: hasValidItems result: \(isValid ? "✅ VALID" : "❌ INVALID")")
+        return isValid
     }
     
     // MARK: - Validation Helpers
@@ -179,25 +186,55 @@ class NewWorkOrderViewModel: ObservableObject {
     
     /// Save the work order to Core Data
     func saveWorkOrder() async {
+        print("🔍 DEBUG: saveWorkOrder() called")
+        
         // ───── Required Field Validation ─────
         guard let customer = selectedCustomer else {
+            print("❌ DEBUG: No customer selected")
             setError("Please select or add a Customer before saving this WorkOrder.")
             return
         }
         
+        print("🔍 DEBUG: Customer selected: \(customer.name) (ID: \(customer.id))")
+        
         // ───── Use ValidationService for comprehensive validation ─────
         let nonBlankItems = items.filter { !isBlankItem($0) }
+        print("🔍 DEBUG: Total items: \(items.count), Non-blank items: \(nonBlankItems.count)")
+        
+        // Debug each item
+        for (index, item) in nonBlankItems.enumerated() {
+            print("🔍 DEBUG: Item[\(index)] validation:")
+            print("  - ID: \(item.id)")
+            print("  - Type: '\(item.type)'")
+            print("  - Image URLs: \(item.imageUrls.count) items")
+            print("  - Thumb URLs: \(item.thumbUrls.count) items")
+            print("  - Reasons: \(item.reasonsForService.count) items")
+            print("  - Asset Tag: '\(item.assetTagId ?? "nil")'")
+            
+            // Check individual item validation
+            let itemValidation = validationService.validateItem(item, at: index)
+            print("  - Item validation: \(itemValidation.isValid ? "✅ VALID" : "❌ INVALID")")
+            if !itemValidation.isValid {
+                print("  - Validation errors: \(itemValidation.errors)")
+            }
+        }
         
         // Validate customer
+        print("🔍 DEBUG: Validating customer...")
         let customerValidation = validationService.validateCustomer(customer)
+        print("🔍 DEBUG: Customer validation: \(customerValidation.isValid ? "✅ VALID" : "❌ INVALID")")
         if !customerValidation.isValid {
+            print("❌ DEBUG: Customer validation errors: \(customerValidation.errors)")
             setError("Customer validation failed: \(customerValidation.errors.joined(separator: ", "))")
             return
         }
         
         // Validate items
+        print("🔍 DEBUG: Validating all items...")
         let itemsValidation = validationService.validateItems(nonBlankItems)
+        print("🔍 DEBUG: Items validation: \(itemsValidation.isValid ? "✅ VALID" : "❌ INVALID")")
         if !itemsValidation.isValid {
+            print("❌ DEBUG: Items validation errors: \(itemsValidation.errors)")
             setError("Item validation failed: \(itemsValidation.errors.joined(separator: ", "))")
             return
         }
@@ -238,6 +275,7 @@ class NewWorkOrderViewModel: ObservableObject {
             #endif
             
             // ───── Build WorkOrder (ALL required fields) ─────
+            print("🔍 DEBUG: Building WorkOrder with \(builtItems.count) items")
             let workOrder = WorkOrder(
                 id: UUID().uuidString,                    // Generate new UUID for Core Data
                 createdBy: "Tech",
@@ -270,17 +308,30 @@ class NewWorkOrderViewModel: ObservableObject {
             )
             
             // ───── Persist via WorkOrdersDatabase ─────
-            #if DEBUG
-            print("🚀 Attempting to save WorkOrder: \(workOrder.workOrderNumber)")
-            #endif
+            print("🚀 DEBUG: Attempting to save WorkOrder: \(workOrder.workOrderNumber)")
+            print("🔍 DEBUG: WorkOrder details:")
+            print("  - ID: \(workOrder.id)")
+            print("  - Customer: \(workOrder.customerName)")
+            print("  - Items count: \(workOrder.items.count)")
+            print("  - Status: \(workOrder.status)")
+            
+            // Debug each item in the work order
+            for (index, item) in workOrder.items.enumerated() {
+                print("🔍 DEBUG: WorkOrder Item[\(index)]:")
+                print("  - ID: \(item.id)")
+                print("  - Type: '\(item.type)'")
+                print("  - Image URLs: \(item.imageUrls.count)")
+                print("  - Thumb URLs: \(item.thumbUrls.count)")
+                print("  - Asset Tag: '\(item.assetTagId ?? "nil")'")
+            }
             
             try await workOrdersDB.addWorkOrder(workOrder)
             
-            #if DEBUG
-            print("✅ WorkOrder saved successfully: \(workOrder.workOrderNumber)")
-            #endif
+            print("✅ DEBUG: WorkOrder saved successfully: \(workOrder.workOrderNumber)")
             
         } catch {
+            print("❌ DEBUG: Error saving work order: \(error)")
+            print("❌ DEBUG: Error localized description: \(error.localizedDescription)")
             setError("Failed to save work order: \(error.localizedDescription)")
         }
         

@@ -8,7 +8,7 @@ import Foundation
 
 // MARK: - WO_Status Model
 
-struct WO_Status: Identifiable, Codable, Equatable {
+struct WO_Status: Identifiable, Codable, Equatable, Hashable {
     var id: UUID = UUID()         // Unique identifier
     var status: String            // e.g., "In Progress", "Completed"
     var user: String              // Who changed it

@@ -12,7 +12,7 @@ import Foundation
 // 📄 WorkOrder.swift
 // Core model for Work Orders in HydraulicsWorkOrderApp
 // ─────────────────────────────────────────────────────────────
-struct WorkOrder: Identifiable, Codable, Equatable {
+struct WorkOrder: Identifiable, Codable, Equatable, Hashable {
 
     // ───── Core Metadata ─────
     var id: String = UUID().uuidString                    // Unique identifier

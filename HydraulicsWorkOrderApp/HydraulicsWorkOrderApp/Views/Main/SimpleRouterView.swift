@@ -185,6 +185,21 @@ struct SimpleRouterView: View {
                         case .myLoginInfo:
                             MyLoginInfoView()
                                 .environmentObject(appState)
+                        case .workOrderDetail:
+                            if let workOrder = appState.selectedWorkOrder {
+                                WorkOrderDetailView(
+                                    workOrder: workOrder,
+                                    onDelete: { deletedWorkOrder in
+                                        // Handle work order deletion
+                                        print("🔍 DEBUG: Work order deleted: \(deletedWorkOrder.workOrderNumber)")
+                                        appState.navigateToView(.activeWorkOrders)
+                                    }
+                                )
+                                .onAppear { print("🔍 DEBUG: SimpleRouterView switching to WorkOrderDetailView for WO: \(workOrder.workOrderNumber)") }
+                            } else {
+                                Text("No work order selected")
+                                    .onAppear { print("🔍 DEBUG: SimpleRouterView switching to WorkOrderDetailView but no work order selected") }
+                            }
                         @unknown default:
                             Text("⚠️ Unknown AppScreen state")
                     }

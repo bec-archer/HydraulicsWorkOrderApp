@@ -2,10 +2,11 @@
 //  WorkOrdersDatabase.swift
 //  HydraulicsWorkOrderApp
 //
-//  Minimal placeholder - will be replaced with Core Data implementation
+//  Firebase Firestore integration for work orders
 //
 import Foundation
 import SwiftUI
+import FirebaseFirestore
 
 @MainActor
 final class WorkOrdersDatabase: ObservableObject {
@@ -15,12 +16,42 @@ final class WorkOrdersDatabase: ObservableObject {
     @Published var isLoading = false
     @Published var errorMessage: String?
     
+    private let db = Firestore.firestore()
+    private let collectionName = "workOrders"
+    
     private init() {}
     
     // MARK: - Minimal Placeholder Methods
     
     func addWorkOrder(_ workOrder: WorkOrder) async throws {
-        workOrders.append(workOrder)
+        print("🔍 DEBUG: WorkOrdersDatabase.addWorkOrder() called")
+        print("🔍 DEBUG: WorkOrder to add:")
+        print("  - ID: \(workOrder.id)")
+        print("  - Work Order Number: \(workOrder.workOrderNumber)")
+        print("  - Customer: \(workOrder.customerName)")
+        print("  - Status: \(workOrder.status)")
+        print("  - Items count: \(workOrder.items.count)")
+        print("  - Current workOrders count: \(workOrders.count)")
+        
+        do {
+            // Convert WorkOrder to Firestore document
+            let workOrderData = try encodeWorkOrderToFirestore(workOrder)
+            
+            // Save to Firebase Firestore
+            print("🔍 DEBUG: Saving work order to Firebase Firestore...")
+            try await db.collection(collectionName).document(workOrder.id).setData(workOrderData)
+            print("✅ DEBUG: Work order saved to Firebase Firestore successfully!")
+            
+            // Add to local array for immediate UI update
+            workOrders.append(workOrder)
+            print("✅ DEBUG: WorkOrder added to local array")
+            print("🔍 DEBUG: New workOrders count: \(workOrders.count)")
+            
+        } catch {
+            print("❌ DEBUG: Error saving work order to Firebase: \(error)")
+            print("❌ DEBUG: Error localized description: \(error.localizedDescription)")
+            throw error
+        }
     }
     
     func updateWorkOrder(_ workOrder: WorkOrder) async throws {
@@ -127,7 +158,40 @@ final class WorkOrdersDatabase: ObservableObject {
     }
     
     func getAllWorkOrders() async throws -> [WorkOrder] {
-        return workOrders
+        print("🔍 DEBUG: WorkOrdersDatabase.getAllWorkOrders() called")
+        
+        do {
+            // Load from Firebase Firestore
+            print("🔍 DEBUG: Loading work orders from Firebase Firestore...")
+            let snapshot = try await db.collection(collectionName).getDocuments()
+            
+            var firebaseWorkOrders: [WorkOrder] = []
+            for document in snapshot.documents {
+                do {
+                    let workOrder = try decodeWorkOrderFromFirestore(document.data(), id: document.documentID)
+                    firebaseWorkOrders.append(workOrder)
+                } catch {
+                    print("⚠️ DEBUG: Failed to decode work order \(document.documentID): \(error)")
+                }
+            }
+            
+            print("✅ DEBUG: Loaded \(firebaseWorkOrders.count) work orders from Firebase Firestore")
+            
+            // Update local array
+            workOrders = firebaseWorkOrders
+            
+            // Debug each work order
+            for (index, workOrder) in workOrders.enumerated() {
+                print("🔍 DEBUG: WorkOrder[\(index)]: \(workOrder.workOrderNumber) - \(workOrder.customerName) - \(workOrder.status)")
+            }
+            
+            return workOrders
+            
+        } catch {
+            print("❌ DEBUG: Error loading work orders from Firebase: \(error)")
+            print("❌ DEBUG: Returning local array as fallback")
+            return workOrders
+        }
     }
     
     func migrateExistingWorkOrdersToHaveWOItemIds(completion: @escaping (Result<Void, Error>) -> Void) {
@@ -139,5 +203,265 @@ final class WorkOrdersDatabase: ObservableObject {
         let dateFormatter = DateFormatter()
         dateFormatter.dateFormat = "yyMMdd"
         return dateFormatter.string(from: date)
+    }
+    
+    // MARK: - Firebase Firestore Encoding/Decoding
+    
+    private func encodeWorkOrderToFirestore(_ workOrder: WorkOrder) throws -> [String: Any] {
+        var data: [String: Any] = [:]
+        
+        // Basic work order fields
+        data["id"] = workOrder.id
+        data["createdBy"] = workOrder.createdBy
+        data["customerId"] = workOrder.customerId
+        data["customerName"] = workOrder.customerName
+        data["customerCompany"] = workOrder.customerCompany ?? ""
+        data["customerEmail"] = workOrder.customerEmail ?? ""
+        data["customerTaxExempt"] = workOrder.customerTaxExempt
+        data["customerPhone"] = workOrder.customerPhone
+        data["customerEmojiTag"] = workOrder.customerEmojiTag ?? ""
+        data["workOrderType"] = workOrder.workOrderType
+        data["primaryImageURL"] = workOrder.primaryImageURL ?? ""
+        data["timestamp"] = Timestamp(date: workOrder.timestamp)
+        data["status"] = workOrder.status
+        data["workOrderNumber"] = workOrder.workOrderNumber
+        data["flagged"] = workOrder.flagged
+        data["assetTagId"] = workOrder.assetTagId ?? ""
+        data["estimatedCost"] = workOrder.estimatedCost ?? ""
+        data["finalCost"] = workOrder.finalCost ?? ""
+        data["dropdowns"] = workOrder.dropdowns
+        data["dropdownSchemaVersion"] = workOrder.dropdownSchemaVersion
+        data["lastModified"] = Timestamp(date: workOrder.lastModified)
+        data["lastModifiedBy"] = workOrder.lastModifiedBy
+        data["tagBypassReason"] = workOrder.tagBypassReason ?? ""
+        data["isDeleted"] = workOrder.isDeleted
+        data["syncStatus"] = workOrder.syncStatus
+        data["lastSyncDate"] = workOrder.lastSyncDate != nil ? Timestamp(date: workOrder.lastSyncDate!) : nil
+        
+        // Encode items
+        var itemsData: [[String: Any]] = []
+        for item in workOrder.items {
+            var itemData: [String: Any] = [:]
+            itemData["id"] = item.id.uuidString
+            itemData["type"] = item.type
+            itemData["imageUrls"] = item.imageUrls
+            itemData["thumbUrls"] = item.thumbUrls
+            itemData["reasonsForService"] = item.reasonsForService
+            itemData["completedReasons"] = item.completedReasons
+            itemData["reasonNotes"] = item.reasonNotes ?? ""
+            itemData["assetTagId"] = item.assetTagId ?? ""
+            itemData["dropdowns"] = item.dropdowns
+            itemData["statusHistory"] = item.statusHistory.map { status in
+                [
+                    "status": status.status,
+                    "timestamp": Timestamp(date: status.timestamp),
+                    "user": status.user,
+                    "notes": status.notes ?? ""
+                ]
+            }
+            itemData["notes"] = item.notes.map { note in
+                [
+                    "text": note.text,
+                    "timestamp": Timestamp(date: note.timestamp),
+                    "user": note.user,
+                    "workOrderId": note.workOrderId,
+                    "itemId": note.itemId ?? ""
+                ]
+            }
+            itemData["lastModified"] = Timestamp(date: item.lastModified)
+            itemData["lastModifiedBy"] = item.lastModifiedBy ?? ""
+            itemData["tagReplacementHistory"] = item.tagReplacementHistory?.map { replacement in
+                [
+                    "oldTagId": replacement.oldTagId,
+                    "newTagId": replacement.newTagId,
+                    "reason": replacement.reason ?? "",
+                    "timestamp": Timestamp(date: replacement.timestamp),
+                    "replacedBy": replacement.replacedBy
+                ]
+            } ?? []
+            
+            itemsData.append(itemData)
+        }
+        data["items"] = itemsData
+        
+        // Encode notes
+        var notesData: [[String: Any]] = []
+        for note in workOrder.notes {
+            var noteData: [String: Any] = [:]
+            noteData["text"] = note.text
+            noteData["timestamp"] = Timestamp(date: note.timestamp)
+            noteData["user"] = note.user
+            noteData["workOrderId"] = note.workOrderId
+            noteData["itemId"] = note.itemId ?? ""
+            notesData.append(noteData)
+        }
+        data["notes"] = notesData
+        
+        return data
+    }
+    
+    private func decodeWorkOrderFromFirestore(_ data: [String: Any], id: String) throws -> WorkOrder {
+        // Decode basic fields
+        let createdBy = data["createdBy"] as? String ?? ""
+        let customerId = data["customerId"] as? String ?? ""
+        let customerName = data["customerName"] as? String ?? ""
+        let customerCompany = data["customerCompany"] as? String
+        let customerEmail = data["customerEmail"] as? String
+        let customerTaxExempt = data["customerTaxExempt"] as? Bool ?? false
+        let customerPhone = data["customerPhone"] as? String ?? ""
+        let customerEmojiTag = data["customerEmojiTag"] as? String
+        let workOrderType = data["workOrderType"] as? String ?? ""
+        let primaryImageURL = data["primaryImageURL"] as? String
+        let timestamp = (data["timestamp"] as? Timestamp)?.dateValue() ?? Date()
+        let status = data["status"] as? String ?? ""
+        let workOrderNumber = data["workOrderNumber"] as? String ?? ""
+        let flagged = data["flagged"] as? Bool ?? false
+        let assetTagId = data["assetTagId"] as? String
+        let estimatedCost = data["estimatedCost"] as? String
+        let finalCost = data["finalCost"] as? String
+        let dropdowns = data["dropdowns"] as? [String: String] ?? [:]
+        let dropdownSchemaVersion = data["dropdownSchemaVersion"] as? Int ?? 1
+        let lastModified = (data["lastModified"] as? Timestamp)?.dateValue() ?? Date()
+        let lastModifiedBy = data["lastModifiedBy"] as? String ?? ""
+        let tagBypassReason = data["tagBypassReason"] as? String
+        let isDeleted = data["isDeleted"] as? Bool ?? false
+        let syncStatus = data["syncStatus"] as? String ?? ""
+        let lastSyncDate = (data["lastSyncDate"] as? Timestamp)?.dateValue()
+        
+        // Decode items
+        var items: [WO_Item] = []
+        if let itemsData = data["items"] as? [[String: Any]] {
+            for itemData in itemsData {
+                let item = try decodeWOItemFromFirestore(itemData)
+                items.append(item)
+            }
+        }
+        
+        // Decode notes
+        var notes: [WO_Note] = []
+        if let notesData = data["notes"] as? [[String: Any]] {
+            for noteData in notesData {
+                let note = try decodeWONoteFromFirestore(noteData)
+                notes.append(note)
+            }
+        }
+        
+        return WorkOrder(
+            id: id,
+            createdBy: createdBy,
+            customerId: customerId,
+            customerName: customerName,
+            customerCompany: customerCompany,
+            customerEmail: customerEmail,
+            customerTaxExempt: customerTaxExempt,
+            customerPhone: customerPhone,
+            customerEmojiTag: customerEmojiTag,
+            workOrderType: workOrderType,
+            primaryImageURL: primaryImageURL,
+            timestamp: timestamp,
+            status: status,
+            workOrderNumber: workOrderNumber,
+            flagged: flagged,
+            assetTagId: assetTagId,
+            estimatedCost: estimatedCost,
+            finalCost: finalCost,
+            dropdowns: dropdowns,
+            dropdownSchemaVersion: dropdownSchemaVersion,
+            lastModified: lastModified,
+            lastModifiedBy: lastModifiedBy,
+            tagBypassReason: tagBypassReason,
+            isDeleted: isDeleted,
+            syncStatus: syncStatus,
+            lastSyncDate: lastSyncDate,
+            notes: notes,
+            items: items
+        )
+    }
+    
+    private func decodeWOItemFromFirestore(_ data: [String: Any]) throws -> WO_Item {
+        let id = UUID(uuidString: data["id"] as? String ?? "") ?? UUID()
+        let type = data["type"] as? String ?? ""
+        let imageUrls = data["imageUrls"] as? [String] ?? []
+        let thumbUrls = data["thumbUrls"] as? [String] ?? []
+        let reasonsForService = data["reasonsForService"] as? [String] ?? []
+        let completedReasons = data["completedReasons"] as? [String] ?? []
+        let reasonNotes = data["reasonNotes"] as? String
+        let assetTagId = data["assetTagId"] as? String
+        let dropdowns = data["dropdowns"] as? [String: String] ?? [:]
+        let lastModified = (data["lastModified"] as? Timestamp)?.dateValue() ?? Date()
+        let lastModifiedBy = data["lastModifiedBy"] as? String
+        
+        // Decode status history
+        var statusHistory: [WO_Status] = []
+        if let statusHistoryData = data["statusHistory"] as? [[String: Any]] {
+            for statusData in statusHistoryData {
+                let status = statusData["status"] as? String ?? ""
+                let user = statusData["user"] as? String ?? ""
+                let timestamp = (statusData["timestamp"] as? Timestamp)?.dateValue() ?? Date()
+                let notes = statusData["notes"] as? String
+                statusHistory.append(WO_Status(status: status, user: user, timestamp: timestamp, notes: notes))
+            }
+        }
+        
+        // Decode notes
+        var notes: [WO_Note] = []
+        if let notesData = data["notes"] as? [[String: Any]] {
+            for noteData in notesData {
+                let note = try decodeWONoteFromFirestore(noteData)
+                notes.append(note)
+            }
+        }
+        
+        // Decode tag replacement history
+        var tagReplacementHistory: [TagReplacement]?
+        if let tagHistoryData = data["tagReplacementHistory"] as? [[String: Any]], !tagHistoryData.isEmpty {
+            var replacements: [TagReplacement] = []
+            for replacementData in tagHistoryData {
+                let oldTagId = replacementData["oldTagId"] as? String ?? ""
+                let newTagId = replacementData["newTagId"] as? String ?? ""
+                let replacedBy = replacementData["replacedBy"] as? String ?? ""
+                let timestamp = (replacementData["timestamp"] as? Timestamp)?.dateValue() ?? Date()
+                let reason = replacementData["reason"] as? String
+                replacements.append(TagReplacement(oldTagId: oldTagId, newTagId: newTagId, replacedBy: replacedBy, timestamp: timestamp, reason: reason))
+            }
+            tagReplacementHistory = replacements
+        }
+        
+        return WO_Item(
+            id: id,
+            itemNumber: nil,
+            assetTagId: assetTagId,
+            type: type,
+            imageUrls: imageUrls,
+            thumbUrls: thumbUrls,
+            localImages: [],
+            dropdowns: dropdowns,
+            dropdownSchemaVersion: 1,
+            reasonsForService: reasonsForService,
+            reasonNotes: reasonNotes,
+            completedReasons: completedReasons,
+            statusHistory: statusHistory,
+            notes: notes,
+            testResult: nil,
+            partsUsed: nil,
+            hoursWorked: nil,
+            estimatedCost: nil,
+            finalCost: nil,
+            assignedTo: "",
+            isFlagged: false,
+            tagReplacementHistory: tagReplacementHistory,
+            lastModified: lastModified,
+            lastModifiedBy: lastModifiedBy
+        )
+    }
+    
+    private func decodeWONoteFromFirestore(_ data: [String: Any]) throws -> WO_Note {
+        let workOrderId = data["workOrderId"] as? String ?? ""
+        let itemId = data["itemId"] as? String
+        let user = data["user"] as? String ?? ""
+        let text = data["text"] as? String ?? ""
+        let timestamp = (data["timestamp"] as? Timestamp)?.dateValue() ?? Date()
+        
+        return WO_Note(workOrderId: workOrderId, itemId: itemId, user: user, text: text, timestamp: timestamp)
     }
 }

@@ -117,6 +117,9 @@ struct AddWOItemFormView: View {
                     workOrderId: woId,
                     itemId: item.id,
                     onImagesChanged: {
+                        print("🔍 DEBUG: AddWOItemFormView - Images changed for item \(item.id)")
+                        print("🔍 DEBUG: Current imageUrls count: \(item.imageUrls.count)")
+                        print("🔍 DEBUG: Current thumbUrls count: \(item.thumbUrls.count)")
                         hasTouchedRequired = true
                     },
                     showQR: false, // We'll handle QR scanning separately for asset tag

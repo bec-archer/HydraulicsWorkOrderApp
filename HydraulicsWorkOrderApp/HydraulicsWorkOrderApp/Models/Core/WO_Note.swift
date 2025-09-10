@@ -9,7 +9,7 @@ import Foundation
 
 // MARK: - WO_Note Model
 
-struct WO_Note: Identifiable, Codable, Equatable {
+struct WO_Note: Identifiable, Codable, Equatable, Hashable {
     
     var id: UUID = UUID()           // Local-only — not used as Firestore doc ID
     var workOrderId: String         // Reference to parent WorkOrder

@@ -1,7 +1,7 @@
 import Foundation
 import SwiftUI
 
-struct WO_Item: Identifiable, Codable, Equatable {
+struct WO_Item: Identifiable, Codable, Equatable, Hashable {
     var id: UUID = UUID()
     var itemNumber: String? = nil  // 🆕 Human-readable WO Item ID (e.g., "250826-653-WOI-001") (renamed from woItemId)
     var assetTagId: String? = nil  // 🆕 Asset tag ID (renamed from tagId)
@@ -42,7 +42,7 @@ struct WO_Item: Identifiable, Codable, Equatable {
 
     var imageUrls: [String] = []
     var thumbUrls: [String] = []       // 🆕 store thumbnails for fast UI
-    var localImages: [UIImage] = []    // ✅ No longer using @TransientImageStorage
+    var localImages: [UIImage] = []    // ✅ No longer using @TransientImageStorage (excluded from hash)
     // 🆕 Store local images for offline use
     var lastModified: Date = Date()
     var dropdownSchemaVersion: Int = 1
@@ -301,5 +301,35 @@ extension WO_Item {
 extension WO_Item {
     static func == (lhs: WO_Item, rhs: WO_Item) -> Bool {
         lhs.id == rhs.id && lhs.lastModified == rhs.lastModified
+    }
+}
+
+// MARK: - Hashable
+extension WO_Item {
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+        hasher.combine(itemNumber)
+        hasher.combine(assetTagId)
+        hasher.combine(type)
+        hasher.combine(imageUrls)
+        hasher.combine(thumbUrls)
+        hasher.combine(dropdowns)
+        hasher.combine(dropdownSchemaVersion)
+        hasher.combine(reasonsForService)
+        hasher.combine(reasonNotes)
+        hasher.combine(completedReasons)
+        hasher.combine(statusHistory)
+        hasher.combine(notes)
+        hasher.combine(testResult)
+        hasher.combine(partsUsed)
+        hasher.combine(hoursWorked)
+        hasher.combine(estimatedCost)
+        hasher.combine(finalCost)
+        hasher.combine(assignedTo)
+        hasher.combine(isFlagged)
+        hasher.combine(tagReplacementHistory)
+        hasher.combine(lastModified)
+        hasher.combine(lastModifiedBy)
+        // Note: localImages is excluded from hash as UIImage doesn't conform to Hashable
     }
 }

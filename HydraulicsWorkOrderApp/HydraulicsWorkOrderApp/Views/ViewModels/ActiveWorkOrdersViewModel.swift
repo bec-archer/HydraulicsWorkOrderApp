@@ -86,19 +86,31 @@ class ActiveWorkOrdersViewModel: ObservableObject {
     
     /// Load work orders from the database
     func loadWorkOrders() {
+        print("🔍 DEBUG: ActiveWorkOrdersViewModel.loadWorkOrders() called")
         Task {
             await MainActor.run {
                 isLoading = true
+                print("🔍 DEBUG: Set isLoading = true")
             }
             
             do {
+                print("🔍 DEBUG: Calling workOrdersDB.getAllWorkOrders()")
                 let workOrders = try await workOrdersDB.getAllWorkOrders()
+                print("🔍 DEBUG: Got \(workOrders.count) work orders from database")
+                
                 await MainActor.run {
                     self.workOrders = workOrders
                     self.isLoading = false
-                    print("📋 Loaded \(workOrders.count) work orders")
+                    print("📋 DEBUG: Loaded \(workOrders.count) work orders into viewModel")
+                    
+                    // Debug each work order
+                    for (index, workOrder) in workOrders.enumerated() {
+                        print("🔍 DEBUG: WorkOrder[\(index)]: \(workOrder.workOrderNumber) - \(workOrder.customerName) - \(workOrder.status)")
+                    }
                 }
             } catch {
+                print("❌ DEBUG: Error loading work orders: \(error)")
+                print("❌ DEBUG: Error localized description: \(error.localizedDescription)")
                 await MainActor.run {
                     self.isLoading = false
                     self.setError("Failed to load work orders: \(error.localizedDescription)")

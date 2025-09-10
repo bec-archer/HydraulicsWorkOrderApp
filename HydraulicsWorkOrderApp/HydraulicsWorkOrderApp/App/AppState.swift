@@ -19,6 +19,7 @@ enum AppScreen {
     case settings
     case userManager
     case dropdownManager
+    case workOrderDetail
     // Add more cases as needed (e.g., completedWorkOrders, etc.)
 }
 // END enum
@@ -30,6 +31,7 @@ class AppState: ObservableObject {
     static let shared = AppState() // Singleton for global access
     
     @Published var currentView: AppScreen = .activeWorkOrders
+    @Published var selectedWorkOrder: WorkOrder? = nil  // For work order detail navigation
 
     // ───── Current Logged-in User Info ─────
     @Published var currentUser: User? = nil  // The actual logged-in user from database
@@ -90,6 +92,18 @@ class AppState: ObservableObject {
         print("🔍 DEBUG: New currentView: \(currentView)")
         splitVisibility = .detailOnly
         print("🔍 DEBUG: Sidebar collapsed to detailOnly")
+    }
+    
+    // Navigate to work order detail
+    func navigateToWorkOrderDetail(_ workOrder: WorkOrder) {
+        print("🔍 DEBUG: AppState.navigateToWorkOrderDetail called with WO: \(workOrder.workOrderNumber)")
+        print("🔍 DEBUG: Setting selectedWorkOrder to: \(workOrder.workOrderNumber)")
+        selectedWorkOrder = workOrder
+        print("🔍 DEBUG: Setting currentView to: .workOrderDetail")
+        currentView = .workOrderDetail
+        print("🔍 DEBUG: Current currentView is now: \(currentView)")
+        splitVisibility = .detailOnly
+        print("🔍 DEBUG: Navigation complete")
     }
 
 

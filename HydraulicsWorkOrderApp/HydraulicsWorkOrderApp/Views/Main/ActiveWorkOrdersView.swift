@@ -80,15 +80,12 @@ struct ActiveWorkOrdersView: View {
                             GridItem(.flexible(), spacing: 16)
                         ], spacing: 16) {
                             ForEach(viewModel.activeWorkOrders, id: \.workOrderNumber) { workOrder in
-                                NavigationLink(destination: WorkOrderDetailView(
-                                    workOrder: workOrder,
-                                    onDelete: { deletedWorkOrder in
-                                        viewModel.deleteWorkOrder(deletedWorkOrder)
+                                WorkOrderCardView(workOrder: workOrder)
+                                    .onTapGesture {
+                                        print("🔍 DEBUG: WorkOrderCardView tapped for WO: \(workOrder.workOrderNumber)")
+                                        // Navigate to work order detail using appState
+                                        appState.navigateToWorkOrderDetail(workOrder)
                                     }
-                                )) {
-                                    WorkOrderCardView(workOrder: workOrder)
-                                }
-                                .buttonStyle(PlainButtonStyle())
                             }
                         }
                         .padding(.horizontal)

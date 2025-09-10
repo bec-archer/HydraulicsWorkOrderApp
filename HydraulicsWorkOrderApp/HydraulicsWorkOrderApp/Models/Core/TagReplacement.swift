@@ -8,7 +8,7 @@ import Foundation
 
 // MARK: - TagReplacement Model
 
-struct TagReplacement: Identifiable, Codable, Equatable {
+struct TagReplacement: Identifiable, Codable, Equatable, Hashable {
     var id: UUID = UUID()         // Unique identifier
     var oldTagId: String          // Previous tag ID
     var newTagId: String          // New tag ID

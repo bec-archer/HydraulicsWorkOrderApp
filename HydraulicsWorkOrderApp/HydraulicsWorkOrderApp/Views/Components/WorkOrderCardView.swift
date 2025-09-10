@@ -194,6 +194,9 @@ struct WorkOrderCardView: View {
                 )
             }
         }
+        .background(Color.white) // White background for all work order cards
+        .cornerRadius(16)
+        .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
         .id(stableId) // Use stable ID instead of lastModified to prevent recreation
         .onChange(of: workOrderImageCount) {
             // Refresh images when work order image count changes
