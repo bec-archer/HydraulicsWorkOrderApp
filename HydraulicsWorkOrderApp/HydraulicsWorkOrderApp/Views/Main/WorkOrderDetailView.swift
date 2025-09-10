@@ -736,13 +736,31 @@ struct WorkOrderDetailView: View {
                                                 showGallery = true
                                             }) {
                                                 ZStack {
+                                                    // Show the 5th image (index 4) as background
+                                                    AsyncImage(url: URL(string: item.imageUrls[4])) { image in
+                                                        image
+                                                            .resizable()
+                                                            .aspectRatio(contentMode: .fill)
+                                                            .frame(width: thumbSize, height: thumbSize)
+                                                            .clipped()
+                                                            .cornerRadius(ThemeManager.shared.cardCornerRadius - 6)
+                                                    } placeholder: {
+                                                        Rectangle()
+                                                            .fill(ThemeManager.shared.border.opacity(0.3))
+                                                            .frame(width: thumbSize, height: thumbSize)
+                                                            .cornerRadius(ThemeManager.shared.cardCornerRadius - 6)
+                                                    }
+                                                    
+                                                    // Dark overlay
                                                     Rectangle()
-                                                        .fill(ThemeManager.shared.border.opacity(0.3))
+                                                        .fill(Color.black.opacity(0.6))
                                                         .frame(width: thumbSize, height: thumbSize)
                                                         .cornerRadius(ThemeManager.shared.cardCornerRadius - 6)
+                                                    
+                                                    // +Qty text
                                                     Text("+\(item.imageUrls.count - 4)")
                                                         .font(.headline)
-                                                        .foregroundColor(ThemeManager.shared.textPrimary)
+                                                        .foregroundColor(.white)
                                                 }
                                             }
                                             .buttonStyle(PlainButtonStyle())
