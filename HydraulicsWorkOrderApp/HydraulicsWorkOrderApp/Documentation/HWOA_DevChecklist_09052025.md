@@ -1,0 +1,193 @@
+# ✅ Developer Checklist – Hydraulics Work Order App
+
+*Updated: September 5th, 2025 – Matches Final PRD & File Structure*
+
+---
+
+## 🔄 Functional Flow
+
+* [ ] Tag Binding & Reassignment Logic:
+
+  * [ ] Admin/Manager can manage tag bindings (add, unbind, reassign)
+  * [ ] Prompt for reason + tag action (bind / unbind / reassign)
+  * [ ] Write to `tagHistory` (event: bound, unbound, reassigned)
+  * [ ] Ensure old tags remain searchable and dedupe to the current WO_Item
+  * [ ] Support marking one tag as Primary; others as Auxiliary
+  * [ ] Allow optional Position Labels on each tag (A/B/C, Rod/Cap, etc.)
+
+* [ ] Customer Lookup logic:
+
+  * [ ] First field is customer lookup (by phone or name)
+  * [ ] If match found → autofill customer info
+  * [ ] If no match → “+ Add New Customer” button appears
+  * [ ] Modal opens with prefilled value
+  * [ ] Tech enters: Company Name, Email, Tax Exempt \[t/f]
+  * [ ] New customer saved and returned to WorkOrder form
+
+* [ ] App opens to PIN-based login (4–8 digits)
+
+* [ ] Logged-in user and role correctly persist
+
+* [ ] WorkOrder creation supports 1+ WO_Item(s)
+
+* [ ] For each WO_Item:
+
+  * [ ] QR Code scanned (or bypass reason selected)
+  * [ ] At least one image captured
+  * [ ] Dropdowns selected and saved (**on WO_Item**; carries `dropdownSchemaVersion` snapshot)
+  * [ ] Reason(s) for service checked
+  * [ ] Reasons for Service are catalog-managed:
+    * Admin/SuperAdmin can add/edit/deactivate options
+    * Managers can submit change requests (read-only access in DropdownManagerView)
+
+* [ ] WorkOrder number auto-generated in format: `YYMMDD-001`, `001-A`, etc.
+
+* [ ] Card shows up to 4 images: the first image from up to four WO_Items (in item create order)
+* [ ] Status dots (overlay): one dot at the **top-right** of each item image (one per WO_Item)
+* [ ] Status dots (inline): up to **4** dots on the **same line as WO_Number**
+* [ ] Status dots (overlay): a single dot at the **top-right of each item image** (one per WO_Item)
+* [ ] Status dots (inline): a **summary row of up to 4 dots** on the same line as **WO_Number**
+
+* [ ] All WO_Items show up under WorkOrderDetailView
+
+* [ ] Search supports: customer name, phone, WO_#, tag (active binding **and** previous via `tagHistory`), status
+---
+
+## 🧑‍🔧 Status Update + Test Logic
+
+* [ ] Tech can mark WO_Item:
+  * [ ] In Progress
+  * [ ] WO_Item Done
+  * [ ] Tested: PASS → enter Parts Used, Hours, Cost
+  * [ ] Mark WorkOrder as Completed → card turns gray (roll-up derived from WO_Item statuses)
+* [ ] Tech can mark WorkOrder as Closed after completion (roll-up flag/timestamp on WorkOrder)
+* [ ] FAIL logic:
+
+  * [ ] First FAIL = logged, no alert
+  * [ ] Second FAIL = triggers "PROBLEM CHILD"
+  * [ ] Only Managers receive push
+  * [ ] If tech inputting FAIL is not last updater, last updater is warned
+
+---
+
+## 👥 User Roles
+
+| Feature                     | Tech | Manager | Admin | SuperAdmin |
+| --------------------------- | ---- | ------- | ----- | ---------- |
+| Add/Edit WorkOrder          | ✅   | ✅      | ✅    | ✅          |
+| Mark WorkOrder Completed    | ✅   | ✅      | ✅    | ✅          |
+| Mark WorkOrder Closed       | ✅   | ✅      | ✅    | ✅          |
+| Override Parts/Hours/Cost   | ❌   | ✅      | ✅    | ✅          |
+| View Closed WOs             | ❌   | ✅      | ✅    | ✅          |
+| Add/Delete Users            | ❌   | ❌      | ✅*   | ✅          |
+| Edit Dropdowns (general)    | ❌   | ❌      | ✅    | ✅          |
+| Manage Reasons for Service  | ❌   | Request | ✅    | ✅          |
+| Developer Toggles           | ❌   | ❌      | ❌    | ✅          |
+| Restore Deleted WorkOrders  | ❌   | ✅      | ✅    | ✅          |
+| Unlock Completed WorkOrders | ❌   | ✅      | ✅    | ✅          |
+| Reassign/Replace Tag IDs    | ❌   | ✅      | ✅    | ✅          |
+
+> *Admins cannot edit, activate/deactivate, or change any **SuperAdmin** account. Only SuperAdmin can manage SuperAdmin users.*
+
+---
+
+## 📦 Sync & Storage
+
+* [ ] Dropdown versioning:
+
+* [ ] Each `WO_Item` includes `dropdownSchemaVersion` (snapshot at item creation)
+* [ ] UI warns or disables edits on the item if version mismatch is detected
+
+* [ ] Conflict resolution logic in `SyncManager.swift`:
+
+  * [ ] Uses `lastModified` to compare local vs remote WorkOrders
+  * [ ] "Last write wins" strategy applied
+  * [ ] Logs which version is kept
+
+* [ ] Firebase Firestore active
+
+* [ ] Images uploaded to Firebase Storage
+
+* [ ] Card thumbnails derive from items.imageUrls (first image per WO_Item, up to 4); optional WO image cache is non-authoritative
+
+* [ ] Local SQLite backup created
+
+* [ ] Self-hosted sync pushes to `/sqlite_backups`
+
+* [ ] SyncManager retries failed uploads
+
+* [ ] Offline mode queue confirmed
+
+* [ ] WorkOrder.finalCost is a computed aggregate (cents) = sum of items.finalCost; recompute on any item cost change
+
+* [ ] Collection-group index on `/workOrders/*/items`: (assignedToId ASC, status ASC) for “My Work Items”
+
+* [ ] DeletedWorkOrdersView filters by `workOrders.isDeleted == true`
+
+* [ ] List membership:
+* **Active** = `!isCompleted && !isClosed && !isDeleted`
+* **Completed** = `isCompleted && !isClosed && !isDeleted` (cards appear grayed)
+* **Closed** = `isClosed && !isDeleted` (hidden from Active; Manager/Admin archive)
+* **Deleted** = `isDeleted`
+
+---
+
+## 🛠 UI / UX Checks
+
+* [ ] Apple Notes style grid
+* [ ] Yellow-accented theme from AppleNotesYellow\.json
+* [ ] Tap targets are iPad-friendly
+* [ ] **Cards** (ActiveWorkOrdersView / WorkOrderCardView): indicator dots only (overlay on thumbnails + inline by WO_Number); **no StatusBadge** on cards
+* [ ] **Detail** (WorkOrderDetailView / WorkOrderItemDetailView): **StatusBadge** per WO_Item row; **no indicator dots** in detail lists
+* [ ] Dot colors derive from the **same mapping as StatusBadge**; no hex literals. Adding a new status only updates the central mapping.
+* [ ] All major actions timestamped and attributed to user
+* [ ] Completed WorkOrders appear grayed out (based on roll-up Completed)
+* [ ] Flagged WorkOrders show icon
+* [ ] Deleted WorkOrders hidden unless Admin or above
+* [ ] Fields always show `WorkOrder`, `WO_Item`, `WO_Note`, `WO_Status` — no "job" references
+* [ ] Modal flows return to origin screen properly
+* [ ] Fields support iPad keyboards + handwriting input
+* [ ] Managers see DropdownManagerView in read-only mode with a Request Change option
+* [ ] Admins can edit all dropdowns including Reasons for Service
+* [ ] Card shows up to 4 thumbnails (first image from up to four WO_Items)
+* [ ] Dot colors follow the same semantic mapping as item status (In Progress / Done / PASS / FAIL); **no hardcoded hex** — use theme tokens
+* [ ] When fewer than 4 items exist, render only that many dots (no placeholders)
+* [ ] DeletedWorkOrdersView lists `isDeleted == true`
+* [ ] Customer **emojiTag** shows next to the customer name on cards and detail headers when set; absent emoji collapses spacing (no gap)
+
+---
+
+## 🗃 Notes & History
+
+* [ ] WO_Status and WO_Note stored separately (order-level notes at `/workOrders/{woId}/workOrderNotes`, item-level at `/workOrders/{woId}/items/{itemId}/itemNotes`; timeline merges these + each item’s `statusHistory`; **use `userId/userName` when present**)
+* [ ] WorkOrder-level notes stored in `/workOrders/{woId}/workOrderNotes`
+* [ ] Item-level notes stored in `/workOrders/{woId}/items/{itemId}/itemNotes`
+* [ ] Both displayed together in `NotesTimelineView` (merged + sorted by timestamp desc)
+* [ ] User and timestamp shown on all entries
+* [ ] Notes allow freeform input
+* [ ] Status changes reflect dropdown + logic state (status & statusHistory live on WO_Item)
+* [ ] Status: Checked In, In Progress, Done, Tested: PASS/FAIL at WO_Item level; WorkOrder uses roll-up Completed/Closed flags
+
+---
+
+## 🧪 Developer Checks
+
+* [ ] Codebase avoids "job" or legacy terms
+* [ ] Developer toggles exist for:
+  * [ ] Bypass tag scan enforcement
+  * [ ] Disable login screen
+* [ ] WO_Number generation tested across midnight rollover
+* [ ] Tag reassignment logs are searchable by both old and new IDs
+* [ ] Offline-first behavior tested
+* [ ] Sample data can be reloaded on cold start
+
+### 🔧 Patch — PRD: Customer Emoji Tag
+
+#### Customer Emoji Tag (new)
+- Each Customer may have an optional **emoji tag** (e.g., 🔧, ⭐️).
+- Any signed-in user can set/change/remove the emoji from **Customer Detail**.
+- The emoji appears:
+  - Next to the customer name in **WorkOrderCardView** and **WorkOrderDetailView**.
+  - In **Customer lookup results** and the **Selected Customer Summary** in NewWorkOrderView.
+- Validation:
+  - Must be a single emoji (one visible symbol). If multiple characters are entered, keep the **first grapheme** and discard the rest.

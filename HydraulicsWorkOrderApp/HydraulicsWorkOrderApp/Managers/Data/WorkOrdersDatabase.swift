@@ -57,10 +57,25 @@ final class WorkOrdersDatabase: ObservableObject {
     func updateWorkOrder(_ workOrder: WorkOrder) async throws {
         print("🔍 DEBUG: updateWorkOrder called for WO: \(workOrder.workOrderNumber)")
         
+        // Debug: Show completion details before encoding
+        for (index, item) in workOrder.items.enumerated() {
+            print("🔍 DEBUG: Item \(index) completion details before encoding:")
+            print("🔍 DEBUG: Parts Used: '\(item.partsUsed ?? "nil")', Hours: '\(item.hoursWorked ?? "nil")', Cost: '\(item.finalCost ?? "nil")'")
+        }
+        
         do {
             // Save to Firebase Firestore
             print("🔍 DEBUG: Saving work order to Firebase Firestore...")
             let data = try encodeWorkOrderToFirestore(workOrder)
+            
+            // Debug: Show what's being encoded for items
+            if let itemsData = data["items"] as? [[String: Any]] {
+                for (index, itemData) in itemsData.enumerated() {
+                    print("🔍 DEBUG: Item \(index) data being saved to Firebase:")
+                    print("🔍 DEBUG: Parts Used: '\(itemData["partsUsed"] ?? "nil")', Hours: '\(itemData["hoursWorked"] ?? "nil")', Cost: '\(itemData["finalCost"] ?? "nil")'")
+                }
+            }
+            
             try await db.collection(collectionName).document(workOrder.id).setData(data)
             print("✅ DEBUG: Successfully saved work order to Firebase Firestore")
             
@@ -308,6 +323,16 @@ final class WorkOrdersDatabase: ObservableObject {
             }
             itemData["lastModified"] = Timestamp(date: item.lastModified)
             itemData["lastModifiedBy"] = item.lastModifiedBy ?? ""
+            
+            // Add completion details fields
+            itemData["partsUsed"] = item.partsUsed ?? ""
+            itemData["hoursWorked"] = item.hoursWorked ?? ""
+            itemData["finalCost"] = item.finalCost ?? ""
+            itemData["estimatedCost"] = item.estimatedCost ?? ""
+            itemData["testResult"] = item.testResult ?? ""
+            itemData["assignedTo"] = item.assignedTo
+            itemData["isFlagged"] = item.isFlagged
+            
             itemData["tagReplacementHistory"] = item.tagReplacementHistory?.map { replacement in
                 [
                     "oldTagId": replacement.oldTagId,
@@ -471,6 +496,18 @@ final class WorkOrdersDatabase: ObservableObject {
             tagReplacementHistory = replacements
         }
         
+        // Decode completion details fields
+        let partsUsed = data["partsUsed"] as? String
+        let hoursWorked = data["hoursWorked"] as? String
+        let finalCost = data["finalCost"] as? String
+        let estimatedCost = data["estimatedCost"] as? String
+        let testResult = data["testResult"] as? String
+        let assignedTo = data["assignedTo"] as? String ?? ""
+        let isFlagged = data["isFlagged"] as? Bool ?? false
+        
+        print("🔍 DEBUG: Decoding WO_Item completion details from Firebase:")
+        print("🔍 DEBUG: Parts Used: '\(partsUsed ?? "nil")', Hours: '\(hoursWorked ?? "nil")', Cost: '\(finalCost ?? "nil")'")
+        
         return WO_Item(
             id: id,
             itemNumber: nil,
@@ -486,13 +523,13 @@ final class WorkOrdersDatabase: ObservableObject {
             completedReasons: completedReasons,
             statusHistory: statusHistory,
             notes: notes,
-            testResult: nil,
-            partsUsed: nil,
-            hoursWorked: nil,
-            estimatedCost: nil,
-            finalCost: nil,
-            assignedTo: "",
-            isFlagged: false,
+            testResult: testResult,
+            partsUsed: partsUsed,
+            hoursWorked: hoursWorked,
+            estimatedCost: estimatedCost,
+            finalCost: finalCost,
+            assignedTo: assignedTo,
+            isFlagged: isFlagged,
             tagReplacementHistory: tagReplacementHistory,
             lastModified: lastModified,
             lastModifiedBy: lastModifiedBy

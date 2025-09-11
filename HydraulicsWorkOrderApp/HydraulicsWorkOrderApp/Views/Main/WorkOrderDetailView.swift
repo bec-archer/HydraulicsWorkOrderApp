@@ -140,6 +140,9 @@ struct WorkOrderDetailView: View {
     @State private var showAllThumbs = false
     @State private var showTagReplacement = false
     @State private var selectedItemForTagReplacement: WO_Item?
+    @State private var showCompletionDetailsSheet = false
+    @State private var selectedItemForCompletion: WO_Item?
+    @State private var selectedItemIndexForCompletion: Int?
     
     // MARK: - Dependencies
     @Environment(\.dismiss) private var dismiss
@@ -292,6 +295,31 @@ struct WorkOrderDetailView: View {
                         Task {
                             await viewModel.replaceTag(replacement, for: item)
                         }
+                    }
+                )
+            }
+        }
+        .sheet(isPresented: $showCompletionDetailsSheet) {
+            if let item = selectedItemForCompletion, let itemIndex = selectedItemIndexForCompletion {
+                CompletionDetailsSheet(
+                    workOrder: viewModel.workOrder,
+                    item: item,
+                    itemIndex: itemIndex,
+                    onCompletionDetailsSaved: { partsUsed, hoursWorked, cost in
+                        Task {
+                            // Only change status to Complete after completion details are saved
+                            await viewModel.updateItemStatusWithCompletion(
+                                "Complete",
+                                for: itemIndex,
+                                partsUsed: partsUsed,
+                                hoursWorked: hoursWorked,
+                                cost: cost
+                            )
+                        }
+                    },
+                    onCompletionCancelled: {
+                        // If user cancels, don't change the status - it remains as it was
+                        print("🔍 DEBUG: Completion details sheet cancelled - status unchanged")
                     }
                 )
             }
@@ -614,11 +642,22 @@ struct WorkOrderDetailView: View {
                             }
                         },
                         onStatusChanged: { newStatus in
-                            print("🔍 DEBUG: Status changed to: '\(newStatus)' for item index: \(index)")
-                            Task { @MainActor in
-                                print("🔍 DEBUG: About to call updateItemStatus")
-                                await viewModel.updateItemStatus(newStatus, for: index)
-                                print("🔍 DEBUG: updateItemStatus completed")
+                            print("🔍 DEBUG: Status change requested to: '\(newStatus)' for item index: \(index)")
+                            
+                            // Check if status is "Complete" - show completion details sheet first
+                            if newStatus.lowercased() == "complete" {
+                                print("🔍 DEBUG: Complete status requested - showing completion details sheet")
+                                selectedItemForCompletion = item
+                                selectedItemIndexForCompletion = index
+                                showCompletionDetailsSheet = true
+                                // Note: Status will only change to Complete AFTER completion details are saved
+                            } else {
+                                // For other statuses, update directly
+                                Task { @MainActor in
+                                    print("🔍 DEBUG: About to call updateItemStatus for non-complete status")
+                                    await viewModel.updateItemStatus(newStatus, for: index)
+                                    print("🔍 DEBUG: updateItemStatus completed")
+                                }
                             }
                         },
                         onNotesAdded: { noteText, images in
@@ -876,6 +915,11 @@ struct WorkOrderDetailView: View {
                     }
                     
                     Spacer()
+                }
+                
+                // Completion Details Section (shown at bottom when item is complete)
+                if isItemComplete(item) {
+                    completionDetailsSection
                 }
             }
             .padding(16)
@@ -1138,6 +1182,106 @@ struct WorkOrderDetailView: View {
             // The thumbnail is already a reasonable size for full-screen viewing
             print("🔍 DEBUG: Using thumbnail URL directly instead of converting to full image URL")
             return thumbnailUrl
+        }
+        
+        func formatCurrency(_ costString: String?) -> String {
+            guard let costString = costString, !costString.isEmpty else {
+                return "Not specified"
+            }
+            
+            // Try to parse as a number
+            if let cost = Double(costString) {
+                let formatter = NumberFormatter()
+                formatter.numberStyle = .currency
+                formatter.currencyCode = "USD"
+                return formatter.string(from: NSNumber(value: cost)) ?? costString
+            }
+            
+            // If it's not a valid number, return as-is
+            return costString
+        }
+        
+        // MARK: - Completion Details Helper Functions
+        func isItemComplete(_ item: WO_Item) -> Bool {
+            // Check if the CURRENT status is "Complete" (not just if it was ever complete)
+            let currentStatus = getActualItemStatus(item)
+            let isComplete = currentStatus.lowercased() == "complete"
+            
+            print("🔍 DEBUG: isItemComplete check for item \(item.id)")
+            print("🔍 DEBUG: Current status: '\(currentStatus)', isComplete: \(isComplete)")
+            print("🔍 DEBUG: Item completion details - Parts: '\(item.partsUsed ?? "nil")', Hours: '\(item.hoursWorked ?? "nil")', Cost: '\(item.finalCost ?? "nil")'")
+            
+            return isComplete
+        }
+        
+        // MARK: - Completion Details Section
+        @ViewBuilder
+        var completionDetailsSection: some View {
+            VStack(alignment: .leading, spacing: 12) {
+                // Divider
+                Rectangle()
+                    .fill(ThemeManager.shared.border.opacity(0.3))
+                    .frame(height: 1)
+                    .padding(.vertical, 8)
+                
+                // Completion Details Header
+                HStack {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundColor(.green)
+                        .font(.title3)
+                    
+                    Text("Completion Details")
+                        .font(.headline)
+                        .foregroundColor(ThemeManager.shared.textPrimary)
+                    
+                    Spacer()
+                }
+                
+                // Completion Details Grid
+                LazyVGrid(columns: [
+                    GridItem(.flexible(), alignment: .leading),
+                    GridItem(.flexible(), alignment: .leading),
+                    GridItem(.flexible(), alignment: .leading)
+                ], spacing: 16) {
+                    // Parts Used
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Parts Used")
+                            .font(.caption)
+                            .foregroundColor(ThemeManager.shared.textSecondary)
+                            .fontWeight(.medium)
+                        
+                        Text(item.partsUsed ?? "Not specified")
+                            .font(.subheadline)
+                            .foregroundColor(ThemeManager.shared.textPrimary)
+                            .lineLimit(2)
+                    }
+                    
+                    // Hours Worked
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Hours")
+                            .font(.caption)
+                            .foregroundColor(ThemeManager.shared.textSecondary)
+                            .fontWeight(.medium)
+                        
+                        Text(item.hoursWorked ?? "Not specified")
+                            .font(.subheadline)
+                            .foregroundColor(ThemeManager.shared.textPrimary)
+                    }
+                    
+                    // Cost
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Cost")
+                            .font(.caption)
+                            .foregroundColor(ThemeManager.shared.textSecondary)
+                            .fontWeight(.medium)
+                        
+                        Text(formatCurrency(item.finalCost))
+                            .font(.subheadline)
+                            .foregroundColor(ThemeManager.shared.textPrimary)
+                    }
+                }
+            }
+            .padding(.top, 8)
         }
     }
     

@@ -179,6 +179,11 @@ struct MyWorkOrderItemCard: View {
     let itemIndex: Int
     let onTap: () -> Void
     
+    @State private var partsUsedText: String = ""
+    @State private var isEditingParts: Bool = false
+    @State private var isSavingParts: Bool = false
+    @StateObject private var workOrdersDB = WorkOrdersDatabase.shared
+    
     // Get current status from statusHistory
     private var currentStatus: String {
         item.statusHistory.last?.status ?? "Unknown"
@@ -311,6 +316,9 @@ struct MyWorkOrderItemCard: View {
                         .lineLimit(2)
                         .padding(.top, 4)
                 }
+                
+                // ───── Parts Used Section ─────
+                partsUsedSection
             }
             .padding(16)
             .background(Color(.systemBackground))
@@ -318,6 +326,116 @@ struct MyWorkOrderItemCard: View {
             .shadow(color: Color.black.opacity(0.1), radius: 2, x: 0, y: 1)
         }
         .buttonStyle(.plain)
+        .onAppear {
+            // Initialize parts used text from item
+            partsUsedText = item.partsUsed ?? ""
+        }
+    }
+    
+    // MARK: - Parts Used Section
+    @ViewBuilder
+    private var partsUsedSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("Parts Used")
+                    .font(.caption)
+                    .fontWeight(.medium)
+                    .foregroundColor(.secondary)
+                
+                Spacer()
+                
+                if isEditingParts {
+                    Button("Cancel") {
+                        // Reset to original value and stop editing
+                        partsUsedText = item.partsUsed ?? ""
+                        isEditingParts = false
+                    }
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                } else {
+                    Button("Edit") {
+                        isEditingParts = true
+                    }
+                    .font(.caption)
+                    .foregroundColor(.blue)
+                }
+            }
+            
+            if isEditingParts {
+                VStack(spacing: 8) {
+                    TextField("Enter parts used...", text: $partsUsedText, axis: .vertical)
+                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                        .lineLimit(2...4)
+                        .font(.caption)
+                    
+                    HStack {
+                        Button("Save") {
+                            savePartsUsed()
+                        }
+                        .font(.caption)
+                        .foregroundColor(.blue)
+                        .disabled(isSavingParts || partsUsedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        
+                        if isSavingParts {
+                            ProgressView()
+                                .scaleEffect(0.8)
+                        }
+                        
+                        Spacer()
+                    }
+                }
+            } else {
+                if partsUsedText.isEmpty {
+                    Text("No parts recorded yet")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .italic()
+                } else {
+                    Text(partsUsedText)
+                        .font(.caption)
+                        .foregroundColor(.primary)
+                        .lineLimit(2)
+                }
+            }
+        }
+        .padding(.top, 8)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .background(Color(.systemGray6))
+        .cornerRadius(8)
+    }
+    
+    // MARK: - Save Parts Used
+    private func savePartsUsed() {
+        guard !partsUsedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        
+        isSavingParts = true
+        
+        Task {
+            do {
+                // Create a copy of the work order with updated parts used
+                var updatedWorkOrder = workOrder
+                updatedWorkOrder.items[itemIndex].partsUsed = partsUsedText.trimmingCharacters(in: .whitespacesAndNewlines)
+                updatedWorkOrder.items[itemIndex].lastModified = Date()
+                updatedWorkOrder.items[itemIndex].lastModifiedBy = AppState.shared.currentUserName
+                updatedWorkOrder.lastModified = Date()
+                updatedWorkOrder.lastModifiedBy = AppState.shared.currentUserName
+                
+                // Save to database
+                try await workOrdersDB.updateWorkOrder(updatedWorkOrder)
+                
+                await MainActor.run {
+                    isEditingParts = false
+                    isSavingParts = false
+                }
+                
+            } catch {
+                print("❌ Error saving parts used: \(error)")
+                await MainActor.run {
+                    isSavingParts = false
+                }
+            }
+        }
     }
 }
 

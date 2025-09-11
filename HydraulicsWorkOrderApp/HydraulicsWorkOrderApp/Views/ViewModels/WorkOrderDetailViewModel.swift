@@ -120,6 +120,91 @@ class WorkOrderDetailViewModel: ObservableObject {
         }
     }
     
+    /// Update the status of a specific item with completion details
+    func updateItemStatusWithCompletion(_ status: String, for itemIndex: Int, partsUsed: String, hoursWorked: String, cost: String, note: String? = nil) async {
+        print("🔍 DEBUG: updateItemStatusWithCompletion called with status: '\(status)', itemIndex: \(itemIndex)")
+        print("🔍 DEBUG: Completion details - Parts: '\(partsUsed)', Hours: '\(hoursWorked)', Cost: '\(cost)'")
+        
+        guard itemIndex >= 0 && itemIndex < workOrder.items.count else {
+            print("❌ DEBUG: Invalid item index: \(itemIndex), total items: \(workOrder.items.count)")
+            setError("Invalid item index")
+            return
+        }
+        
+        errorMessage = nil
+        
+        do {
+            // Create new status entry
+            let newStatus = WO_Status(
+                status: status,
+                user: getCurrentUser(),
+                timestamp: Date(),
+                notes: note ?? "Status updated to \(status)"
+            )
+            
+            print("🔍 DEBUG: Created new status: '\(newStatus.status)' by user: '\(getCurrentUser())'")
+            
+            // Update the work order item with completion details
+            let originalPartsUsed = workOrder.items[itemIndex].partsUsed
+            let originalHoursWorked = workOrder.items[itemIndex].hoursWorked
+            let originalFinalCost = workOrder.items[itemIndex].finalCost
+            
+            print("🔍 DEBUG: Original values - Parts: '\(originalPartsUsed ?? "nil")', Hours: '\(originalHoursWorked ?? "nil")', Cost: '\(originalFinalCost ?? "nil")'")
+            
+            workOrder.items[itemIndex].statusHistory.append(newStatus)
+            workOrder.items[itemIndex].partsUsed = partsUsed
+            workOrder.items[itemIndex].hoursWorked = hoursWorked
+            workOrder.items[itemIndex].finalCost = cost
+            workOrder.items[itemIndex].lastModified = Date()
+            workOrder.items[itemIndex].lastModifiedBy = getCurrentUser()
+            
+            workOrder.lastModified = Date()
+            workOrder.lastModifiedBy = getCurrentUser()
+            
+            print("🔍 DEBUG: Updated values - Parts: '\(workOrder.items[itemIndex].partsUsed ?? "nil")', Hours: '\(workOrder.items[itemIndex].hoursWorked ?? "nil")', Cost: '\(workOrder.items[itemIndex].finalCost ?? "nil")'")
+            print("🔍 DEBUG: Added status to history. Total statuses now: \(workOrder.items[itemIndex].statusHistory.count)")
+            
+            // Save to Firebase
+            print("🔍 DEBUG: About to save work order to Firebase...")
+            print("🔍 DEBUG: Work order ID: \(workOrder.id)")
+            print("🔍 DEBUG: Work order number: \(workOrder.workOrderNumber)")
+            
+            try await workOrdersDB.updateWorkOrder(workOrder)
+            print("✅ DEBUG: Successfully saved work order to Firebase")
+            
+            // Verify the save by checking if we can read it back
+            print("🔍 DEBUG: Verifying save by fetching work order from Firebase...")
+            let verificationResult = await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
+                workOrdersDB.fetchWorkOrder(woId: self.workOrder.id) { result in
+                    switch result {
+                    case .success(let fetchedWorkOrder):
+                        if let fetchedItem = fetchedWorkOrder.items.first(where: { $0.id == self.workOrder.items[itemIndex].id }) {
+                            print("🔍 DEBUG: Verification - Fetched Parts: '\(fetchedItem.partsUsed ?? "nil")', Hours: '\(fetchedItem.hoursWorked ?? "nil")', Cost: '\(fetchedItem.finalCost ?? "nil")'")
+                            continuation.resume(returning: true)
+                        } else {
+                            print("❌ DEBUG: Verification failed - could not find item in fetched work order")
+                            continuation.resume(returning: false)
+                        }
+                    case .failure(let error):
+                        print("❌ DEBUG: Verification failed - could not fetch work order: \(error)")
+                        continuation.resume(returning: false)
+                    }
+                }
+            }
+            
+            if verificationResult {
+                print("✅ DEBUG: Verification successful - completion details persisted correctly")
+            } else {
+                print("❌ DEBUG: Verification failed - completion details may not have persisted")
+            }
+            
+        } catch {
+            print("❌ DEBUG: Failed to save to Firebase: \(error)")
+            print("❌ DEBUG: Error details: \(error.localizedDescription)")
+            setError("Failed to update status: \(error.localizedDescription)")
+        }
+    }
+    
     /// Add a note to a specific item
     func addNote(_ noteText: String, imageURL: String? = nil, to itemIndex: Int) async {
         guard itemIndex >= 0 && itemIndex < workOrder.items.count else {
