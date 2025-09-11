@@ -21,6 +21,7 @@ struct UserEditView: View {
     @State private var phoneE164: String = ""
     @State private var role: UserRole = .tech
     @State private var isActive: Bool = true
+    @State private var pin: String = ""
 
     private var canAdjustRole: Bool {
         appState.isSuperAdmin || (appState.isAdmin && role != .superadmin)
@@ -32,6 +33,8 @@ struct UserEditView: View {
                 Section(header: Text("Info")) {
                     TextField("Display Name", text: $displayName)
                     TextField("Phone (+15551234567)", text: $phoneE164)
+                    TextField("PIN (4-8 digits, leave empty for default role PIN)", text: $pin)
+                        .keyboardType(.numberPad)
                 }
                 Section(header: Text("Role & Status")) {
                     Picker("Role", selection: $role) {
@@ -57,18 +60,23 @@ struct UserEditView: View {
             phoneE164  = u.phoneE164 ?? ""
             role       = u.role
             isActive   = u.isActive
+            pin        = u.pin ?? ""
         }
     }
 
     private func save() {
         let now = Date()
         if mode == .create {
+            // Generate temporary pin from last 4 digits of phone number
+            let temporaryPin = generateTemporaryPin(from: phoneE164)
+            
             let new = User(
                 id: UUID().uuidString, 
                 displayName: displayName,
                 phoneE164: phoneE164.isEmpty ? nil : phoneE164,
                 role: role, 
                 isActive: isActive,
+                pin: temporaryPin,
                 createdAt: now, 
                 updatedAt: now,
                 createdByUserId: nil, 
@@ -80,10 +88,25 @@ struct UserEditView: View {
             u.phoneE164   = phoneE164.isEmpty ? nil : phoneE164
             u.role        = role
             u.isActive    = isActive
+            u.pin         = pin.isEmpty ? nil : pin
             u.updatedAt   = now
             db.update(u)
         }
         dismiss()
+    }
+    
+    /// Generate temporary pin from last 4 digits of phone number
+    private func generateTemporaryPin(from phoneNumber: String) -> String? {
+        // Remove all non-digit characters from phone number
+        let digitsOnly = phoneNumber.replacingOccurrences(of: "[^0-9]", with: "", options: .regularExpression)
+        
+        // Return last 4 digits if phone number has at least 4 digits
+        if digitsOnly.count >= 4 {
+            return String(digitsOnly.suffix(4))
+        }
+        
+        // If phone number has fewer than 4 digits, return nil (will use default role pin)
+        return nil
     }
 }
 

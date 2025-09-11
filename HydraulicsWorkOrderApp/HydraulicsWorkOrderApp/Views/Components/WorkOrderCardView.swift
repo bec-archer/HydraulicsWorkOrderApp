@@ -426,7 +426,7 @@ private struct SquareThumb: View {
                     case .success(let image):
                         image
                             .resizable()
-                            .aspectRatio(contentMode: .fill)  // ⬅️ fill area, crop from center (like WorkOrderDetailView)
+                            .scaledToFill()
                     case .failure:
                         Rectangle().fill(Color.red.opacity(0.25)).overlay(Text("❌"))
                     @unknown default:
@@ -492,7 +492,7 @@ private struct FullWidthThumb: View {
                 case .success(let image):
                     image
                         .resizable()
-                        .aspectRatio(contentMode: .fill)  // ⬅️ fill area, crop from center (like WorkOrderDetailView)
+                        .scaledToFill()
                         .onAppear {
                             print("✅ DEBUG: FullWidthThumb AsyncImage SUCCESS for URL: \(url?.absoluteString ?? "nil")")
                         }
@@ -575,7 +575,7 @@ private struct GridThumb: View {
                 case .success(let image):
                     image
                         .resizable()
-                        .aspectRatio(contentMode: .fill)  // ⬅️ fill area, crop from center (like WorkOrderDetailView)
+                        .scaledToFill()
                         .onAppear {
                             print("✅ DEBUG: GridThumb AsyncImage SUCCESS for URL: \(url?.absoluteString ?? "nil")")
                         }

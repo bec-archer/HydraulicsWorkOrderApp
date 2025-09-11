@@ -24,9 +24,20 @@ final class UsersDatabase: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
     
     // Blacklist of user IDs that should be automatically deleted if recreated
-    private var deletedUserBlacklist: Set<String> = []
+    private var deletedUserBlacklist: Set<String> = [] {
+        didSet {
+            // Persist the blacklist to UserDefaults
+            UserDefaults.standard.set(Array(deletedUserBlacklist), forKey: "deletedUserBlacklist")
+        }
+    }
 
     private init() {
+        // Load persisted blacklist from UserDefaults
+        if let savedBlacklist = UserDefaults.standard.array(forKey: "deletedUserBlacklist") as? [String] {
+            deletedUserBlacklist = Set(savedBlacklist)
+            print("📱 Loaded \(deletedUserBlacklist.count) blacklisted user IDs from UserDefaults")
+        }
+        
         // Subscribe to connectivity changes for offline sync
         NotificationCenter.default
             .publisher(for: .connectivityStatusChanged)
