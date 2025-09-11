@@ -620,6 +620,14 @@ struct WorkOrderDetailView: View {
                                 await viewModel.updateItemStatus(newStatus, for: index)
                                 print("🔍 DEBUG: updateItemStatus completed")
                             }
+                        },
+                        onNotesAdded: { noteText, images in
+                            print("🔍 DEBUG: Notes added: '\(noteText)' with \(images.count) images for item index: \(index)")
+                            Task { @MainActor in
+                                print("🔍 DEBUG: About to call addItemNoteWithImages")
+                                await viewModel.addItemNoteWithImages(noteText, images: images, to: index)
+                                print("🔍 DEBUG: addItemNoteWithImages completed")
+                            }
                         }
                     )
                 }
@@ -635,11 +643,13 @@ struct WorkOrderDetailView: View {
         let onImageTap: (String) -> Void
         let onReasonToggled: (String) -> Void
         let onStatusChanged: (String) -> Void
+        let onNotesAdded: (String, [UIImage]) -> Void
         
         @State private var showImageViewer = false
         @State private var selectedImageURL: URL?
         @State private var showGallery = false
         @State private var showStatusSelection = false
+        @State private var showAddNotes = false
         
         var body: some View {
             VStack(alignment: .leading, spacing: 12) {
@@ -682,13 +692,24 @@ struct WorkOrderDetailView: View {
                         }
                     }
                     
-                    // Right: StatusBadge (tappable)
-                    Button(action: {
-                        showStatusSelection = true
-                    }) {
-                        StatusBadge(status: item.statusHistory.last?.status ?? "Checked In")
+                    // Right: StatusBadge (tappable) and Add Notes button
+                    HStack(spacing: 8) {
+                        Button(action: {
+                            showStatusSelection = true
+                        }) {
+                            StatusBadge(status: item.statusHistory.last?.status ?? "Checked In")
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                        
+                        Button(action: {
+                            showAddNotes = true
+                        }) {
+                            Image(systemName: "note.text.badge.plus")
+                                .foregroundColor(ThemeManager.shared.linkColor)
+                                .font(.title3)
+                        }
+                        .buttonStyle(PlainButtonStyle())
                     }
-                    .buttonStyle(PlainButtonStyle())
                 }
                 
                 // Type line
@@ -907,9 +928,51 @@ struct WorkOrderDetailView: View {
                                         .foregroundColor(ThemeManager.shared.textSecondary)
                                     
                                     VStack(alignment: .leading, spacing: 2) {
-                                        Text(note.text)
-                                            .font(.caption)
-                                            .foregroundColor(ThemeManager.shared.textPrimary)
+                                        // Show text if available
+                                        if !note.text.isEmpty {
+                                            Text(note.text)
+                                                .font(.caption)
+                                                .foregroundColor(ThemeManager.shared.textPrimary)
+                                        }
+                                        
+                                        // Show image thumbnails if available
+                                        if !note.imageUrls.isEmpty {
+                                            HStack(spacing: 4) {
+                                                ForEach(note.imageUrls.prefix(3), id: \.self) { imageUrl in
+                                                    AsyncImage(url: URL(string: imageUrl)) { image in
+                                                        image
+                                                            .resizable()
+                                                            .aspectRatio(contentMode: .fill)
+                                                            .frame(width: 24, height: 24)
+                                                            .clipped()
+                                                            .cornerRadius(4)
+                                                    } placeholder: {
+                                                        Rectangle()
+                                                            .fill(ThemeManager.shared.border.opacity(0.3))
+                                                            .frame(width: 24, height: 24)
+                                                            .cornerRadius(4)
+                                                    }
+                                                }
+                                                
+                                                // Show "+X more" if there are more than 3 images
+                                                if note.imageUrls.count > 3 {
+                                                    Text("+\(note.imageUrls.count - 3)")
+                                                        .font(.caption2)
+                                                        .foregroundColor(ThemeManager.shared.textSecondary)
+                                                        .frame(width: 24, height: 24)
+                                                        .background(ThemeManager.shared.border.opacity(0.3))
+                                                        .cornerRadius(4)
+                                                }
+                                            }
+                                        }
+                                        
+                                        // Show "Image only" text if there's no text but there are images
+                                        if note.text.isEmpty && !note.imageUrls.isEmpty {
+                                            Text("Image only")
+                                                .font(.caption2)
+                                                .foregroundColor(ThemeManager.shared.textSecondary)
+                                                .italic()
+                                        }
                                         
                                         HStack {
                                             Text(note.user)
@@ -953,6 +1016,17 @@ struct WorkOrderDetailView: View {
                     onStatusSelected: { newStatus in
                         onStatusChanged(newStatus)
                         showStatusSelection = false
+                    }
+                )
+            }
+            .sheet(isPresented: $showAddNotes) {
+                AddNotesView(
+                    workOrder: workOrder,
+                    item: item,
+                    itemIndex: itemIndex,
+                    onNotesAdded: { noteText, images in
+                        onNotesAdded(noteText, images)
+                        showAddNotes = false
                     }
                 )
             }
@@ -1455,5 +1529,149 @@ struct StatusSelectionView: View {
                 }
             }
         }
+    }
+}
+
+// MARK: - AddNotesView
+struct AddNotesView: View {
+    let workOrder: WorkOrder
+    let item: WO_Item
+    let itemIndex: Int
+    let onNotesAdded: (String, [UIImage]) -> Void
+    @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var appState: AppState
+    
+    @State private var noteText = ""
+    @State private var selectedImages: [UIImage] = []
+    @State private var showingImagePicker = false
+    @State private var isSaving = false
+    
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 0) {
+                // Header
+                VStack(spacing: 8) {
+                    Text("Add Notes")
+                        .font(.title2)
+                        .fontWeight(.semibold)
+                        .foregroundColor(ThemeManager.shared.textPrimary)
+                    
+                    Text("\(workOrder.workOrderNumber)-\(String(format: "%03d", itemIndex + 1))")
+                        .font(.subheadline)
+                        .foregroundColor(ThemeManager.shared.textSecondary)
+                }
+                .padding(.top, 20)
+                .padding(.bottom, 20)
+                
+                // Content
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 20) {
+                        // Notes text field
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Notes")
+                                .font(.headline)
+                                .foregroundColor(ThemeManager.shared.textPrimary)
+                            
+                            TextEditor(text: $noteText)
+                                .frame(minHeight: 100)
+                                .padding(12)
+                                .background(ThemeManager.shared.cardBackground)
+                                .cornerRadius(8)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 8)
+                                        .stroke(ThemeManager.shared.border, lineWidth: 1)
+                                )
+                        }
+                        
+                        // Images section
+                        VStack(alignment: .leading, spacing: 12) {
+                            HStack {
+                                Text("Images")
+                                    .font(.headline)
+                                    .foregroundColor(ThemeManager.shared.textPrimary)
+                                
+                                Spacer()
+                                
+                                Button(action: {
+                                    showingImagePicker = true
+                                }) {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "camera.fill")
+                                        Text("Add Photos")
+                                    }
+                                    .font(.subheadline)
+                                    .foregroundColor(ThemeManager.shared.linkColor)
+                                }
+                            }
+                            
+                            if selectedImages.isEmpty {
+                                Text("No images selected")
+                                    .font(.subheadline)
+                                    .foregroundColor(ThemeManager.shared.textSecondary)
+                                    .italic()
+                            } else {
+                                LazyVGrid(columns: [
+                                    GridItem(.adaptive(minimum: 80), spacing: 8)
+                                ], spacing: 8) {
+                                    ForEach(Array(selectedImages.enumerated()), id: \.offset) { index, image in
+                                        ZStack(alignment: .topTrailing) {
+                                            Image(uiImage: image)
+                                                .resizable()
+                                                .aspectRatio(contentMode: .fill)
+                                                .frame(width: 80, height: 80)
+                                                .clipped()
+                                                .cornerRadius(8)
+                                            
+                                            Button(action: {
+                                                selectedImages.remove(at: index)
+                                            }) {
+                                                Image(systemName: "xmark.circle.fill")
+                                                    .foregroundColor(.red)
+                                                    .background(Color.white)
+                                                    .clipShape(Circle())
+                                            }
+                                            .offset(x: 8, y: -8)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        
+                        Spacer(minLength: 20)
+                    }
+                    .padding(.horizontal, 20)
+                }
+            }
+            .background(ThemeManager.shared.background)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                    .foregroundColor(ThemeManager.shared.textSecondary)
+                }
+                
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Save") {
+                        saveNotes()
+                    }
+                    .foregroundColor(ThemeManager.shared.linkColor)
+                    .disabled(noteText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && selectedImages.isEmpty || isSaving)
+                }
+            }
+        }
+        .sheet(isPresented: $showingImagePicker) {
+            ImagePicker(selectedImages: $selectedImages)
+        }
+    }
+    
+    private func saveNotes() {
+        guard !noteText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !selectedImages.isEmpty else {
+            return
+        }
+        
+        isSaving = true
+        onNotesAdded(noteText, selectedImages)
     }
 }

@@ -1,5 +1,6 @@
 import SwiftUI
 import Combine
+import FirebaseAuth
 import FirebaseFirestore
 import Foundation
 
@@ -94,7 +95,7 @@ class WorkOrderDetailViewModel: ObservableObject {
             // Create new status entry
             let newStatus = WO_Status(
                 status: status,
-                user: "current_user", // TODO: Get from auth
+                user: getCurrentUser(),
                 timestamp: Date(),
                 notes: note ?? "Status updated to \(status)"
             )
@@ -104,7 +105,7 @@ class WorkOrderDetailViewModel: ObservableObject {
             // Update the work order
             workOrder.items[itemIndex].statusHistory.append(newStatus)
             workOrder.lastModified = Date()
-            workOrder.lastModifiedBy = "current_user" // TODO: Get from auth
+            workOrder.lastModifiedBy = getCurrentUser()
             
             print("🔍 DEBUG: Added status to history. Total statuses now: \(workOrder.items[itemIndex].statusHistory.count)")
             
@@ -153,7 +154,7 @@ class WorkOrderDetailViewModel: ObservableObject {
             }
             
             workOrder.lastModified = Date()
-            workOrder.lastModifiedBy = "current_user" // TODO: Get from auth
+            workOrder.lastModifiedBy = getCurrentUser()
             
             // Save to Firebase
             try await workOrdersDB.updateWorkOrder(workOrder)
@@ -186,7 +187,7 @@ class WorkOrderDetailViewModel: ObservableObject {
             
             workOrder.items[itemIndex] = item
             workOrder.lastModified = Date()
-            workOrder.lastModifiedBy = "current_user" // TODO: Get from auth
+            workOrder.lastModifiedBy = getCurrentUser()
             
             // Save to Firebase
             try await workOrdersDB.updateWorkOrder(workOrder)
@@ -271,7 +272,7 @@ class WorkOrderDetailViewModel: ObservableObject {
             workOrder.items[itemIndex].lastModified = Date()
             workOrder.items[itemIndex].lastModifiedBy = "current_user" // TODO: Get from auth
             workOrder.lastModified = Date()
-            workOrder.lastModifiedBy = "current_user" // TODO: Get from auth
+            workOrder.lastModifiedBy = getCurrentUser()
             
             // Save to database
             try await workOrdersDB.updateWorkOrder(workOrder)
@@ -294,7 +295,7 @@ class WorkOrderDetailViewModel: ObservableObject {
         do {
             workOrder.flagged.toggle()
             workOrder.lastModified = Date()
-            workOrder.lastModifiedBy = "current_user" // TODO: Get from auth
+            workOrder.lastModifiedBy = getCurrentUser()
             
             try await workOrdersDB.updateWorkOrder(workOrder)
             
@@ -313,7 +314,7 @@ class WorkOrderDetailViewModel: ObservableObject {
         do {
             workOrder.status = "Completed"
             workOrder.lastModified = Date()
-            workOrder.lastModifiedBy = "current_user" // TODO: Get from auth
+            workOrder.lastModifiedBy = getCurrentUser()
             
             try await workOrdersDB.updateWorkOrder(workOrder)
             
@@ -332,7 +333,7 @@ class WorkOrderDetailViewModel: ObservableObject {
         do {
             workOrder.status = "Closed"
             workOrder.lastModified = Date()
-            workOrder.lastModifiedBy = "current_user" // TODO: Get from auth
+            workOrder.lastModifiedBy = getCurrentUser()
             
             try await workOrdersDB.updateWorkOrder(workOrder)
             
@@ -417,7 +418,7 @@ class WorkOrderDetailViewModel: ObservableObject {
                 status.status == statusText
             }
             workOrder.lastModified = Date()
-            workOrder.lastModifiedBy = "current_user" // TODO: Get from auth
+            workOrder.lastModifiedBy = getCurrentUser()
             
             print("🔍 DEBUG: Removed status from history. Total statuses now: \(workOrder.items[itemIndex].statusHistory.count)")
             
@@ -440,6 +441,112 @@ class WorkOrderDetailViewModel: ObservableObject {
         // Trigger UI update
         objectWillChange.send()
     }
+    
+    /// Add a note with images to a specific item
+    func addItemNoteWithImages(_ noteText: String, images: [UIImage], to itemIndex: Int) async {
+        print("🔍 DEBUG: addItemNoteWithImages called for itemIndex: \(itemIndex), note: '\(noteText)', images: \(images.count)")
+        guard itemIndex >= 0 && itemIndex < workOrder.items.count else {
+            print("❌ DEBUG: Invalid item index: \(itemIndex), total items: \(workOrder.items.count)")
+            setError("Invalid item index")
+            return
+        }
+        
+        errorMessage = nil
+        
+        do {
+            // Get current user
+            let currentUser = getCurrentUser()
+            print("🔍 DEBUG: Current user: \(currentUser)")
+            
+            // Create new note
+            let newNote = WO_Note(
+                workOrderId: workOrder.id,
+                itemId: workOrder.items[itemIndex].id.uuidString,
+                user: currentUser,
+                text: noteText,
+                timestamp: Date(),
+                imageUrls: [] // Will be populated after image upload
+            )
+            
+            print("🔍 DEBUG: Created new note: '\(newNote.text)'")
+            
+            // Upload images if any
+            var imageUrls: [String] = []
+            var thumbnailUrls: [String] = []
+            if !images.isEmpty {
+                print("🔍 DEBUG: Uploading \(images.count) images...")
+                do {
+                    // Use the existing ImageManagementService to upload images
+                    imageUrls = try await ImageManagementService.shared.uploadImages(images, for: workOrder.id, itemId: workOrder.items[itemIndex].id)
+                    print("🔍 DEBUG: Successfully uploaded \(imageUrls.count) images")
+                    
+                    // Get the thumbnail URLs for the uploaded images
+                    thumbnailUrls = try await ImageManagementService.shared.getThumbnailURLs(for: workOrder.id, itemId: workOrder.items[itemIndex].id)
+                    print("🔍 DEBUG: Retrieved \(thumbnailUrls.count) thumbnail URLs")
+                } catch {
+                    print("❌ DEBUG: Failed to upload images: \(error)")
+                    setError("Failed to upload images: \(error.localizedDescription)")
+                    return
+                }
+            }
+            
+            // Update note with image URLs
+            let finalNote = WO_Note(
+                id: newNote.id,
+                workOrderId: newNote.workOrderId,
+                itemId: newNote.itemId,
+                user: newNote.user,
+                text: newNote.text,
+                timestamp: newNote.timestamp,
+                imageUrls: imageUrls
+            )
+            
+            // Add note to item
+            workOrder.items[itemIndex].notes.append(finalNote)
+            
+            // Add images to item's image arrays (append to end to maintain order)
+            for imageUrl in imageUrls {
+                workOrder.items[itemIndex].imageUrls.append(imageUrl)
+            }
+            
+            // Add thumbnail URLs to item's thumbnail array (append to end to maintain order)
+            for thumbnailUrl in thumbnailUrls {
+                workOrder.items[itemIndex].thumbUrls.append(thumbnailUrl)
+            }
+            
+            workOrder.lastModified = Date()
+            workOrder.lastModifiedBy = currentUser
+            
+            print("🔍 DEBUG: Added note to item. Total notes now: \(workOrder.items[itemIndex].notes.count)")
+            print("🔍 DEBUG: Added \(imageUrls.count) images to item. Total images now: \(workOrder.items[itemIndex].imageUrls.count)")
+            
+            // Save to Firebase
+            print("🔍 DEBUG: Saving to Firebase...")
+            try await workOrdersDB.updateWorkOrder(workOrder)
+            print("✅ DEBUG: Successfully saved to Firebase")
+            
+        } catch {
+            print("❌ DEBUG: Failed to save note: \(error)")
+            setError("Failed to add note: \(error.localizedDescription)")
+        }
+    }
+    
+    /// Get the current user for attribution
+    private func getCurrentUser() -> String {
+        // Get current user from AppState
+        let currentUser = AppState.shared.currentUser
+        if let user = currentUser {
+            return user.displayName
+        } else {
+            // Fallback to Firebase Auth if available
+            if let firebaseUser = Auth.auth().currentUser {
+                return firebaseUser.displayName ?? firebaseUser.email ?? "Unknown User"
+            } else {
+                return "Unknown User"
+            }
+        }
+    }
+    
     
     // MARK: - Private Methods
     
