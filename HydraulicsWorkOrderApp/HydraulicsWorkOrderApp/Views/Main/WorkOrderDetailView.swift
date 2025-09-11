@@ -874,35 +874,29 @@ struct WorkOrderDetailView: View {
                                 }
                             }
                             
-                            ForEach(item.statusHistory.sorted(by: { $0.timestamp < $1.timestamp }), id: \.timestamp) { status in
+                            ForEach(item.statusHistory.sorted(by: { $0.timestamp < $1.timestamp }), id: \.id) { status in
                                 HStack(alignment: .top, spacing: 8) {
                                     Text("•")
                                         .foregroundColor(ThemeManager.shared.textSecondary)
                                     
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text(status.status)
-                                            .font(.caption)
-                                            .foregroundColor(ThemeManager.shared.textPrimary)
+                                            .font(.system(size: 12 * 1.2))
+                                            .fontWeight(.bold)
+                                            .foregroundColor(getStatusColor(status.status))
                                         
                                         HStack {
                                             Text(status.user)
-                                                .font(.caption2)
+                                                .font(.system(size: 10 * 1.2))
                                                 .foregroundColor(ThemeManager.shared.textSecondary)
                                             
                                             Text("•")
-                                                .font(.caption2)
+                                                .font(.system(size: 10 * 1.2))
                                                 .foregroundColor(ThemeManager.shared.textSecondary)
                                             
-                                            Text(status.timestamp, style: .time)
-                                                .font(.caption2)
+                                            Text(status.timestamp, format: .dateTime.month(.abbreviated).day().year().hour().minute())
+                                                .font(.system(size: 10 * 1.2))
                                                 .foregroundColor(ThemeManager.shared.textSecondary)
-                                        }
-                                        
-                                        if let notes = status.notes, !notes.isEmpty {
-                                            Text(notes)
-                                                .font(.caption2)
-                                                .foregroundColor(ThemeManager.shared.textSecondary)
-                                                .italic()
                                         }
                                     }
                                     
@@ -911,7 +905,7 @@ struct WorkOrderDetailView: View {
                             }
                             
                             // Item-specific notes
-                            ForEach(item.notes.sorted(by: { $0.timestamp < $1.timestamp }), id: \.timestamp) { note in
+                            ForEach(item.notes.sorted(by: { $0.timestamp < $1.timestamp }), id: \.id) { note in
                                 HStack(alignment: .top, spacing: 8) {
                                     Text("•")
                                         .foregroundColor(ThemeManager.shared.textSecondary)
@@ -920,37 +914,50 @@ struct WorkOrderDetailView: View {
                                         // Show text if available
                                         if !note.text.isEmpty {
                                             Text(note.text)
-                                                .font(.caption)
+                                                .font(.system(size: 12 * 1.2))
                                                 .foregroundColor(ThemeManager.shared.textPrimary)
                                         }
                                         
                                         // Show image thumbnails if available
                                         if !note.imageUrls.isEmpty {
+                                            let _ = print("🔍 DEBUG: Note has \(note.imageUrls.count) image URLs: \(note.imageUrls)")
                                             HStack(spacing: 4) {
                                                 ForEach(note.imageUrls.prefix(3), id: \.self) { imageUrl in
-                                                    AsyncImage(url: URL(string: imageUrl)) { image in
-                                                        image
-                                                            .resizable()
-                                                            .aspectRatio(contentMode: .fill)
-                                                            .frame(width: 24, height: 24)
-                                                            .clipped()
-                                                            .cornerRadius(4)
-                                                    } placeholder: {
-                                                        Rectangle()
-                                                            .fill(ThemeManager.shared.border.opacity(0.3))
-                                                            .frame(width: 24, height: 24)
-                                                            .cornerRadius(4)
+                                                    Button(action: {
+                                                        // Convert thumbnail URL back to full image URL for full screen viewing
+                                                        let fullImageUrl = convertThumbnailUrlToImageUrl(imageUrl)
+                                                        print("🔍 DEBUG: Note thumbnail tapped - Original: \(imageUrl)")
+                                                        print("🔍 DEBUG: Note thumbnail tapped - Converted: \(fullImageUrl)")
+                                                        selectedImageURL = URL(string: fullImageUrl)
+                                                        print("🔍 DEBUG: Note thumbnail tapped - selectedImageURL set to: \(selectedImageURL?.absoluteString ?? "nil")")
+                                                        showImageViewer = true
+                                                        print("🔍 DEBUG: Note thumbnail tapped - showImageViewer set to: \(showImageViewer)")
+                                                    }) {
+                                                        AsyncImage(url: URL(string: imageUrl)) { image in
+                                                            image
+                                                                .resizable()
+                                                                .aspectRatio(contentMode: .fill)
+                                                                .frame(width: 48, height: 48)
+                                                                .clipped()
+                                                                .cornerRadius(6)
+                                                        } placeholder: {
+                                                            Rectangle()
+                                                                .fill(ThemeManager.shared.border.opacity(0.3))
+                                                                .frame(width: 48, height: 48)
+                                                                .cornerRadius(6)
+                                                        }
                                                     }
+                                                    .buttonStyle(PlainButtonStyle())
                                                 }
                                                 
                                                 // Show "+X more" if there are more than 3 images
                                                 if note.imageUrls.count > 3 {
                                                     Text("+\(note.imageUrls.count - 3)")
-                                                        .font(.caption2)
+                                                        .font(.system(size: 10 * 1.2))
                                                         .foregroundColor(ThemeManager.shared.textSecondary)
-                                                        .frame(width: 24, height: 24)
+                                                        .frame(width: 48, height: 48)
                                                         .background(ThemeManager.shared.border.opacity(0.3))
-                                                        .cornerRadius(4)
+                                                        .cornerRadius(6)
                                                 }
                                             }
                                         }
@@ -958,22 +965,22 @@ struct WorkOrderDetailView: View {
                                         // Show "Image only" text if there's no text but there are images
                                         if note.text.isEmpty && !note.imageUrls.isEmpty {
                                             Text("Image only")
-                                                .font(.caption2)
+                                                .font(.system(size: 10 * 1.2))
                                                 .foregroundColor(ThemeManager.shared.textSecondary)
                                                 .italic()
                                         }
                                         
                                         HStack {
                                             Text(note.user)
-                                                .font(.caption2)
+                                                .font(.system(size: 10 * 1.2))
                                                 .foregroundColor(ThemeManager.shared.textSecondary)
                                             
                                             Text("•")
-                                                .font(.caption2)
+                                                .font(.system(size: 10 * 1.2))
                                                 .foregroundColor(ThemeManager.shared.textSecondary)
                                             
-                                            Text(note.timestamp, style: .time)
-                                                .font(.caption2)
+                                            Text(note.timestamp, format: .dateTime.month(.abbreviated).day().year().hour().minute())
+                                                .font(.system(size: 10 * 1.2))
                                                 .foregroundColor(ThemeManager.shared.textSecondary)
                                         }
                                     }
@@ -1019,6 +1026,28 @@ struct WorkOrderDetailView: View {
                     }
                 )
             }
+            .onChange(of: selectedImageURL) { oldValue, newValue in
+                print("🔍 DEBUG: WOItemCard selectedImageURL changed from: \(oldValue?.absoluteString ?? "nil") to: \(newValue?.absoluteString ?? "nil")")
+            }
+            .onChange(of: showImageViewer) { oldValue, newValue in
+                print("🔍 DEBUG: WOItemCard showImageViewer changed from: \(oldValue) to: \(newValue)")
+                if newValue {
+                    print("🔍 DEBUG: WOItemCard showImageViewer is true, selectedImageURL: \(selectedImageURL?.absoluteString ?? "nil")")
+                }
+            }
+            .fullScreenCover(isPresented: $showImageViewer) {
+                if let imageURL = selectedImageURL {
+                    FullScreenImageViewer(imageURL: imageURL, isPresented: $showImageViewer)
+                        .onAppear {
+                            print("🔍 DEBUG: FullScreenCover presenting with URL: \(imageURL.absoluteString)")
+                        }
+                } else {
+                    Text("No image selected")
+                        .onAppear {
+                            print("🔍 DEBUG: FullScreenCover triggered but selectedImageURL is nil")
+                        }
+                }
+            }
         }
         
         func isReasonPerformed(_ reason: String) -> Bool {
@@ -1041,6 +1070,32 @@ struct WorkOrderDetailView: View {
                 return s
             }
             return parts.joined(separator: " • ")
+        }
+        
+        func getStatusColor(_ status: String) -> Color {
+            switch status.lowercased() {
+            case "checked in":
+                return Color.blue
+            case "disassembly":
+                return Color.purple
+            case "in progress":
+                return Color.yellow
+            case "test failed":
+                return Color.red
+            case "complete", "completed":
+                return Color.green
+            case "closed":
+                return Color.gray
+            default:
+                return ThemeManager.shared.textPrimary
+            }
+        }
+        
+        func convertThumbnailUrlToImageUrl(_ thumbnailUrl: String) -> String {
+            // For now, just return the thumbnail URL directly since the full-size image might not exist
+            // The thumbnail is already a reasonable size for full-screen viewing
+            print("🔍 DEBUG: Using thumbnail URL directly instead of converting to full image URL")
+            return thumbnailUrl
         }
     }
     

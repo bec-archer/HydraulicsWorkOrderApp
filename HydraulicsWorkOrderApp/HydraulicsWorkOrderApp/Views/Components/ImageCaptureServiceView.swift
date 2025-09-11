@@ -207,11 +207,16 @@ struct ImageCaptureServiceView: View {
         do {
             print("🔍 DEBUG: Calling imageService.uploadImages...")
             // Upload images using the service
-            let uploadedURLs = try await imageService.uploadImages(images, for: workOrderId, itemId: itemId)
+            let result = try await imageService.uploadImages(images, for: workOrderId, itemId: itemId)
+            let uploadedURLs = result.imageURLs
+            let uploadedThumbnailURLs = result.thumbnailURLs
             
-            print("🔍 DEBUG: Upload successful! Got \(uploadedURLs.count) URLs:")
+            print("🔍 DEBUG: Upload successful! Got \(uploadedURLs.count) image URLs and \(uploadedThumbnailURLs.count) thumbnail URLs:")
             for (index, url) in uploadedURLs.enumerated() {
-                print("🔍 DEBUG:   URL[\(index)]: \(url)")
+                print("🔍 DEBUG:   Image[\(index)]: \(url)")
+            }
+            for (index, url) in uploadedThumbnailURLs.enumerated() {
+                print("🔍 DEBUG:   Thumb[\(index)]: \(url)")
             }
             
             // Update the bindings
@@ -220,14 +225,11 @@ struct ImageCaptureServiceView: View {
             imageURLs.append(contentsOf: uploadedURLs)
             print("🔍 DEBUG: Updated imageURLs from \(previousCount) to \(imageURLs.count) items")
             
-            print("🔍 DEBUG: Getting thumbnail URLs...")
-            // Get updated thumbnail URLs
-            let thumbnailURLs = try await imageService.getThumbnailURLs(for: workOrderId, itemId: itemId)
-            print("🔍 DEBUG: Got \(thumbnailURLs.count) thumbnail URLs:")
-            for (index, url) in thumbnailURLs.enumerated() {
-                print("🔍 DEBUG:   Thumb[\(index)]: \(url)")
-            }
-            thumbURLs = thumbnailURLs
+            // Update thumbnail URLs
+            let previousThumbCount = thumbURLs.count
+            print("🔍 DEBUG: Appending \(uploadedThumbnailURLs.count) thumbnail URLs (was \(previousThumbCount))")
+            thumbURLs.append(contentsOf: uploadedThumbnailURLs)
+            print("🔍 DEBUG: Updated thumbURLs from \(previousThumbCount) to \(thumbURLs.count) items")
             
             print("🔍 DEBUG: ===== FINAL ARRAY STATE =====")
             print("🔍 DEBUG: imageURLs final count: \(imageURLs.count)")

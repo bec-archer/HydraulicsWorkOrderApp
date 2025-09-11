@@ -46,7 +46,7 @@ class ImageManagementService: ObservableObject {
     // MARK: - Public Methods
     
     /// Upload a single image and return the URL
-    func uploadSingleImage(_ image: UIImage, for workOrderId: String, itemId: UUID) async throws -> String {
+    func uploadSingleImage(_ image: UIImage, for workOrderId: String, itemId: UUID) async throws -> (imageURL: String, thumbnailURL: String) {
         print("🔍 DEBUG: uploadSingleImage called - Size: \(image.size)")
         
         isUploading = true
@@ -129,7 +129,7 @@ class ImageManagementService: ObservableObject {
             print("🔍 DEBUG: Image URL: \(imageURL)")
             print("🔍 DEBUG: Thumbnail URL: \(thumbnailURL)")
             
-            return imageURL
+            return (imageURL: imageURL, thumbnailURL: thumbnailURL)
             
         } catch {
             setError("Failed to upload image: \(error.localizedDescription)")
@@ -137,8 +137,8 @@ class ImageManagementService: ObservableObject {
         }
     }
     
-    /// Upload multiple images and return URLs
-    func uploadImages(_ images: [UIImage], for workOrderId: String, itemId: UUID) async throws -> [String] {
+    /// Upload multiple images and return both image and thumbnail URLs
+    func uploadImages(_ images: [UIImage], for workOrderId: String, itemId: UUID) async throws -> (imageURLs: [String], thumbnailURLs: [String]) {
         print("🔍 DEBUG: ImageManagementService.uploadImages called with \(images.count) images")
         print("🔍 DEBUG: workOrderId: \(workOrderId), itemId: \(itemId)")
         
@@ -151,15 +151,17 @@ class ImageManagementService: ObservableObject {
             uploadProgress = 0.0
         }
         
-        var uploadedURLs: [String] = []
+        var uploadedImageURLs: [String] = []
+        var uploadedThumbnailURLs: [String] = []
         let totalImages = images.count
         
         for (index, image) in images.enumerated() {
             print("🔍 DEBUG: Processing image[\(index)] - Size: \(image.size)")
             do {
-                let imageURL = try await uploadSingleImage(image, for: workOrderId, itemId: itemId)
-                uploadedURLs.append(imageURL)
-                print("🔍 DEBUG: Image[\(index)] uploaded successfully: \(imageURL)")
+                let result = try await uploadSingleImage(image, for: workOrderId, itemId: itemId)
+                uploadedImageURLs.append(result.imageURL)
+                uploadedThumbnailURLs.append(result.thumbnailURL)
+                print("🔍 DEBUG: Image[\(index)] uploaded successfully - Image: \(result.imageURL), Thumbnail: \(result.thumbnailURL)")
                 
                 // Update progress
                 uploadProgress = Double(index + 1) / Double(totalImages)
@@ -172,11 +174,11 @@ class ImageManagementService: ObservableObject {
         }
         
         print("🔍 DEBUG: All images uploaded. Final order:")
-        for (index, url) in uploadedURLs.enumerated() {
+        for (index, url) in uploadedImageURLs.enumerated() {
             print("🔍 DEBUG:   Final[\(index)]: \(url)")
         }
         
-        return uploadedURLs
+        return (imageURLs: uploadedImageURLs, thumbnailURLs: uploadedThumbnailURLs)
     }
     
     /// Delete an image from Firebase Storage

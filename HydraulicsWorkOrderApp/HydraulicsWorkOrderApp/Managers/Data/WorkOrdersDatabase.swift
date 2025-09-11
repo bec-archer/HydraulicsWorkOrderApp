@@ -281,7 +281,8 @@ final class WorkOrdersDatabase: ObservableObject {
                     "timestamp": Timestamp(date: note.timestamp),
                     "user": note.user,
                     "workOrderId": note.workOrderId,
-                    "itemId": note.itemId ?? ""
+                    "itemId": note.itemId ?? "",
+                    "imageUrls": note.imageUrls
                 ]
             }
             itemData["lastModified"] = Timestamp(date: item.lastModified)
@@ -483,8 +484,9 @@ final class WorkOrdersDatabase: ObservableObject {
         let user = data["user"] as? String ?? ""
         let text = data["text"] as? String ?? ""
         let timestamp = (data["timestamp"] as? Timestamp)?.dateValue() ?? Date()
+        let imageUrls = data["imageUrls"] as? [String] ?? []
         
-        return WO_Note(workOrderId: workOrderId, itemId: itemId, user: user, text: text, timestamp: timestamp)
+        return WO_Note(workOrderId: workOrderId, itemId: itemId, user: user, text: text, timestamp: timestamp, imageUrls: imageUrls)
     }
     
     /// Extract timestamp from Firebase Storage URL for sorting

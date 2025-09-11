@@ -158,12 +158,12 @@ class NewWorkOrderViewModel: ObservableObject {
             var uploadedThumbURLs: [String] = []
             
             for image in images {
-                let imageURL = try await imageService.uploadSingleImage(image, for: workOrderId, itemId: itemId)
-                uploadedURLs.append(imageURL)
+                let result = try await imageService.uploadSingleImage(image, for: workOrderId, itemId: itemId)
+                uploadedURLs.append(result.imageURL)
+                uploadedThumbURLs.append(result.thumbnailURL)
             }
             
-            // Get thumbnail URLs after all images are uploaded
-            uploadedThumbURLs = try await imageService.getThumbnailURLs(for: workOrderId, itemId: itemId)
+            // Thumbnail URLs are already collected during upload
             
             // Update the item with uploaded URLs
             items[itemIndex].imageUrls.append(contentsOf: uploadedURLs)

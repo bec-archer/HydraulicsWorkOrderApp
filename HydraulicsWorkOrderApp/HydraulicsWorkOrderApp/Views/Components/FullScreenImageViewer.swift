@@ -121,6 +121,12 @@ struct FullScreenImageViewer: View {
                 }
 
                 print("🌐 Response: \(String(describing: response))")
+                
+                // Debug: Show HTTP status code
+                if let httpResponse = response as? HTTPURLResponse {
+                    print("🔍 DEBUG: HTTP Status Code: \(httpResponse.statusCode)")
+                    print("🔍 DEBUG: HTTP Headers: \(httpResponse.allHeaderFields)")
+                }
 
                 guard let data = data else {
                     print("❌ No data received from: \(imageURL.absoluteString)")
@@ -131,6 +137,16 @@ struct FullScreenImageViewer: View {
                 }
 
                 print("📦 Image data size: \(data.count) bytes")
+                
+                // Debug: Show first few bytes of the response
+                if data.count < 200 {
+                    let dataString = String(data: data, encoding: .utf8) ?? "Unable to decode as UTF-8"
+                    print("🔍 DEBUG: Response data (first 200 bytes): \(dataString)")
+                } else {
+                    let firstBytes = data.prefix(100)
+                    let dataString = String(data: firstBytes, encoding: .utf8) ?? "Unable to decode as UTF-8"
+                    print("🔍 DEBUG: Response data (first 100 bytes): \(dataString)")
+                }
 
                 if let uiImage = UIImage(data: data) {
                     DispatchQueue.main.async {

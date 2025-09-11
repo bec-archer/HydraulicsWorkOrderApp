@@ -477,12 +477,10 @@ class WorkOrderDetailViewModel: ObservableObject {
                 print("🔍 DEBUG: Uploading \(images.count) images...")
                 do {
                     // Use the existing ImageManagementService to upload images
-                    imageUrls = try await ImageManagementService.shared.uploadImages(images, for: workOrder.id, itemId: workOrder.items[itemIndex].id)
-                    print("🔍 DEBUG: Successfully uploaded \(imageUrls.count) images")
-                    
-                    // Get the thumbnail URLs for the uploaded images
-                    thumbnailUrls = try await ImageManagementService.shared.getThumbnailURLs(for: workOrder.id, itemId: workOrder.items[itemIndex].id)
-                    print("🔍 DEBUG: Retrieved \(thumbnailUrls.count) thumbnail URLs")
+                    let result = try await ImageManagementService.shared.uploadImages(images, for: workOrder.id, itemId: workOrder.items[itemIndex].id)
+                    imageUrls = result.imageURLs
+                    thumbnailUrls = result.thumbnailURLs
+                    print("🔍 DEBUG: Successfully uploaded \(imageUrls.count) images and \(thumbnailUrls.count) thumbnails")
                 } catch {
                     print("❌ DEBUG: Failed to upload images: \(error)")
                     setError("Failed to upload images: \(error.localizedDescription)")
@@ -490,7 +488,10 @@ class WorkOrderDetailViewModel: ObservableObject {
                 }
             }
             
-            // Update note with image URLs
+            print("🔍 DEBUG: Image URLs: \(imageUrls)")
+            print("🔍 DEBUG: Thumbnail URLs: \(thumbnailUrls)")
+            
+            // Update note with thumbnail URLs (for display in notes list)
             let finalNote = WO_Note(
                 id: newNote.id,
                 workOrderId: newNote.workOrderId,
@@ -498,7 +499,7 @@ class WorkOrderDetailViewModel: ObservableObject {
                 user: newNote.user,
                 text: newNote.text,
                 timestamp: newNote.timestamp,
-                imageUrls: imageUrls
+                imageUrls: thumbnailUrls
             )
             
             // Add note to item
@@ -546,6 +547,7 @@ class WorkOrderDetailViewModel: ObservableObject {
             }
         }
     }
+    
     
     
     // MARK: - Private Methods
