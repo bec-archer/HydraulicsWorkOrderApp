@@ -793,8 +793,8 @@ struct WorkOrderDetailView: View {
                                             }
                                         }
                                         
-                                        // +Qty tile if there are more than 4 total images
-                                        if item.imageUrls.count > 4 {
+                                        // +Qty tile if there are 6 or more total images
+                                        if item.imageUrls.count >= 6 {
                                             Button(action: {
                                                 // Show gallery for all images
                                                 showGallery = true
