@@ -50,18 +50,26 @@ final class CustomerDatabase: ObservableObject {
 
                     // 2) Manual map: pull fields; build a Customer using docID (UUID string) or 'id' field
                     let data = doc.data()
+                    
+                    // Debug: Print all available fields (can be removed after testing)
+                    // print("🔍 DEBUG: Customer \(doc.documentID) fields: \(data.keys.sorted())")
 
                     guard
                         let name = data["name"] as? String,
-                        let phone = data["phoneNumber"] as? String
+                        let phone = data["phone"] as? String
                     else {
                         print("⚠️ Skipping customer \(doc.documentID): missing required fields")
+                        // print("   Available fields: \(data.keys.sorted())")
+                        // print("   name: \(data["name"] ?? "nil")")
+                        // print("   phone: \(data["phone"] ?? "nil")")
                         return nil
                     }
 
                     let company = data["company"] as? String
                     let email = data["email"] as? String
                     let taxExempt = data["taxExempt"] as? Bool ?? false
+                    // Map both possible emoji field names
+                    let emojiTag = (data["emojiTag"] as? String) ?? (data["customerTag"] as? String)
                     // Prefer documentID if it is a UUID string; else try "id" field; else generate UUID
                     let docUUID = UUID(uuidString: doc.documentID)
                     let fieldUUID = (data["id"] as? String).flatMap(UUID.init(uuidString:))
@@ -73,7 +81,8 @@ final class CustomerDatabase: ObservableObject {
                         phoneNumber: phone,
                         company: company,
                         email: email,
-                        taxExempt: taxExempt
+                        taxExempt: taxExempt,
+                        emojiTag: emojiTag
                     )
                 }
 

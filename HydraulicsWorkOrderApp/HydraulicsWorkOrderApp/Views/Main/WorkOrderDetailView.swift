@@ -455,9 +455,9 @@ struct WorkOrderDetailView: View {
                     Text("Phone:")
                             .font(.subheadline)
                             .foregroundColor(.secondary)
-                    Button(viewModel.customerPhone) {
-                                showingPhoneActions = true
-                            }
+                    Button(viewModel.customerPhone.formattedPhoneNumber) {
+                        showingPhoneActions = true
+                    }
                     .font(.subheadline)
                     .fontWeight(.medium)
                     .foregroundColor(.blue)
@@ -1116,7 +1116,7 @@ struct PhoneActionSheet: View {
                 Text("Contact \(customerName)")
                     .font(.headline)
                 
-                Text(phoneNumber)
+                Text(phoneNumber.formattedPhoneNumber)
                     .font(.title2)
                     .fontWeight(.medium)
             

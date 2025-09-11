@@ -280,7 +280,7 @@ struct WorkOrderCardContent: View {
             
             // Phone number (tappable)
             Button(action: { callCustomer() }) {
-                Text(workOrder.customerPhone)
+                Text(workOrder.customerPhone.formattedPhoneNumber)
                     .font(ThemeManager.shared.labelFont)       // same size as customer name
                     .fontWeight(.bold)                         // bold
                     .underline()                               // underlined
@@ -685,7 +685,7 @@ struct WorkOrderDetailHeader: View {
                         .foregroundColor(.secondary)
                 }
                 
-                Text(workOrder.customerPhone)
+                Text(workOrder.customerPhone.formattedPhoneNumber)
                     .font(.subheadline)
                     .foregroundColor(.secondary)
             }

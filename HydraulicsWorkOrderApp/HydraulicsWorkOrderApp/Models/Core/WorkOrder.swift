@@ -93,6 +93,7 @@ struct WorkOrder: Identifiable, Codable, Equatable, Hashable {
         case customerEmail
         case customerTaxExempt
         case customerPhone
+        case customerEmojiTag
         case workOrderType
         case primaryImageURL
         case timestamp

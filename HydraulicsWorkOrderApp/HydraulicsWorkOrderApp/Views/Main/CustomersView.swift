@@ -15,6 +15,7 @@ struct CustomersView: View {
     @State private var showingAddCustomer = false
     @State private var showTaxExemptOnly = false
     @State private var showTop20Only = false
+    @State private var refreshTrigger = false
     
     private var filteredCustomers: [Customer] {
         var customers = customerDB.customers
@@ -80,6 +81,15 @@ struct CustomersView: View {
             }
             .navigationTitle("Customers")
             .searchable(text: $searchText, prompt: "Search customers...")
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button(action: {
+                        customerDB.fetchCustomers()
+                    }) {
+                        Image(systemName: "arrow.clockwise")
+                    }
+                }
+            }
             .safeAreaInset(edge: .top) {
                 VStack(spacing: 8) {
                     // Header row with Add New Customer button
@@ -159,6 +169,16 @@ struct CustomersView: View {
             .onAppear {
                 customerDB.fetchCustomers()
             }
+            .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
+                // Refresh when app becomes active (e.g., returning from editing)
+                customerDB.fetchCustomers()
+            }
+            .refreshable {
+                customerDB.fetchCustomers()
+            }
+            .onChange(of: refreshTrigger) {
+                customerDB.fetchCustomers()
+            }
         }
         // END
     }
@@ -173,10 +193,17 @@ private struct CustomerRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
-                Text(customer.name)
-                    .font(.headline)
+                // ───── Name with Emoji Tag ─────
+                HStack(spacing: 6) {
+                    if let emoji = customer.emojiTag, !emoji.isEmpty {
+                        Text(emoji)
+                            .font(.headline)
+                    }
+                    Text(customer.name)
+                        .font(.headline)
+                }
+                
                 Spacer()
-                // Customer tag removed from model
             }
             
             Text(customer.phoneNumber.formattedPhoneNumber)

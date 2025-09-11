@@ -137,7 +137,7 @@ extension Customer {
     mutating func setEmojiTag(_ emoji: String?) {
         if let emoji = emoji, !emoji.isEmpty {
             // Keep only the first grapheme (visible character)
-            let firstGrapheme = String(emoji.prefix(while: { _ in true }))
+            let firstGrapheme = String(emoji.prefix(1))
             self.emojiTag = firstGrapheme
         } else {
             self.emojiTag = nil

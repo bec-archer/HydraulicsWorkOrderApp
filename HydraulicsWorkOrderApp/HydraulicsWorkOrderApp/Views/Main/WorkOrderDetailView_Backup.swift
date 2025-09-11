@@ -188,7 +188,7 @@ struct WorkOrderDetailView: View {
                     
                     HStack(spacing: 6) {
                         Image(systemName: "phone.fill")
-                        Text(woWrapper.wo.customerPhone)
+                        Text(woWrapper.wo.customerPhone.formattedPhoneNumber)
                             .underline()
                             .foregroundColor(Color(hex: "#FFC500"))
                             .onLongPressGesture {
@@ -1139,7 +1139,7 @@ struct PhoneActionSheet: View {
                         HStack {
                             Image(systemName: "phone.fill")
                                 .foregroundColor(.white)
-                            Text("Call \(phoneNumber)")
+                            Text("Call \(phoneNumber.formattedPhoneNumber)")
                                 .fontWeight(.medium)
                         }
                         .frame(maxWidth: .infinity)
@@ -1178,7 +1178,7 @@ struct PhoneActionSheet: View {
                         HStack {
                             Image(systemName: "message.fill")
                                 .foregroundColor(.white)
-                            Text("Text \(phoneNumber)")
+                            Text("Text \(phoneNumber.formattedPhoneNumber)")
                                 .fontWeight(.medium)
                         }
                         .frame(maxWidth: .infinity)

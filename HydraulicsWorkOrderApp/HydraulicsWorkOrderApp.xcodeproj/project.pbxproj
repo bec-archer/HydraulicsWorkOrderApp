@@ -84,6 +84,7 @@
 				Views/Admin/UserManagerView.swift,
 				Views/Admin/UsersListView.swift,
 				Views/Components/DropdownField.swift,
+				Views/Components/EmojiSelectionView.swift,
 				Views/Components/FullScreenImageViewer.swift,
 				Views/Components/ImageCaptureServiceView.swift,
 				Views/Components/ItemCard.swift,

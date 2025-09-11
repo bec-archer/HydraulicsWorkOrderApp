@@ -29,6 +29,7 @@ struct NewCustomerModalView: View {
     @State private var company: String = ""
     @State private var email: String = ""
     @State private var taxExempt: Bool = false
+    @State private var emojiTag: String? = nil
 
     // ───── FEEDBACK ─────
     @State private var errorMessage: String?
@@ -51,6 +52,12 @@ struct NewCustomerModalView: View {
                     TextField("Full Name", text: $name)
                         .textContentType(.name)
                         .focused($focusedField, equals: .name)
+                }
+                // END Section
+                
+                // ───── Emoji Tag ─────
+                Section(header: Text("Emoji Tag"), footer: Text("Select an emoji to help identify this customer")) {
+                    EmojiSelectionView(selectedEmoji: $emojiTag)
                 }
                 // END Section
 
@@ -138,7 +145,8 @@ struct NewCustomerModalView: View {
             phoneNumber: phoneDigits,
             company: company.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : company,
             email: email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : email,
-            taxExempt: taxExempt
+            taxExempt: taxExempt,
+            emojiTag: emojiTag
         )
 
 
@@ -169,6 +177,7 @@ struct NewCustomerModalView: View {
 // ─────────────────────────────────────────────────────────────
 // MARK: - Preview Template
 // ─────────────────────────────────────────────────────────────
+
 #Preview(traits: .sizeThatFitsLayout) {
     NewCustomerModalView(
         prefillName: "Maria",
