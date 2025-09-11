@@ -393,14 +393,14 @@ struct WorkOrderCardThumbnailGrid: View {
         }
     }
 
-    // Always use the first image (index 0) from thumbUrls or imageUrls
+    // Always use a non-distorted source for UI cropping.
+    // Prefer ORIGINAL image (imageUrls[0]) and only fall back to thumb if missing.
     private func firstImageURL(for item: WO_Item) -> URL? {
-        // Prefer thumbUrls[0], fall back to imageUrls[0]
-        if !item.thumbUrls.isEmpty, let first = item.thumbUrls.first, let u = URL(string: first) { 
-            return u 
+        if let first = item.imageUrls.first, let u = URL(string: first) {
+            return u
         }
-        if !item.imageUrls.isEmpty, let first = item.imageUrls.first, let u = URL(string: first) { 
-            return u 
+        if let first = item.thumbUrls.first, let u = URL(string: first) {
+            return u
         }
         return nil
     }
