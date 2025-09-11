@@ -364,19 +364,6 @@ class WorkOrderDetailViewModel: ObservableObject {
         await addNote(note.text, to: itemIndex)
     }
     
-    func addServicePerformedStatus(for itemIndex: Int, reason: String) async {
-        print("🔍 DEBUG: addServicePerformedStatus called for itemIndex: \(itemIndex), reason: '\(reason)'")
-        guard itemIndex >= 0 && itemIndex < workOrder.items.count else {
-            print("❌ DEBUG: Invalid item index: \(itemIndex), total items: \(workOrder.items.count)")
-            setError("Invalid item index")
-            return
-        }
-        
-        let statusText = "Service Performed — \(reason)"
-        print("🔍 DEBUG: Calling updateItemStatus with: '\(statusText)'")
-        await updateItemStatus(statusText, for: itemIndex)
-        print("🔍 DEBUG: updateItemStatus completed")
-    }
     
     func toggleServicePerformedStatus(for itemIndex: Int, reason: String) async {
         print("🔍 DEBUG: toggleServicePerformedStatus called for itemIndex: \(itemIndex), reason: '\(reason)'")
@@ -386,52 +373,68 @@ class WorkOrderDetailViewModel: ObservableObject {
             return
         }
         
-        let statusText = "Service Performed — \(reason)"
-        let isCurrentlyPerformed = workOrder.items[itemIndex].statusHistory.contains { status in
-            status.status == statusText
-        }
+        var item = workOrder.items[itemIndex]
+        let isCurrentlyPerformed = item.completedReasons.contains(reason)
+        let currentUser = getCurrentUser()
+        let currentTime = Date()
         
         if isCurrentlyPerformed {
-            print("🔍 DEBUG: Reason is currently performed, removing status")
-            await removeServicePerformedStatus(for: itemIndex, reason: reason)
+            print("🔍 DEBUG: Reason is currently performed, removing from completedReasons")
+            item.completedReasons.removeAll { $0 == reason }
+            
+            // Add note about unchecking
+            let note = WO_Note(
+                workOrderId: workOrder.id,
+                itemId: item.id.uuidString,
+                user: currentUser,
+                text: "❌ • \(reason)",
+                timestamp: currentTime
+            )
+            item.notes.append(note)
+            
+            // Remove the "Service Performed" status entry from history
+            let statusText = "Service Performed — \(reason)"
+            item.statusHistory.removeAll { status in
+                status.status == statusText
+            }
+            
         } else {
-            print("🔍 DEBUG: Reason is not performed, adding status")
-            await addServicePerformedStatus(for: itemIndex, reason: reason)
+            print("🔍 DEBUG: Reason is not performed, adding to completedReasons")
+            item.completedReasons.append(reason)
+            
+            // Add note about checking
+            let note = WO_Note(
+                workOrderId: workOrder.id,
+                itemId: item.id.uuidString,
+                user: currentUser,
+                text: "✅ • \(reason)",
+                timestamp: currentTime
+            )
+            item.notes.append(note)
+            
+            // Add status entry to history for tracking
+            let statusEntry = WO_Status(
+                status: "Service Performed — \(reason)",
+                user: currentUser,
+                timestamp: currentTime
+            )
+            item.statusHistory.append(statusEntry)
+        }
+        
+        // Update the item in the work order
+        workOrder.items[itemIndex] = item
+        workOrder.lastModified = currentTime
+        workOrder.lastModifiedBy = currentUser
+        
+        // Save to database
+        do {
+            try await workOrdersDB.updateWorkOrder(workOrder)
+        } catch {
+            print("❌ DEBUG: Failed to save work order: \(error)")
+            setError("Failed to save work order: \(error.localizedDescription)")
         }
     }
     
-    func removeServicePerformedStatus(for itemIndex: Int, reason: String) async {
-        print("🔍 DEBUG: removeServicePerformedStatus called for itemIndex: \(itemIndex), reason: '\(reason)'")
-        guard itemIndex >= 0 && itemIndex < workOrder.items.count else {
-            print("❌ DEBUG: Invalid item index: \(itemIndex), total items: \(workOrder.items.count)")
-            setError("Invalid item index")
-            return
-        }
-        
-        let statusText = "Service Performed — \(reason)"
-        
-        errorMessage = nil
-        
-        do {
-            // Remove the status entry
-            workOrder.items[itemIndex].statusHistory.removeAll { status in
-                status.status == statusText
-            }
-            workOrder.lastModified = Date()
-            workOrder.lastModifiedBy = getCurrentUser()
-            
-            print("🔍 DEBUG: Removed status from history. Total statuses now: \(workOrder.items[itemIndex].statusHistory.count)")
-            
-            // Save to Firebase
-            print("🔍 DEBUG: Saving to Firebase...")
-            try await workOrdersDB.updateWorkOrder(workOrder)
-            print("✅ DEBUG: Successfully saved to Firebase")
-            
-        } catch {
-            print("❌ DEBUG: Failed to save to Firebase: \(error)")
-            setError("Failed to remove status: \(error.localizedDescription)")
-        }
-    }
     
     /// Update the work order with fresh data from Firebase
     func updateWorkOrder(_ freshWorkOrder: WorkOrder) {

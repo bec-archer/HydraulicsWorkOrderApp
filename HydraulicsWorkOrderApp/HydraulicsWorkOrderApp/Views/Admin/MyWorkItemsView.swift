@@ -223,6 +223,6 @@ private struct WorkItemRow: View {
         updatedByUserId: nil
     )
     
-    return MyWorkItemsView(user: user)
+    MyWorkItemsView(user: user)
 }
 // END

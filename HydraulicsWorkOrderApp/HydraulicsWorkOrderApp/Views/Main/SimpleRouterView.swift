@@ -13,6 +13,7 @@ import SwiftUI
 struct SimpleRouterView: View {
     @EnvironmentObject private var appState: AppState
     @State private var isSidebarVisible = false
+    @State private var showTagScanner = false
     
     // MARK: - Computed Properties
     private var navigationTitle: String {
@@ -37,6 +38,10 @@ struct SimpleRouterView: View {
             return "Dropdown Manager"
         case .workOrderDetail:
             return "Work Order Detail"
+        case .workOrderItemDetail:
+            return "Item Details"
+        case .qrBatchGenerator:
+            return "QR Batch Generator"
         }
     }
     
@@ -80,6 +85,29 @@ struct SimpleRouterView: View {
                     }
                     .buttonStyle(.plain)
                 }
+                
+                // Tag Scanner button
+                Button {
+                    print("🔍 DEBUG: Tag Scanner button tapped")
+                    showTagScanner = true
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "qrcode.viewfinder")
+                            .font(.subheadline)
+                            .fontWeight(.bold)
+                        Text("Scan Tag")
+                            .font(.subheadline)
+                            .fontWeight(.bold)
+                    }
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .background(
+                        Capsule()
+                            .fill(Color.blue)
+                    )
+                }
+                .buttonStyle(.plain)
                 
                 // Add New Work Order button
                 Button {
@@ -184,6 +212,15 @@ struct SimpleRouterView: View {
                                     currentView: appState.currentView,
                                     onTap: { isSidebarVisible = false }
                                 )
+                                
+                                // ───── ADMIN TOOLS (NEW) ─────
+                                NavigationButton(
+                                    title: "QR Batch Generator",
+                                    icon: "qrcode",
+                                    targetView: .qrBatchGenerator,
+                                    currentView: appState.currentView,
+                                    onTap: { isSidebarVisible = false }
+                                )
                             }
                         }
                         .padding(.horizontal)
@@ -237,6 +274,24 @@ struct SimpleRouterView: View {
                                 Text("No work order selected")
                                     .onAppear { print("🔍 DEBUG: SimpleRouterView switching to WorkOrderDetailView but no work order selected") }
                             }
+                        case .workOrderItemDetail:
+                            if let workOrder = appState.selectedWorkOrder,
+                               let item = appState.selectedWorkOrderItem,
+                               let itemIndex = appState.selectedWorkOrderItemIndex {
+                                WorkOrderItemDetailView(
+                                    workOrder: workOrder,
+                                    item: item,
+                                    itemIndex: itemIndex
+                                )
+                                .onAppear { print("🔍 DEBUG: SimpleRouterView switching to WorkOrderItemDetailView for WO: \(workOrder.workOrderNumber), Item: \(item.type)") }
+                            } else {
+                                Text("No work order item selected")
+                                    .onAppear { print("🔍 DEBUG: SimpleRouterView switching to WorkOrderItemDetailView but no work order item selected") }
+                            }
+                        case .qrBatchGenerator:
+                            QRBatchGeneratorView()
+                                .environmentObject(appState)
+                                .onAppear { print("🔍 DEBUG: SimpleRouterView switching to QRBatchGeneratorView") }
                         @unknown default:
                             Text("⚠️ Unknown AppScreen state")
                     }
@@ -263,6 +318,10 @@ struct SimpleRouterView: View {
                     appState.currentView = .activeWorkOrders
                 }
             }
+        }
+        .sheet(isPresented: $showTagScanner) {
+            TagScanningView(isPresented: $showTagScanner)
+                .environmentObject(appState)
         }
     }
 }

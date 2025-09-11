@@ -124,6 +124,6 @@ struct UserDetailView: View {
 #Preview {
     let s = AppState.previewLoggedIn(role: .admin)
     let u = User(id: "u1", displayName: "Jane Tech", phoneE164: "+12345550123", role: .tech, isActive: true, createdAt: .now, updatedAt: .now, createdByUserId: nil, updatedByUserId: nil)
-    return NavigationStack { UserDetailView(user: u).environmentObject(s) }
+    NavigationStack { UserDetailView(user: u).environmentObject(s) }
 }
 // END

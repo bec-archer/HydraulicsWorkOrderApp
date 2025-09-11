@@ -64,22 +64,66 @@ final class UsersDatabase: ObservableObject {
     func loadInitial() {
         print("📱 loadInitial() called - users in cache: \(users.count)")
         
-        // Always fetch fresh data to ensure we have the latest state and remove duplicates
-        print("📱 Fetching fresh data from Firestore")
-        fetchAllUsers { [weak self] result in
-            DispatchQueue.main.async {
+        // If we already have users in cache, don't aggressively overwrite them
+        // This prevents race conditions where local changes get overwritten by stale Firestore data
+        if !users.isEmpty {
+            print("📱 Users already in cache, doing background refresh instead of overwrite")
+            // Do a background refresh but don't overwrite local cache immediately
+            fetchAllUsers { [weak self] result in
                 switch result {
-                case .success(let users):
-                    print("📱 Fetched \(users.count) users from Firestore")
-                    self?.users = users
+                case .success(let firestoreUsers):
+                    print("📱 Background refresh: Fetched \(firestoreUsers.count) users from Firestore")
+                    // Only update if we got more recent data (based on updatedAt timestamps)
+                    self?.mergeUsersFromFirestore(firestoreUsers)
                 case .failure(let error):
-                    print("⚠️ Users load failed, using cached data: \(error.localizedDescription)")
-                    // Load sample data if offline and no cache
-                    if self?.users.isEmpty == true && !NetworkMonitor.shared.isConnected {
-                        self?.loadSampleData()
+                    print("⚠️ Background refresh failed: \(error.localizedDescription)")
+                }
+            }
+        } else {
+            // No users in cache, fetch fresh data
+            print("📱 No users in cache, fetching fresh data from Firestore")
+            fetchAllUsers { [weak self] result in
+                DispatchQueue.main.async {
+                    switch result {
+                    case .success(let users):
+                        print("📱 Fetched \(users.count) users from Firestore")
+                        self?.users = users
+                    case .failure(let error):
+                        print("⚠️ Users load failed, using cached data: \(error.localizedDescription)")
+                        // No sample data - users must be populated manually
+                        print("📱 No users found - please populate users manually")
                     }
                 }
             }
+        }
+    }
+    
+    /// Merge users from Firestore, preferring more recent data
+    private func mergeUsersFromFirestore(_ firestoreUsers: [User]) {
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            
+            var updatedUsers = self.users
+            
+            for firestoreUser in firestoreUsers {
+                if let localIndex = updatedUsers.firstIndex(where: { $0.id == firestoreUser.id }) {
+                    let localUser = updatedUsers[localIndex]
+                    
+                    // Only update if Firestore data is more recent
+                    if firestoreUser.updatedAt > localUser.updatedAt {
+                        print("📱 Updating user \(firestoreUser.displayName) with more recent Firestore data")
+                        updatedUsers[localIndex] = firestoreUser
+                    } else {
+                        print("📱 Keeping local data for user \(localUser.displayName) (more recent)")
+                    }
+                } else {
+                    // New user from Firestore
+                    print("📱 Adding new user from Firestore: \(firestoreUser.displayName)")
+                    updatedUsers.append(firestoreUser)
+                }
+            }
+            
+            self.users = updatedUsers
         }
     }
 
@@ -128,6 +172,7 @@ final class UsersDatabase: ObservableObject {
                                 phoneE164: user.phoneE164,
                                 role: user.role,
                                 isActive: user.isActive,
+                                pin: user.pin,  // CRITICAL: Don't lose the PIN!
                                 createdAt: user.createdAt,
                                 updatedAt: user.updatedAt,
                                 createdByUserId: user.createdByUserId,
@@ -221,6 +266,19 @@ final class UsersDatabase: ObservableObject {
         print("🔄 UsersDatabase.update() called for user: \(user.displayName) (ID: \(user.id))")
         print("🔄 User isActive: \(user.isActive)")
         print("🔄 Users in cache before update: \(users.count)")
+        
+        // Validate that user exists and has a valid ID
+        guard !user.id.isEmpty else {
+            print("❌ ERROR: Cannot update user with empty ID")
+            return
+        }
+        
+        // Check if this is actually an update (user exists) or a create (user doesn't exist)
+        let existingUser = users.first(where: { $0.id == user.id })
+        if existingUser == nil {
+            print("⚠️ WARNING: User with ID \(user.id) not found in cache - this might be a create operation")
+            print("⚠️ If you're trying to update a user, ensure the ID matches exactly")
+        }
         
         // Update local cache immediately for UI responsiveness
         DispatchQueue.main.async { [weak self] in
@@ -338,34 +396,88 @@ final class UsersDatabase: ObservableObject {
         print("🔄 updateInFirestore() called for user: \(user.displayName) (ID: \(user.id))")
         print("🔄 User isActive: \(user.isActive)")
         print("🔄 User PIN: \(user.pin ?? "none")")
+        print("🔄 Network connected: \(NetworkMonitor.shared.isConnected)")
+        print("🔄 Firestore collection: \(collectionName)")
         
-        do {
-            // Prepare user for write (server-side timestamp)
-            var userForWrite = user
-            userForWrite.updatedAt = Date()
+        // Create a dictionary without the ID field to avoid conflicts
+        let userData: [String: Any] = [
+            "displayName": user.displayName,
+            "phoneE164": user.phoneE164 as Any,
+            "role": user.role.rawValue,
+            "isActive": user.isActive,
+            "pin": user.pin as Any,
+            "createdAt": user.createdAt,
+            "updatedAt": Date(),
+            "createdByUserId": user.createdByUserId as Any,
+            "updatedByUserId": user.updatedByUserId as Any
+        ]
 
-            print("🔄 Updating Firestore document: \(user.id)")
-            // Use setData with merge to handle cases where document might not exist
-            try db.collection(collectionName).document(user.id).setData(from: userForWrite, merge: true) { [weak self] error in
-                if let error = error {
-                    print("❌ User update failed: \(error.localizedDescription)")
-                    print("❌ Error details: \(error)")
-                    
-                    // Revert local cache on failure
-                    DispatchQueue.main.async { [weak self] in
-                        self?.fetchAllUsers { _ in } // Refresh from server
-                    }
-                    return
+        print("🔄 Updating Firestore document: \(user.id)")
+        print("🔄 User data being written:")
+        print("  - Display Name: \(user.displayName)")
+        print("  - Role: \(user.role.rawValue)")
+        print("  - Is Active: \(user.isActive)")
+        print("  - PIN: \(user.pin ?? "nil")")
+        print("  - Updated At: \(Date())")
+        
+        // Use setData with merge to update existing document
+        db.collection(collectionName).document(user.id).setData(userData, merge: true) { [weak self] error in
+            if let error = error {
+                print("❌ User update failed: \(error.localizedDescription)")
+                print("❌ Error details: \(error)")
+                print("❌ Error code: \(error._code)")
+                print("❌ Error domain: \(error._domain)")
+                
+                // Revert local cache on failure
+                DispatchQueue.main.async { [weak self] in
+                    self?.fetchAllUsers { _ in }
                 }
-
-                print("✅ User updated successfully in Firestore: \(user.displayName)")
-                print("✅ Document \(user.id) updated with isActive: \(user.isActive)")
+                return
             }
-        } catch {
-            print("❌ User update encoding failed: \(error.localizedDescription)")
-            print("❌ Encoding error details: \(error)")
-            // Revert local cache on failure
-            fetchAllUsers { _ in } // Refresh from server
+
+            print("✅ User updated successfully in Firestore: \(user.displayName)")
+            print("✅ Document \(user.id) updated with isActive: \(user.isActive)")
+            print("✅ PIN updated to: \(user.pin ?? "nil")")
+            
+            // Verify the update by reading the document back
+            self?.verifyFirestoreUpdate(user)
+        }
+    }
+    
+    /// Verify that the Firestore update actually persisted
+    private func verifyFirestoreUpdate(_ user: User) {
+        print("🔍 Verifying Firestore update for user: \(user.displayName)")
+        db.collection(collectionName).document(user.id).getDocument { document, error in
+            if let error = error {
+                print("❌ Verification failed - could not read document: \(error.localizedDescription)")
+                return
+            }
+            
+            guard let document = document, document.exists else {
+                print("❌ Verification failed - document does not exist")
+                return
+            }
+            
+            do {
+                let firestoreUser = try document.data(as: User.self)
+                print("🔍 Firestore document verification:")
+                print("  - Display Name: \(firestoreUser.displayName)")
+                print("  - Role: \(firestoreUser.role.rawValue)")
+                print("  - Is Active: \(firestoreUser.isActive)")
+                print("  - PIN: \(firestoreUser.pin ?? "nil")")
+                print("  - Updated At: \(firestoreUser.updatedAt)")
+                
+                // Check if PIN matches what we expected
+                if firestoreUser.pin == user.pin {
+                    print("✅ PIN verification successful: \(firestoreUser.pin ?? "nil")")
+                } else {
+                    print("❌ PIN verification failed!")
+                    print("  Expected: \(user.pin ?? "nil")")
+                    print("  Actual: \(firestoreUser.pin ?? "nil")")
+                }
+            } catch {
+                print("❌ Verification failed - could not decode user: \(error.localizedDescription)")
+            }
         }
     }
 
@@ -473,25 +585,79 @@ final class UsersDatabase: ObservableObject {
     func manualSyncOfflineChanges() {
         syncOfflineChanges()
     }
-
-    // MARK: - Sample Data (Offline Fallback)
-
-    /// Load sample users when offline and no cached data available
-    private func loadSampleData() {
-        let sampleUsers = [
-            User(id: UUID().uuidString, displayName: "Chuck", phoneE164: "+12345550001", role: .manager, isActive: true, createdAt: .now, updatedAt: .now, createdByUserId: nil, updatedByUserId: nil),
-            User(id: UUID().uuidString, displayName: "Joe", phoneE164: "+12345550002", role: .manager, isActive: true, createdAt: .now, updatedAt: .now, createdByUserId: nil, updatedByUserId: nil),
-            User(id: UUID().uuidString, displayName: "Lee", phoneE164: "+12345550003", role: .manager, isActive: true, createdAt: .now, updatedAt: .now, createdByUserId: nil, updatedByUserId: nil)
-        ]
+    
+    /// Force refresh users from Firestore (useful for debugging)
+    func forceRefreshFromFirestore() {
+        print("🔄 Force refreshing users from Firestore...")
+        fetchAllUsers { [weak self] result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success(let users):
+                    print("✅ Force refresh successful: \(users.count) users loaded")
+                    self?.users = users
+                case .failure(let error):
+                    print("❌ Force refresh failed: \(error.localizedDescription)")
+                }
+            }
+        }
+    }
+    
+    /// Clean up duplicate users in Firebase (by phone number or display name)
+    func cleanupDuplicateUsers() {
+        print("🧹 Starting cleanup of duplicate users...")
         
-        DispatchQueue.main.async { [weak self] in
-            self?.users = sampleUsers
+        let usersByPhone = Dictionary(grouping: users) { $0.phoneE164 }
+        let usersByName = Dictionary(grouping: users) { $0.displayName.lowercased() }
+        
+        var duplicatesToDelete: [User] = []
+        
+        // Find duplicates by phone number
+        for (phone, phoneUsers) in usersByPhone {
+            guard let phone = phone, phoneUsers.count > 1 else { continue }
+            print("🧹 Found \(phoneUsers.count) users with phone \(phone)")
+            
+            // Keep the most recent user, mark others for deletion
+            let sortedUsers = phoneUsers.sorted { $0.updatedAt > $1.updatedAt }
+            duplicatesToDelete.append(contentsOf: sortedUsers.dropFirst())
         }
         
-        #if DEBUG
-        print("📱 Offline: Loaded \(sampleUsers.count) sample users")
-        #endif
+        // Find duplicates by display name
+        for (name, nameUsers) in usersByName {
+            guard nameUsers.count > 1 else { continue }
+            print("🧹 Found \(nameUsers.count) users with name '\(name)'")
+            
+            // Keep the most recent user, mark others for deletion
+            let sortedUsers = nameUsers.sorted { $0.updatedAt > $1.updatedAt }
+            duplicatesToDelete.append(contentsOf: sortedUsers.dropFirst())
+        }
+        
+        // Remove duplicates from the list
+        let uniqueDuplicates = Array(Set(duplicatesToDelete))
+        
+        if !uniqueDuplicates.isEmpty {
+            print("🧹 Found \(uniqueDuplicates.count) duplicate users to delete:")
+            for user in uniqueDuplicates {
+                print("  - \(user.displayName) (ID: \(user.id)) - Phone: \(user.phoneE164 ?? "none")")
+                delete(user)
+            }
+        } else {
+            print("🧹 No duplicate users found")
+        }
     }
+    
+    /// Debug method to check current user state
+    func debugUserState() {
+        print("🔍 DEBUG: Current user state")
+        print("🔍 Users in cache: \(users.count)")
+        for user in users {
+            print("  - \(user.displayName) (ID: \(user.id))")
+            print("    Role: \(user.role.rawValue)")
+            print("    Active: \(user.isActive)")
+            print("    PIN: \(user.pin ?? "nil")")
+            print("    Updated: \(user.updatedAt)")
+        }
+    }
+
 
     // MARK: - Authentication
 
@@ -520,46 +686,22 @@ final class UsersDatabase: ObservableObject {
         print("🔐 Authenticating PIN: \(pin)")
         print("🔐 Available users: \(users.count)")
         for user in users {
-            print("  - \(user.displayName) (\(user.role.rawValue)) - Active: \(user.isActive) - PIN: \(user.pin ?? "none")")
+            print("  - \(user.displayName) (\(user.role.rawValue)) - Active: \(user.isActive) - PIN: \(user.pin ?? "none") - Phone: \(user.phoneE164 ?? "none")")
         }
         #endif
         
-        // First, try to find user with custom PIN
-        if let userWithCustomPin = users.first(where: { $0.pin == pin && $0.isActive }) {
+        // Find user with exact PIN match (custom PIN or phone-based PIN)
+        if let userWithPin = users.first(where: { $0.pin == pin && $0.isActive }) {
             #if DEBUG
-            print("🔐 Found user with custom PIN: \(userWithCustomPin.displayName)")
+            print("🔐 Found user with PIN: \(userWithPin.displayName)")
             #endif
-            completion(.success(userWithCustomPin))
+            completion(.success(userWithPin))
             return
-        }
-        
-        // If no custom PIN matches, try default role-based PINs
-        let defaultPins: [UserRole: String] = [
-            .tech: "1234",
-            .manager: "2345", 
-            .admin: "5678",
-            .superadmin: "0000"
-        ]
-        
-        for (role, defaultPin) in defaultPins {
-            if pin == defaultPin {
-                // Find first active user with this role and no custom PIN
-                if let userWithDefaultPin = users.first(where: { 
-                    $0.role == role && 
-                    $0.isActive && 
-                    ($0.pin == nil || $0.pin?.isEmpty == true)
-                }) {
-                    #if DEBUG
-                    print("🔐 Found user with default PIN for role \(role.rawValue): \(userWithDefaultPin.displayName)")
-                    #endif
-                    completion(.success(userWithDefaultPin))
-                    return
-                }
-            }
         }
         
         #if DEBUG
         print("🔐 No user found with PIN: \(pin)")
+        print("🔐 Users must have custom PINs or phone-based PINs")
         #endif
         
         // No user found with this PIN
@@ -614,5 +756,48 @@ final class UsersDatabase: ObservableObject {
             || u.role.rawValue.lowercased().contains(q)
         }
     }
+}
+
+// MARK: - Static Helper Methods
+
+/// Generate PIN from last 4 digits of phone number
+func generatePinFromPhone(_ phoneE164: String?) -> String? {
+    guard let phone = phoneE164, !phone.isEmpty else { return nil }
+    
+    // Remove all non-digit characters
+    let digits = phone.filter { $0.isNumber }
+    
+    // Take last 4 digits
+    guard digits.count >= 4 else { return nil }
+    
+    let lastFour = String(digits.suffix(4))
+    print("🔐 Generated PIN from phone \(phone): \(lastFour)")
+    return lastFour
+}
+
+/// Create a new user with auto-generated PIN from phone number
+func createUserWithPhonePin(displayName: String, phoneE164: String, role: UserRole, createdByUserId: String? = nil) -> User {
+    let pin = generatePinFromPhone(phoneE164) ?? "0000" // fallback if phone invalid
+    
+    let user = User(
+        id: UUID().uuidString,
+        displayName: displayName,
+        phoneE164: phoneE164,
+        role: role,
+        isActive: true,
+        pin: pin,
+        createdAt: Date(),
+        updatedAt: Date(),
+        createdByUserId: createdByUserId,
+        updatedByUserId: nil
+    )
+    
+    print("👤 Created user with phone-based PIN:")
+    print("  - Name: \(displayName)")
+    print("  - Phone: \(phoneE164)")
+    print("  - PIN: \(pin)")
+    print("  - Role: \(role.rawValue)")
+    
+    return user
 }
 // END

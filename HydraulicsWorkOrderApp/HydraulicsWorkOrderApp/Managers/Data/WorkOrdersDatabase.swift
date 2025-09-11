@@ -173,6 +173,27 @@ final class WorkOrdersDatabase: ObservableObject {
         completion(.success(workOrders))
     }
     
+    // MARK: - Tag Scanning Support
+    
+    /// Find a work order item by its asset tag ID
+    func findWorkOrderItemByTagId(_ tagId: String, completion: @escaping (Result<(WorkOrder, WO_Item, Int), Error>) -> Void) {
+        print("🔍 DEBUG: Searching for work order item with tag ID: \(tagId)")
+        
+        // Search through all work orders and their items
+        for workOrder in workOrders {
+            for (index, item) in workOrder.items.enumerated() {
+                if let itemTagId = item.assetTagId, itemTagId == tagId {
+                    print("✅ DEBUG: Found work order item with tag ID \(tagId) in work order \(workOrder.workOrderNumber)")
+                    completion(.success((workOrder, item, index)))
+                    return
+                }
+            }
+        }
+        
+        print("❌ DEBUG: No work order item found with tag ID: \(tagId)")
+        completion(.failure(NSError(domain: "TagNotFound", code: 404, userInfo: [NSLocalizedDescriptionKey: "No work order item found with tag ID: \(tagId)"])))
+    }
+    
     func getAllWorkOrders() async throws -> [WorkOrder] {
         print("🔍 DEBUG: WorkOrdersDatabase.getAllWorkOrders() called")
         

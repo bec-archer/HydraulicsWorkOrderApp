@@ -12,6 +12,10 @@
 		8905EEA42E57AD96006AC3D3 /* FirebaseFirestoreSwift in Frameworks */ = {isa = PBXBuildFile; productRef = 8905EEA32E57AD96006AC3D3 /* FirebaseFirestoreSwift */; };
 		8905EEA62E57AD96006AC3D3 /* FirebaseStorage in Frameworks */ = {isa = PBXBuildFile; productRef = 8905EEA52E57AD96006AC3D3 /* FirebaseStorage */; };
 		8905EEA72E57B19D006AC3D3 /* FirestoreTestView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8996D33F2E46D185005DE3D4 /* FirestoreTestView.swift */; };
+		89DDB3C02E734BFC00F14821 /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = 89DDB3BF2E734BFC00F14821 /* FirebaseAuth */; };
+		89DDB3C22E734C0200F14821 /* FirebaseDatabase in Frameworks */ = {isa = PBXBuildFile; productRef = 89DDB3C12E734C0200F14821 /* FirebaseDatabase */; };
+		89DDB3C42E734C0700F14821 /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = 89DDB3C32E734C0700F14821 /* FirebaseFirestore */; };
+		89DDB3C62E734C0C00F14821 /* FirebaseStorage in Frameworks */ = {isa = PBXBuildFile; productRef = 89DDB3C52E734C0C00F14821 /* FirebaseStorage */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -78,6 +82,8 @@
 				Views/Admin/DeletedWorkOrdersView.swift,
 				Views/Admin/DropdownManagerView.swift,
 				Views/Admin/MyWorkItemsView.swift,
+				Views/Admin/QRBatchGeneratorView.swift,
+				Views/Admin/QRBatchReservation.swift,
 				Views/Admin/SettingsView.swift,
 				Views/Admin/SyncStatusView.swift,
 				Views/Admin/UserDetailView.swift,
@@ -93,6 +99,7 @@
 				Views/Components/PhotoCaptureView.swift,
 				Views/Components/QRScannerView.swift,
 				Views/Components/StatusBadge.swift,
+				Views/Components/TagScanningView.swift,
 				Views/Components/VersionMismatchWarningView.swift,
 				Views/Components/WOItemAccordionRow.swift,
 				Views/Components/WorkOrderCardView.swift,
@@ -106,9 +113,9 @@
 				Views/Main/MyWorkOrderItemsView.swift,
 				Views/Main/NewCustomerModalView.swift,
 				Views/Main/NewWorkOrderView.swift,
-				Views/Main/RouterView.swift,
 				Views/Main/SimpleRouterView.swift,
 				Views/Main/WorkOrderDetailView.swift,
+				Views/Main/WorkOrderItemDetailView.swift,
 				Views/Sidebar/SidebarMenuContent.swift,
 				Views/Sidebar/SidebarMenuSheet.swift,
 				Views/Sidebar/SidebarMenuView.swift,
@@ -158,6 +165,10 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				89DDB3C22E734C0200F14821 /* FirebaseDatabase in Frameworks */,
+				89DDB3C62E734C0C00F14821 /* FirebaseStorage in Frameworks */,
+				89DDB3C02E734BFC00F14821 /* FirebaseAuth in Frameworks */,
+				89DDB3C42E734C0700F14821 /* FirebaseFirestore in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -179,6 +190,7 @@
 				8996D2C52E46348C005DE3D4 /* HydraulicsWorkOrderAppUITests */,
 				8996D2AC2E46348B005DE3D4 /* Products */,
 				8996D33F2E46D185005DE3D4 /* FirestoreTestView.swift */,
+				89DDB3B62E734B1600F14821 /* Frameworks */,
 			);
 			sourceTree = "<group>";
 		};
@@ -190,6 +202,13 @@
 				8905ED992E5795AE006AC3D3 /* HydraulicsWorkOrderApp.app */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		89DDB3B62E734B1600F14821 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -235,6 +254,10 @@
 			);
 			name = HydraulicsWorkOrderAppTests;
 			packageProductDependencies = (
+				89DDB3BF2E734BFC00F14821 /* FirebaseAuth */,
+				89DDB3C12E734C0200F14821 /* FirebaseDatabase */,
+				89DDB3C32E734C0700F14821 /* FirebaseFirestore */,
+				89DDB3C52E734C0C00F14821 /* FirebaseStorage */,
 			);
 			productName = HydraulicsWorkOrderAppTests;
 			productReference = 8996D2B82E46348C005DE3D4 /* HydraulicsWorkOrderAppTests.xctest */;
@@ -677,6 +700,26 @@
 			productName = FirebaseFirestoreSwift;
 		};
 		8905EEA52E57AD96006AC3D3 /* FirebaseStorage */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 8905EE9E2E57AD96006AC3D3 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseStorage;
+		};
+		89DDB3BF2E734BFC00F14821 /* FirebaseAuth */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 8905EE9E2E57AD96006AC3D3 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAuth;
+		};
+		89DDB3C12E734C0200F14821 /* FirebaseDatabase */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 8905EE9E2E57AD96006AC3D3 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseDatabase;
+		};
+		89DDB3C32E734C0700F14821 /* FirebaseFirestore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 8905EE9E2E57AD96006AC3D3 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseFirestore;
+		};
+		89DDB3C52E734C0C00F14821 /* FirebaseStorage */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 8905EE9E2E57AD96006AC3D3 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
 			productName = FirebaseStorage;

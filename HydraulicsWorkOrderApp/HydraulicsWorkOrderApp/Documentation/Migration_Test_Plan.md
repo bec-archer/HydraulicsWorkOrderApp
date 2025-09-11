@@ -41,7 +41,7 @@ Verify that the refactored `NewWorkOrderView_Refactored` using `NewWorkOrderView
 
 ### **Step 1: Replace the View**
 ```swift
-// In RouterView.swift or wherever NewWorkOrderView is used
+// In SimpleRouterView.swift or wherever NewWorkOrderView is used
 // Replace:
 NewWorkOrderView()
 // With:

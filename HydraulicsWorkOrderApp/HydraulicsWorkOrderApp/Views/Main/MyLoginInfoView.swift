@@ -112,39 +112,16 @@ struct MyLoginInfoView: View {
                     .cornerRadius(12)
                 }
                 
-                // ───── Default PINs Info ─────
+                // ───── PIN Info ─────
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Default PINs by Role")
+                    Text("PIN Information")
                         .font(.headline)
                     
-                    VStack(alignment: .leading, spacing: 4) {
-                        HStack {
-                            Text("Tech:")
-                            Spacer()
-                            Text("1234")
-                                .font(.system(.body, design: .monospaced))
-                        }
-                        
-                        HStack {
-                            Text("Manager:")
-                            Spacer()
-                            Text("2345")
-                                .font(.system(.body, design: .monospaced))
-                        }
-                        
-                        HStack {
-                            Text("Admin:")
-                            Spacer()
-                            Text("5678")
-                                .font(.system(.body, design: .monospaced))
-                        }
-                        
-                        HStack {
-                            Text("Super Admin:")
-                            Spacer()
-                            Text("0000")
-                                .font(.system(.body, design: .monospaced))
-                        }
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("• Each user must have a unique PIN")
+                        Text("• New users get a PIN based on their phone number")
+                        Text("• PINs must be 4-8 digits")
+                        Text("• Contact an admin to reset your PIN")
                     }
                     .font(.caption)
                     .foregroundColor(.secondary)
@@ -167,15 +144,28 @@ struct MyLoginInfoView: View {
     // MARK: - Helper Methods
     
     private func loadCurrentUserInfo() {
+        print("🔐 MyLoginInfoView.loadCurrentUserInfo() called")
         // Load current user's PIN from AppState
         if let user = appState.currentUser {
+            print("🔐 Loading user info:")
+            print("  - Name: \(user.displayName)")
+            print("  - ID: \(user.id)")
+            print("  - Role: \(user.role.rawValue)")
+            print("  - PIN: \(user.pin ?? "nil")")
+            print("  - Is Active: \(user.isActive)")
             currentPin = user.pin ?? ""
         } else {
+            print("🔐 No current user found in AppState")
             currentPin = ""
         }
+        print("🔐 Set currentPin to: \(currentPin.isEmpty ? "empty (using default)" : "••••••••")")
     }
     
     private func saveNewPin() {
+        print("🔐 MyLoginInfoView.saveNewPin() called")
+        print("🔐 New PIN: \(newPin)")
+        print("🔐 Confirm PIN: \(confirmPin)")
+        
         // Validate PIN
         guard newPin.count >= 4 && newPin.count <= 8 else {
             errorMessage = "PIN must be 4-8 digits"
@@ -203,14 +193,27 @@ struct MyLoginInfoView: View {
             return
         }
         
+        print("🔐 Current user before update:")
+        print("  - Name: \(user.displayName)")
+        print("  - ID: \(user.id)")
+        print("  - Role: \(user.role.rawValue)")
+        print("  - Current PIN: \(user.pin ?? "nil")")
+        print("  - Is Active: \(user.isActive)")
+        
         // Update user's PIN
         user.pin = newPin
         user.updatedAt = Date()
         
+        print("🔐 User after PIN update:")
+        print("  - New PIN: \(user.pin ?? "nil")")
+        print("  - Updated At: \(user.updatedAt)")
+        
         // Save to database
+        print("🔐 Calling UsersDatabase.shared.update()...")
         UsersDatabase.shared.update(user)
         
-        // Update AppState
+        // Update AppState immediately
+        print("🔐 Updating AppState.currentUser...")
         appState.currentUser = user
         
         // Update local state
@@ -220,6 +223,8 @@ struct MyLoginInfoView: View {
         showChangePin = false
         successMessage = "PIN updated successfully!"
         isLoading = false
+        
+        print("🔐 PIN update completed successfully!")
         
         // Clear success message after 3 seconds
         DispatchQueue.main.asyncAfter(deadline: .now() + 3) {

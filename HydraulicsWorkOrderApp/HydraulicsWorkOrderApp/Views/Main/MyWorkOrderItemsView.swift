@@ -13,17 +13,20 @@ import SwiftUI
 struct MyWorkOrderItemsView: View {
     @EnvironmentObject var appState: AppState
     @StateObject private var workOrdersDB = WorkOrdersDatabase.shared
-    @State private var filteredItems: [WO_Item] = []
+    @State private var filteredItemData: [WorkOrderItemData] = []
     @State private var isLoading = true
+    @State private var selectedItemData: WorkOrderItemData?
+    @State private var showItemDetailSheet = false
 
     var body: some View {
         // ───── BODY ─────
-        NavigationStack {
-            Group {
+        ScrollView {
+            LazyVStack(spacing: 16) {
                 if isLoading {
                     ProgressView("Loading your work items...")
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if filteredItems.isEmpty {
+                        .padding(.top, 100)
+                } else if filteredItemData.isEmpty {
                     VStack(spacing: 16) {
                         Image(systemName: "doc.text.magnifyingglass")
                             .font(.system(size: 48))
@@ -38,20 +41,41 @@ struct MyWorkOrderItemsView: View {
                             .padding(.horizontal)
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .padding(.top, 100)
                 } else {
-                    List {
-                        ForEach(filteredItems) { item in
-                            WorkItemRow(item: item, workOrder: findWorkOrder(for: item))
-                        }
+                    ForEach(filteredItemData) { itemData in
+                        MyWorkOrderItemCard(
+                            item: itemData.item,
+                            workOrder: itemData.workOrder,
+                            itemIndex: itemData.itemIndex,
+                            onTap: {
+                                selectedItemData = itemData
+                                showItemDetailSheet = true
+                            }
+                        )
                     }
-                    .listStyle(.plain)
                 }
             }
-            .navigationTitle("My Work Items")
-            .navigationBarTitleDisplayMode(.inline)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
         }
+        .navigationTitle("My Work Items")
+        .navigationBarTitleDisplayMode(.inline)
         .onAppear {
             loadFilteredItems()
+        }
+        .refreshable {
+            loadFilteredItems()
+        }
+        .sheet(isPresented: $showItemDetailSheet) {
+            if let itemData = selectedItemData {
+                SimpleItemDetailSheet(
+                    workOrder: itemData.workOrder,
+                    item: itemData.item,
+                    itemIndex: itemData.itemIndex
+                )
+                .environmentObject(appState)
+            }
         }
         // END
     }
@@ -61,155 +85,443 @@ struct MyWorkOrderItemsView: View {
     private func loadFilteredItems() {
         isLoading = true
         
-        // TODO: Replace with proper WorkOrdersDatabase fetch and filtering
-        // Filter: statusHistory.status != "Checked In" && statusHistory.user == appState.currentUserName
-        // For now, use placeholder logic
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            self.filteredItems = self.getPlaceholderItems()
-            self.isLoading = false
+        Task {
+            do {
+                // Fetch all work orders from database
+                let allWorkOrders = try await workOrdersDB.getAllWorkOrders()
+                
+                // Filter to active work orders only
+                let activeWorkOrders = allWorkOrders.filter { workOrder in
+                    !workOrder.isDeleted && workOrder.status.lowercased() != "closed"
+                }
+                
+                // Extract items where current user has made status/note updates (excluding "Checked In")
+                var itemDataArray: [WorkOrderItemData] = []
+                
+                for workOrder in activeWorkOrders {
+                    for (itemIndex, item) in workOrder.items.enumerated() {
+                        // Check if this item has status history from current user (excluding "Checked In")
+                        let userStatusUpdates = item.statusHistory.filter { status in
+                            status.user == appState.currentUserName && 
+                            status.status.lowercased() != "checked in"
+                        }
+                        
+                        // Check if this item has notes from current user
+                        let userNotes = item.notes.filter { note in
+                            note.user == appState.currentUserName
+                        }
+                        
+                        // Include if user has made any status updates or notes
+                        if !userStatusUpdates.isEmpty || !userNotes.isEmpty {
+                            itemDataArray.append(WorkOrderItemData(
+                                item: item,
+                                workOrder: workOrder,
+                                itemIndex: itemIndex
+                            ))
+                        }
+                    }
+                }
+                
+                // Sort by most recent activity (status updates or notes)
+                itemDataArray.sort { data1, data2 in
+                    let latest1 = getLatestActivityTimestamp(for: data1.item)
+                    let latest2 = getLatestActivityTimestamp(for: data2.item)
+                    return latest1 > latest2
+                }
+                
+                await MainActor.run {
+                    self.filteredItemData = itemDataArray
+                    self.isLoading = false
+                }
+                
+            } catch {
+                print("❌ Error loading work orders: \(error)")
+                await MainActor.run {
+                    self.isLoading = false
+                }
+            }
         }
     }
-
-    private func getPlaceholderItems() -> [WO_Item] {
-        // TODO: Replace with actual filtering logic from WorkOrdersDatabase
-        // Filter: statusHistory.status != "Checked In" && statusHistory.user == appState.currentUserName
-        // Implementation should:
-        // 1. Fetch all WorkOrders from WorkOrdersDatabase
-        // 2. Extract all WO_Items from WorkOrders
-        // 3. Filter items where statusHistory contains entry with:
-        //    - status != "Checked In" AND user == appState.currentUserName
-        // 4. Sort by most recent status change timestamp
+    
+    private func getLatestActivityTimestamp(for item: WO_Item) -> Date {
+        var latestDate = Date.distantPast
         
-        // Placeholder items for demonstration
-        return [
-            WO_Item(
-                id: UUID(),
-                itemNumber: UUID().uuidString,
-                assetTagId: nil,
-                type: "Hydraulic Pump",
-                imageUrls: [],
-                thumbUrls: [],
-                localImages: [],
-                dropdowns: [:],
-                dropdownSchemaVersion: 1,
-                reasonsForService: [],
-                reasonNotes: nil,
-                completedReasons: [],
-                statusHistory: [
-                    WO_Status(status: "Checked In", user: "Tech", timestamp: Date().addingTimeInterval(-86400), notes: nil),
-                    WO_Status(status: "In Progress", user: appState.currentUserName, timestamp: Date().addingTimeInterval(-3600), notes: "Started repair work")
-                ],
-                notes: [],
-                testResult: nil,
-                partsUsed: nil,
-                hoursWorked: nil,
-                estimatedCost: nil,
-                finalCost: nil,
-                assignedTo: "",
-                isFlagged: false,
-                tagReplacementHistory: nil
-            ),
-            WO_Item(
-                id: UUID(),
-                itemNumber: UUID().uuidString,
-                assetTagId: nil,
-                type: "Control Valve",
-                imageUrls: [],
-                thumbUrls: [],
-                localImages: [],
-                dropdowns: [:],
-                dropdownSchemaVersion: 1,
-                reasonsForService: [],
-                reasonNotes: nil,
-                completedReasons: [],
-                statusHistory: [
-                    WO_Status(status: "Checked In", user: "Tech", timestamp: Date().addingTimeInterval(-172800), notes: nil),
-                    WO_Status(status: "In Progress", user: appState.currentUserName, timestamp: Date().addingTimeInterval(-86400), notes: "Valve disassembly complete"),
-                    WO_Status(status: "Done", user: appState.currentUserName, timestamp: Date().addingTimeInterval(-43200), notes: "Repair completed successfully")
-                ],
-                notes: [],
-                testResult: nil,
-                partsUsed: nil,
-                hoursWorked: nil,
-                estimatedCost: nil,
-                finalCost: nil,
-                assignedTo: "",
-                isFlagged: false,
-                tagReplacementHistory: nil
-            )
-        ]
-    }
-
-    private func findWorkOrder(for item: WO_Item) -> WorkOrder? {
-        // TODO: Replace with actual WorkOrdersDatabase lookup
-        // For now, return nil (placeholder)
-        return nil
+        // Check latest status update
+        for status in item.statusHistory {
+            if status.timestamp > latestDate {
+                latestDate = status.timestamp
+            }
+        }
+        
+        // Check latest note
+        for note in item.notes {
+            if note.timestamp > latestDate {
+                latestDate = note.timestamp
+            }
+        }
+        
+        return latestDate
     }
 }
 
-// MARK: - Supporting Views
-
-/// Row view for displaying a work item with basic info
-private struct WorkItemRow: View {
+// MARK: - Data Structure
+struct WorkOrderItemData: Identifiable {
+    let id = UUID()
     let item: WO_Item
-    let workOrder: WorkOrder?
+    let workOrder: WorkOrder
+    let itemIndex: Int
+}
+
+// MARK: - Custom Item Card for My Work Orders
+struct MyWorkOrderItemCard: View {
+    let item: WO_Item
+    let workOrder: WorkOrder
+    let itemIndex: Int
+    let onTap: () -> Void
     
-    // Compute current status from statusHistory
+    // Get current status from statusHistory
     private var currentStatus: String {
         item.statusHistory.last?.status ?? "Unknown"
     }
     
     // Get most recent note text for display
     private var recentNoteText: String {
-        // Note: Placeholder items have empty notes array, so this won't show
-        // TODO: When real data is loaded, this will display the most recent note
-        return ""
+        item.notes.last?.text ?? ""
     }
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text(item.type)
-                    .font(.headline)
-                Spacer()
-                StatusBadge(status: currentStatus)
-            }
-            
-            if let workOrder = workOrder {
-                Text("WO: \(workOrder.workOrderNumber)")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            
-            if let lastStatus = item.statusHistory.last {
+        Button(action: onTap) {
+            VStack(alignment: .leading, spacing: 12) {
+                // ───── Header Row ─────
                 HStack {
-                    Text("Last updated by \(lastStatus.user)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    // Work Order Number
+                    Text("\(workOrder.workOrderNumber)-\(String(format: "%03d", itemIndex + 1))")
+                        .font(.headline)
+                        .foregroundColor(.primary)
+                    
                     Spacer()
-                    Text(lastStatus.timestamp, style: .relative)
+                    
+                    // Status Badge
+                    StatusBadge(status: currentStatus)
+                }
+                
+                // ───── Item Type and Details ─────
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(item.type)
+                        .font(.title3)
+                        .fontWeight(.medium)
+                        .foregroundColor(.primary)
+                    
+                    // Show dropdown details if available
+                    if !item.dropdowns.isEmpty {
+                        ForEach(Array(item.dropdowns.keys.sorted()), id: \.self) { key in
+                            if let value = item.dropdowns[key], !value.isEmpty {
+                                HStack {
+                                    Text("\(key):")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                    Text(value)
+                                        .font(.caption)
+                                        .foregroundColor(.primary)
+                                    Spacer()
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                // ───── Customer Info (Tappable) ─────
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(workOrder.customerName)
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                            .foregroundColor(.primary)
+                        
+                        if !workOrder.customerPhone.isEmpty {
+                            Text(workOrder.customerPhone)
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    
+                    Spacer()
+                    
+                    // Phone action button
+                    if !workOrder.customerPhone.isEmpty {
+                        Button(action: {
+                            if let url = URL(string: "tel:\(workOrder.customerPhone)") {
+                                UIApplication.shared.open(url)
+                            }
+                        }) {
+                            Image(systemName: "phone")
+                                .font(.subheadline)
+                                .foregroundColor(.blue)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.vertical, 4)
+                .padding(.horizontal, 8)
+                .background(Color(.systemGray6))
+                .cornerRadius(8)
+                
+                // ───── Reasons for Service ─────
+                if !item.reasonsForService.isEmpty {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Reasons for Service:")
+                            .font(.caption)
+                            .fontWeight(.medium)
+                            .foregroundColor(.secondary)
+                        
+                        ForEach(item.reasonsForService, id: \.self) { reason in
+                            HStack(spacing: 8) {
+                                Image(systemName: item.completedReasons.contains(reason) ? "checkmark.square.fill" : "square")
+                                    .foregroundColor(item.completedReasons.contains(reason) ? .green : .secondary)
+                                    .font(.caption)
+                                
+                                Text(reason)
+                                    .font(.caption)
+                                    .foregroundColor(.primary)
+                                
+                                Spacer()
+                            }
+                        }
+                    }
+                }
+                
+                // ───── Recent Activity ─────
+                if let lastStatus = item.statusHistory.last {
+                    HStack {
+                        Text("Last updated by \(lastStatus.user)")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        Spacer()
+                        Text(lastStatus.timestamp, style: .relative)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+                
+                // ───── Recent Note ─────
+                if !recentNoteText.isEmpty {
+                    Text(recentNoteText)
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundColor(.secondary)
+                        .lineLimit(2)
+                        .padding(.top, 4)
                 }
             }
-            
-            if !recentNoteText.isEmpty {
-                Text(recentNoteText)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-            }
+            .padding(16)
+            .background(Color(.systemBackground))
+            .cornerRadius(12)
+            .shadow(color: Color.black.opacity(0.1), radius: 2, x: 0, y: 1)
         }
-        .padding(.vertical, 4)
+        .buttonStyle(.plain)
     }
 }
 
-// Note: Using existing StatusBadge component from Views/Components/StatusBadge.swift
+// MARK: - SimpleItemDetailSheet
+struct SimpleItemDetailSheet: View {
+    let workOrder: WorkOrder
+    let item: WO_Item
+    let itemIndex: Int
+    
+    @EnvironmentObject private var appState: AppState
+    @Environment(\.dismiss) private var dismiss
+    
+    private var itemDisplayName: String {
+        "\(workOrder.workOrderNumber)-\(String(format: "%03d", itemIndex + 1))"
+    }
+    
+    private var currentStatus: String {
+        item.statusHistory.last?.status ?? "Checked In"
+    }
+    
+    var body: some View {
+        NavigationView {
+            ScrollView {
+                VStack(spacing: 20) {
+                    // ───── Item Header ─────
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack {
+                            Text(itemDisplayName)
+                                .font(.title2)
+                                .fontWeight(.bold)
+                            
+                            Spacer()
+                            
+                            StatusBadge(status: currentStatus)
+                        }
+                        
+                        Text(item.type)
+                            .font(.title3)
+                            .foregroundColor(.secondary)
+                    }
+                    .padding()
+                    .background(Color(.systemGray6))
+                    .cornerRadius(12)
+                    
+                    // ───── Customer Info ─────
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Customer")
+                            .font(.headline)
+                        
+                        Text(workOrder.customerName)
+                            .font(.subheadline)
+                        
+                        if !workOrder.customerPhone.isEmpty {
+                            HStack {
+                                Text(workOrder.customerPhone)
+                                    .font(.subheadline)
+                                
+                                Spacer()
+                                
+                                Button(action: {
+                                    if let url = URL(string: "tel:\(workOrder.customerPhone)") {
+                                        UIApplication.shared.open(url)
+                                    }
+                                }) {
+                                    Image(systemName: "phone")
+                                        .foregroundColor(.blue)
+                                }
+                            }
+                        }
+                    }
+                    .padding()
+                    .background(Color(.systemGray6))
+                    .cornerRadius(12)
+                    
+                    // ───── Reasons for Service ─────
+                    if !item.reasonsForService.isEmpty {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Reasons for Service")
+                                .font(.headline)
+                            
+                            ForEach(item.reasonsForService, id: \.self) { reason in
+                                HStack(spacing: 8) {
+                                    Image(systemName: item.completedReasons.contains(reason) ? "checkmark.square.fill" : "square")
+                                        .foregroundColor(item.completedReasons.contains(reason) ? .green : .secondary)
+                                    
+                                    Text(reason)
+                                        .font(.subheadline)
+                                    
+                                    Spacer()
+                                }
+                            }
+                        }
+                        .padding()
+                        .background(Color(.systemGray6))
+                        .cornerRadius(12)
+                    }
+                    
+                    // ───── Status History ─────
+                    if !item.statusHistory.isEmpty {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Status History")
+                                .font(.headline)
+                            
+                            ForEach(item.statusHistory.reversed(), id: \.timestamp) { status in
+                                HStack {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(status.status)
+                                            .font(.subheadline)
+                                            .fontWeight(.medium)
+                                        
+                                        Text("by \(status.user)")
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                    }
+                                    
+                                    Spacer()
+                                    
+                                    Text(status.timestamp, style: .relative)
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+                                .padding(.vertical, 4)
+                            }
+                        }
+                        .padding()
+                        .background(Color(.systemGray6))
+                        .cornerRadius(12)
+                    }
+                    
+                    // ───── Notes ─────
+                    if !item.notes.isEmpty {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Notes")
+                                .font(.headline)
+                            
+                            ForEach(item.notes.reversed(), id: \.timestamp) { note in
+                                VStack(alignment: .leading, spacing: 4) {
+                                    reasonServiceNoteText(note.text)
+                                    
+                                    HStack {
+                                        Text("by \(note.user)")
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                        
+                                        Spacer()
+                                        
+                                        Text(note.timestamp, style: .relative)
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                    }
+                                }
+                                .padding(.vertical, 4)
+                            }
+                        }
+                        .padding()
+                        .background(Color(.systemGray6))
+                        .cornerRadius(12)
+                    }
+                }
+                        .padding()
+                    }
+                    .navigationTitle("Item Details")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .navigationBarTrailing) {
+                            Button("Done") {
+                                dismiss()
+                            }
+                        }
+                    }
+                }
+            }
+            
+            @ViewBuilder
+            func reasonServiceNoteText(_ text: String) -> some View {
+                // Check if this is a Reasons for Service note (starts with ✅ or ❌)
+                if text.hasPrefix("✅") || text.hasPrefix("❌") {
+                    let components = text.components(separatedBy: " • ")
+                    if components.count == 2 {
+                        let emoji = components[0]
+                        let reasonText = components[1]
+                        
+                        HStack(spacing: 4) {
+                            Text(emoji)
+                                .font(.subheadline)
+                            Text(reasonText)
+                                .font(.subheadline)
+                                .fontWeight(.bold)
+                        }
+                    } else {
+                        Text(text)
+                            .font(.subheadline)
+                    }
+                } else {
+                    Text(text)
+                        .font(.subheadline)
+                }
+            }
+        }
 
 // ───── PREVIEW ─────
 #Preview {
     let appState = AppState.previewLoggedIn(role: .tech)
-    return MyWorkOrderItemsView()
+    MyWorkOrderItemsView()
         .environmentObject(appState)
 }
 // END

@@ -90,20 +90,6 @@ struct LoginView: View {
             }
         }
     }
-    
-    // ───── Helper: Get Default PIN for Role ─────
-    private func getDefaultPin(for role: UserRole) -> String {
-        switch role {
-        case .tech:
-            return "1234"
-        case .manager:
-            return "2345"
-        case .admin:
-            return "5678"
-        case .superadmin:
-            return "0000"
-        }
-    }
 
     // END
 }

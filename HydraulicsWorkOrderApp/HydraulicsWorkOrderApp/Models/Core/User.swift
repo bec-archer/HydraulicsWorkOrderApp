@@ -9,7 +9,7 @@
 // ───── USER MODEL ─────
 import Foundation
 
-public struct User: Identifiable, Codable, Equatable {
+public struct User: Identifiable, Codable, Equatable, Hashable {
     public let id: String                // Firestore doc id (UUID string ok)
     public var displayName: String       // 2–80 chars
     public var phoneE164: String?        // +15551234567 (optional for now)

@@ -20,6 +20,8 @@ enum AppScreen {
     case userManager
     case dropdownManager
     case workOrderDetail
+    case workOrderItemDetail  // NEW: Individual work order item detail view
+    case qrBatchGenerator   // NEW: Admin/Manager-only QR sheet generator
     // Add more cases as needed (e.g., completedWorkOrders, etc.)
 }
 // END enum
@@ -32,6 +34,8 @@ class AppState: ObservableObject {
     
     @Published var currentView: AppScreen = .activeWorkOrders
     @Published var selectedWorkOrder: WorkOrder? = nil  // For work order detail navigation
+    @Published var selectedWorkOrderItem: WO_Item? = nil  // For work order item detail navigation
+    @Published var selectedWorkOrderItemIndex: Int? = nil  // Index of the item in the work order
 
     // ───── Current Logged-in User Info ─────
     @Published var currentUser: User? = nil  // The actual logged-in user from database
@@ -101,6 +105,22 @@ class AppState: ObservableObject {
         selectedWorkOrder = workOrder
         print("🔍 DEBUG: Setting currentView to: .workOrderDetail")
         currentView = .workOrderDetail
+        print("🔍 DEBUG: Current currentView is now: \(currentView)")
+        splitVisibility = .detailOnly
+        print("🔍 DEBUG: Navigation complete")
+    }
+    
+    // Navigate to work order item detail
+    func navigateToWorkOrderItemDetail(_ workOrder: WorkOrder, item: WO_Item, itemIndex: Int) {
+        print("🔍 DEBUG: AppState.navigateToWorkOrderItemDetail called with WO: \(workOrder.workOrderNumber), Item: \(item.type)")
+        print("🔍 DEBUG: Setting selectedWorkOrder to: \(workOrder.workOrderNumber)")
+        selectedWorkOrder = workOrder
+        print("🔍 DEBUG: Setting selectedWorkOrderItem to: \(item.type)")
+        selectedWorkOrderItem = item
+        print("🔍 DEBUG: Setting selectedWorkOrderItemIndex to: \(itemIndex)")
+        selectedWorkOrderItemIndex = itemIndex
+        print("🔍 DEBUG: Setting currentView to: .workOrderItemDetail")
+        currentView = .workOrderItemDetail
         print("🔍 DEBUG: Current currentView is now: \(currentView)")
         splitVisibility = .detailOnly
         print("🔍 DEBUG: Navigation complete")

@@ -697,7 +697,7 @@ struct WorkOrderDetailView: View {
                         Button(action: {
                             showStatusSelection = true
                         }) {
-                            StatusBadge(status: item.statusHistory.last?.status ?? "Checked In")
+                            StatusBadge(status: getActualItemStatus(item))
                         }
                         .buttonStyle(PlainButtonStyle())
                         
@@ -842,51 +842,18 @@ struct WorkOrderDetailView: View {
                             .fontWeight(.semibold)
                             .foregroundColor(ThemeManager.shared.textPrimary)
                         
-                        // Item-specific notes and status history
+                        // Unified timeline: notes and status history chronologically
                         LazyVStack(alignment: .leading, spacing: 4) {
-                            // Show "Checked In" as default if no status history
-                            if item.statusHistory.isEmpty {
+                            ForEach(getCombinedTimeline(), id: \.id) { timelineItem in
                                 HStack(alignment: .top, spacing: 8) {
                                     Text("•")
                                         .foregroundColor(ThemeManager.shared.textSecondary)
                                     
                                     VStack(alignment: .leading, spacing: 2) {
-                                        Text("Checked In")
-                                            .font(.caption)
-                                            .foregroundColor(ThemeManager.shared.textPrimary)
+                                        timelineItem.content
                                         
                                         HStack {
-                                            Text("System")
-                                                .font(.caption2)
-                                                .foregroundColor(ThemeManager.shared.textSecondary)
-                                            
-                                            Text("•")
-                                                .font(.caption2)
-                                                .foregroundColor(ThemeManager.shared.textSecondary)
-                                            
-                                            Text("Initial Status")
-                                                .font(.caption2)
-                                                .foregroundColor(ThemeManager.shared.textSecondary)
-                                        }
-                                    }
-                                    
-                                    Spacer()
-                                }
-                            }
-                            
-                            ForEach(item.statusHistory.sorted(by: { $0.timestamp < $1.timestamp }), id: \.id) { status in
-                                HStack(alignment: .top, spacing: 8) {
-                                    Text("•")
-                                        .foregroundColor(ThemeManager.shared.textSecondary)
-                                    
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(status.status)
-                                            .font(.system(size: 12 * 1.2))
-                                            .fontWeight(.bold)
-                                            .foregroundColor(getStatusColor(status.status))
-                                        
-                                        HStack {
-                                            Text(status.user)
+                                            Text(timelineItem.user)
                                                 .font(.system(size: 10 * 1.2))
                                                 .foregroundColor(ThemeManager.shared.textSecondary)
                                             
@@ -894,95 +861,12 @@ struct WorkOrderDetailView: View {
                                                 .font(.system(size: 10 * 1.2))
                                                 .foregroundColor(ThemeManager.shared.textSecondary)
                                             
-                                            Text(status.timestamp, format: .dateTime.month(.abbreviated).day().year().hour().minute())
+                                            Text(timelineItem.timestamp, format: .dateTime.month(.abbreviated).day().year().hour().minute())
                                                 .font(.system(size: 10 * 1.2))
                                                 .foregroundColor(ThemeManager.shared.textSecondary)
-                                        }
-                                    }
-                                    
-                                    Spacer()
-                                }
-                            }
-                            
-                            // Item-specific notes
-                            ForEach(item.notes.sorted(by: { $0.timestamp < $1.timestamp }), id: \.id) { note in
-                                HStack(alignment: .top, spacing: 8) {
-                                    Text("•")
-                                        .foregroundColor(ThemeManager.shared.textSecondary)
-                                    
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        // Show text if available
-                                        if !note.text.isEmpty {
-                                            Text(note.text)
-                                                .font(.system(size: 12 * 1.2))
-                                                .foregroundColor(ThemeManager.shared.textPrimary)
                                         }
                                         
-                                        // Show image thumbnails if available
-                                        if !note.imageUrls.isEmpty {
-                                            let _ = print("🔍 DEBUG: Note has \(note.imageUrls.count) image URLs: \(note.imageUrls)")
-                                            HStack(spacing: 4) {
-                                                ForEach(note.imageUrls.prefix(3), id: \.self) { imageUrl in
-                                                    Button(action: {
-                                                        // Convert thumbnail URL back to full image URL for full screen viewing
-                                                        let fullImageUrl = convertThumbnailUrlToImageUrl(imageUrl)
-                                                        print("🔍 DEBUG: Note thumbnail tapped - Original: \(imageUrl)")
-                                                        print("🔍 DEBUG: Note thumbnail tapped - Converted: \(fullImageUrl)")
-                                                        selectedImageURL = URL(string: fullImageUrl)
-                                                        print("🔍 DEBUG: Note thumbnail tapped - selectedImageURL set to: \(selectedImageURL?.absoluteString ?? "nil")")
-                                                        showImageViewer = true
-                                                        print("🔍 DEBUG: Note thumbnail tapped - showImageViewer set to: \(showImageViewer)")
-                                                    }) {
-                                                        AsyncImage(url: URL(string: imageUrl)) { image in
-                                                            image
-                                                                .resizable()
-                                                                .aspectRatio(contentMode: .fill)
-                                                                .frame(width: 48, height: 48)
-                                                                .clipped()
-                                                                .cornerRadius(6)
-                                                        } placeholder: {
-                                                            Rectangle()
-                                                                .fill(ThemeManager.shared.border.opacity(0.3))
-                                                                .frame(width: 48, height: 48)
-                                                                .cornerRadius(6)
-                                                        }
-                                                    }
-                                                    .buttonStyle(PlainButtonStyle())
-                                                }
-                                                
-                                                // Show "+X more" if there are more than 3 images
-                                                if note.imageUrls.count > 3 {
-                                                    Text("+\(note.imageUrls.count - 3)")
-                                                        .font(.system(size: 10 * 1.2))
-                                                        .foregroundColor(ThemeManager.shared.textSecondary)
-                                                        .frame(width: 48, height: 48)
-                                                        .background(ThemeManager.shared.border.opacity(0.3))
-                                                        .cornerRadius(6)
-                                                }
-                                            }
-                                        }
-                                        
-                                        // Show "Image only" text if there's no text but there are images
-                                        if note.text.isEmpty && !note.imageUrls.isEmpty {
-                                            Text("Image only")
-                                                .font(.system(size: 10 * 1.2))
-                                                .foregroundColor(ThemeManager.shared.textSecondary)
-                                                .italic()
-                                        }
-                                        
-                                        HStack {
-                                            Text(note.user)
-                                                .font(.system(size: 10 * 1.2))
-                                                .foregroundColor(ThemeManager.shared.textSecondary)
-                                            
-                                            Text("•")
-                                                .font(.system(size: 10 * 1.2))
-                                                .foregroundColor(ThemeManager.shared.textSecondary)
-                                            
-                                            Text(note.timestamp, format: .dateTime.month(.abbreviated).day().year().hour().minute())
-                                                .font(.system(size: 10 * 1.2))
-                                                .foregroundColor(ThemeManager.shared.textSecondary)
-                                        }
+                                        Spacer()
                                     }
                                     
                                     Spacer()
@@ -1051,10 +935,168 @@ struct WorkOrderDetailView: View {
         }
         
         func isReasonPerformed(_ reason: String) -> Bool {
-            let expectedStatus = "Service Performed — \(reason)"
-            return item.statusHistory.contains { status in
-                status.status == expectedStatus
+            return item.completedReasons.contains(reason)
+        }
+        
+        func getActualItemStatus(_ item: WO_Item) -> String {
+            // Find the last status that is NOT a "Service Performed" entry
+            let actualStatuses = item.statusHistory.filter { !$0.status.hasPrefix("Service Performed") }
+            return actualStatuses.last?.status ?? "Checked In"
+        }
+        
+        @ViewBuilder
+        func reasonServiceNoteText(_ text: String) -> some View {
+            // Check if this is a Reasons for Service note (starts with ✅ or ❌)
+            if text.hasPrefix("✅") || text.hasPrefix("❌") {
+                let components = text.components(separatedBy: " • ")
+                if components.count == 2 {
+                    let emoji = components[0]
+                    let reasonText = components[1]
+                    
+                    HStack(spacing: 4) {
+                        Text(emoji)
+                            .font(.system(size: 12 * 1.2))
+                        Text(reasonText)
+                            .font(.system(size: 12 * 1.2, weight: .bold))
+                            .foregroundColor(ThemeManager.shared.textPrimary)
+                    }
+                } else {
+                    Text(text)
+                        .font(.system(size: 12 * 1.2))
+                        .foregroundColor(ThemeManager.shared.textPrimary)
+                }
+            } else {
+                Text(text)
+                    .font(.system(size: 12 * 1.2))
+                    .foregroundColor(ThemeManager.shared.textPrimary)
             }
+        }
+        
+        // MARK: - Timeline Item Structure
+        struct TimelineItem: Identifiable {
+            let id: UUID
+            let timestamp: Date
+            let user: String
+            let content: AnyView
+            let type: TimelineItemType
+            
+            enum TimelineItemType {
+                case status
+                case note
+                case initialStatus
+            }
+        }
+        
+        // MARK: - Timeline Helper
+        func getCombinedTimeline() -> [TimelineItem] {
+            var timelineItems: [TimelineItem] = []
+            
+            // Add initial "Checked In" status if no status history exists
+            if item.statusHistory.isEmpty {
+                timelineItems.append(TimelineItem(
+                    id: UUID(),
+                    timestamp: item.lastModified,
+                    user: "System",
+                    content: AnyView(
+                        Text("Checked In")
+                            .font(.caption)
+                            .foregroundColor(ThemeManager.shared.textPrimary)
+                    ),
+                    type: .initialStatus
+                ))
+            }
+            
+            // Add status history items (excluding "Service Performed" entries)
+            for status in item.statusHistory {
+                // Skip "Service Performed" entries since they're already tracked in notes
+                if !status.status.hasPrefix("Service Performed") {
+                    timelineItems.append(TimelineItem(
+                        id: status.id,
+                        timestamp: status.timestamp,
+                        user: status.user,
+                        content: AnyView(
+                            Text(status.status)
+                                .font(.system(size: 12 * 1.2))
+                                .fontWeight(.bold)
+                                .foregroundColor(getStatusColor(status.status))
+                        ),
+                        type: .status
+                    ))
+                }
+            }
+            
+            // Add note items
+            for note in item.notes {
+                timelineItems.append(TimelineItem(
+                    id: note.id,
+                    timestamp: note.timestamp,
+                    user: note.user,
+                    content: AnyView(
+                        VStack(alignment: .leading, spacing: 4) {
+                            // Show text if available
+                            if !note.text.isEmpty {
+                                reasonServiceNoteText(note.text)
+                            }
+                            
+                            // Show image thumbnails if available
+                            if !note.imageUrls.isEmpty {
+                                let _ = print("🔍 DEBUG: Note has \(note.imageUrls.count) image URLs: \(note.imageUrls)")
+                                HStack(spacing: 4) {
+                                    ForEach(note.imageUrls.prefix(3), id: \.self) { imageUrl in
+                                        Button(action: {
+                                            // Convert thumbnail URL back to full image URL for full screen viewing
+                                            let fullImageUrl = convertThumbnailUrlToImageUrl(imageUrl)
+                                            print("🔍 DEBUG: Note thumbnail tapped - Original: \(imageUrl)")
+                                            print("🔍 DEBUG: Note thumbnail tapped - Converted: \(fullImageUrl)")
+                                            selectedImageURL = URL(string: fullImageUrl)
+                                            print("🔍 DEBUG: Note thumbnail tapped - selectedImageURL set to: \(selectedImageURL?.absoluteString ?? "nil")")
+                                            showImageViewer = true
+                                            print("🔍 DEBUG: Note thumbnail tapped - showImageViewer set to: \(showImageViewer)")
+                                        }) {
+                                            AsyncImage(url: URL(string: imageUrl)) { image in
+                                                image
+                                                    .resizable()
+                                                    .aspectRatio(contentMode: .fill)
+                                                    .frame(width: 48, height: 48)
+                                                    .clipped()
+                                                    .cornerRadius(6)
+                                            } placeholder: {
+                                                Rectangle()
+                                                    .fill(ThemeManager.shared.border.opacity(0.3))
+                                                    .frame(width: 48, height: 48)
+                                                    .cornerRadius(6)
+                                            }
+                                        }
+                                        .buttonStyle(PlainButtonStyle())
+                                    }
+                                    
+                                    // Show "+X more" if there are more than 3 images
+                                    if note.imageUrls.count > 3 {
+                                        Text("+\(note.imageUrls.count - 3)")
+                                            .font(.system(size: 10 * 1.2))
+                                            .foregroundColor(ThemeManager.shared.textSecondary)
+                                            .frame(width: 48, height: 48)
+                                            .background(ThemeManager.shared.border.opacity(0.3))
+                                            .cornerRadius(6)
+                                    }
+                                }
+                            }
+                            
+                            // Show "Image only" text if there's no text but there are images
+                            if note.text.isEmpty && !note.imageUrls.isEmpty {
+                                Text("Image only")
+                                    .font(.system(size: 10 * 1.2))
+                                    .foregroundColor(ThemeManager.shared.textSecondary)
+                                    .italic()
+                            }
+                        }
+                    ),
+                    type: .note
+                ))
+            }
+            
+            // Sort all items by timestamp (oldest first)
+            return timelineItems.sorted { $0.timestamp < $1.timestamp }
         }
 
         func summaryLineForItem(_ item: WO_Item) -> String {

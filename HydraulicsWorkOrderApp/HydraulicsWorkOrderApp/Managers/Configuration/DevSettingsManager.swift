@@ -24,7 +24,6 @@ final class DevSettingsManager: ObservableObject {
         static let enableAnonAuth = "dev_enableAnonAuth"
         static let bypassLogin    = "dev_bypassLogin"
         static let enforceTagScan = "dev_enforceTagScan"
-        static let sampleData     = "dev_enableSampleData"
     }
 
     // ───── Dev Toggles (Published) ─────
@@ -45,10 +44,6 @@ final class DevSettingsManager: ObservableObject {
         didSet { UserDefaults.standard.set(skipTagScan, forKey: Keys.enforceTagScan) }
     }
 
-    // Load sample data on cold start
-    @Published var enableSampleData: Bool = UserDefaults.standard.object(forKey: Keys.sampleData) as? Bool ?? false {
-        didSet { UserDefaults.standard.set(enableSampleData, forKey: Keys.sampleData) }
-    }
 
     // Controls anonymous Firebase Auth at launch (persisted)
     @Published var enableAnonAuth: Bool = UserDefaults.standard.object(forKey: Keys.enableAnonAuth) as? Bool ?? true {
@@ -71,13 +66,11 @@ final class DevSettingsManager: ObservableObject {
         if defaults.object(forKey: Keys.enableAnonAuth) == nil { defaults.set(true,  forKey: Keys.enableAnonAuth) }
         if defaults.object(forKey: Keys.bypassLogin)    == nil { defaults.set(false, forKey: Keys.bypassLogin) }
         if defaults.object(forKey: Keys.enforceTagScan) == nil { defaults.set(false, forKey: Keys.enforceTagScan) }
-        if defaults.object(forKey: Keys.sampleData)     == nil { defaults.set(false, forKey: Keys.sampleData) }
 
         // Ensure published values reflect stored defaults on launch
         self.enableAnonAuth   = defaults.bool(forKey: Keys.enableAnonAuth)
         self.skipLogin        = defaults.bool(forKey: Keys.bypassLogin)
         self.skipTagScan      = defaults.bool(forKey: Keys.enforceTagScan)
-        self.enableSampleData = defaults.bool(forKey: Keys.sampleData)
 
         // ───── Debug Override: always bypass login in DEBUG builds ─────
         #if DEBUG
