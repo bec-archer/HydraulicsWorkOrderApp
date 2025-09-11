@@ -23,7 +23,7 @@ struct UIConstants {
     // ───── Status Colors ─────
     struct StatusColors {
         static let checkedIn    = Color.blue
-        static let disassembly  = Color.teal
+        static let disassembly  = Color.purple
         static let inProgress   = Color(hex: "#FFC500") // Yellow
         static let testFailed   = Color.red
         static let completed    = Color.green

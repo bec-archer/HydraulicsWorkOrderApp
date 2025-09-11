@@ -1400,9 +1400,10 @@ struct StatusSelectionView: View {
     // Status options with colors
     private let statusOptions = [
         ("Checked In", Color.blue),
-        ("In Progress", Color.orange),
+        ("Disassembly", Color.purple),
+        ("In Progress", Color.yellow),
         ("Test Failed", Color.red),
-        ("Completed", Color.green),
+        ("Complete", Color.green),
         ("Closed", Color.gray)
     ]
     
