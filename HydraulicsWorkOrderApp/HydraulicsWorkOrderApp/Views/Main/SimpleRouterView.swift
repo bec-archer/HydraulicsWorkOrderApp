@@ -14,6 +14,32 @@ struct SimpleRouterView: View {
     @EnvironmentObject private var appState: AppState
     @State private var isSidebarVisible = false
     
+    // MARK: - Computed Properties
+    private var navigationTitle: String {
+        switch appState.currentView {
+        case .login:
+            return "Login"
+        case .activeWorkOrders:
+            return "Active Work Orders"
+        case .newWorkOrder:
+            return "New Work Order"
+        case .myWorkOrderItems:
+            return "My Work Order Items"
+        case .customers:
+            return "Customers"
+        case .myLoginInfo:
+            return "My Login Info"
+        case .settings:
+            return "Settings"
+        case .userManager:
+            return "User Manager"
+        case .dropdownManager:
+            return "Dropdown Manager"
+        case .workOrderDetail:
+            return "Work Order Detail"
+        }
+    }
+    
     var body: some View {
         VStack(spacing: 0) {
             // ───── Top Navigation Bar ─────
@@ -26,11 +52,11 @@ struct SimpleRouterView: View {
                 } label: {
                     Image(systemName: isSidebarVisible ? "sidebar.left" : "sidebar.left")
                         .font(.title2)
-                        .foregroundColor(.blue)
+                        .foregroundColor(Color(hex: "#FFC500"))
                 }
                 .buttonStyle(.plain)
                 
-                Text("Hydraulics Work Order App")
+                Text(navigationTitle)
                     .font(.headline)
                     .fontWeight(.bold)
                 
@@ -55,15 +81,26 @@ struct SimpleRouterView: View {
                     .buttonStyle(.plain)
                 }
                 
-                // Plus button for new work order
+                // Add New Work Order button
                 Button {
-                    print("🔍 DEBUG: Plus button tapped - navigating to new work order")
+                    print("🔍 DEBUG: Add New Work Order button tapped - navigating to new work order")
                     appState.currentView = .newWorkOrder
                 } label: {
-                    Image(systemName: "plus")
-                        .font(.title2)
-                        .fontWeight(.medium)
-                        .foregroundColor(.blue)
+                    HStack(spacing: 4) {
+                        Image(systemName: "plus")
+                            .font(.subheadline)
+                            .fontWeight(.bold)
+                        Text("Add New Work Order")
+                            .font(.subheadline)
+                            .fontWeight(.bold)
+                    }
+                    .foregroundColor(.black)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .background(
+                        Capsule()
+                            .fill(Color(hex: "#FFC500"))
+                    )
                 }
                 .buttonStyle(.plain)
             }
