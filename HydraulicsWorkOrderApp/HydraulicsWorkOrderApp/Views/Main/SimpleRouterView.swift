@@ -178,8 +178,8 @@ struct SimpleRouterView: View {
                             UserManagerView()
                                 .environmentObject(appState)
                         case .dropdownManager:
-                            Text("Dropdown Manager - Coming Soon")
-                                .navigationTitle("Dropdown Manager")
+                            DropdownManagerView()
+                                .environmentObject(appState)
                         case .customers:
                             CustomersView()
                         case .myLoginInfo:

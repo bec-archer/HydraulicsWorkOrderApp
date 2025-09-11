@@ -54,32 +54,27 @@ struct DropdownManagerView: View {
     
     // MARK: - Body
     var body: some View {
-        NavigationView {
-            VStack(spacing: 0) {
-                // Category Picker
-                categoryPicker
-                
-                // Content based on user role
-                if canEdit {
-                    editableContent
-                } else if canRequestChanges {
-                    readOnlyContentWithRequest
-                } else {
-                    readOnlyContent
-                }
-            }
-            .navigationTitle("Dropdown Manager")
-            .navigationBarTitleDisplayMode(.large)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    if canEdit {
-                        Button("Add Option") {
-                            showingAddOption = true
-                        }
-                    }
-                }
+        VStack(spacing: 0) {
+            // Debug info
+            Text("User Role: \(appState.currentUserRole.rawValue)")
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .padding()
+            
+            // Category Picker
+            categoryPicker
+            
+            // Content based on user role
+            if canEdit {
+                editableContent
+            } else if canRequestChanges {
+                readOnlyContentWithRequest
+            } else {
+                readOnlyContent
             }
         }
+        .navigationTitle("Dropdown Manager")
+        .navigationBarTitleDisplayMode(.large)
         .sheet(isPresented: $showingAddOption) {
             addOptionSheet
         }
@@ -102,29 +97,36 @@ struct DropdownManagerView: View {
                 .font(.headline)
                 .padding(.horizontal)
             
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 12) {
-                    ForEach(Array(dropdownManager.options.keys.sorted()), id: \.self) { category in
-                        Button(action: {
-                            selectedCategory = category
-                        }) {
-                            Text(categoryDisplayName(for: category))
-                                .font(.subheadline)
-                                .fontWeight(.medium)
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 8)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 20)
-                                        .fill(selectedCategory == category ? Color.blue : Color.gray.opacity(0.2))
-                                )
-                                .foregroundColor(selectedCategory == category ? .white : .primary)
-                        }
-                    }
+            Picker("Category", selection: $selectedCategory) {
+                ForEach(orderedCategories, id: \.self) { category in
+                    Text(categoryDisplayName(for: category))
+                        .tag(category)
                 }
-                .padding(.horizontal)
             }
+            .pickerStyle(.menu)
+            .padding(.horizontal)
         }
         .padding(.vertical)
+    }
+    
+    // MARK: - Ordered Categories
+    private var orderedCategories: [String] {
+        // Reorder categories in logical order
+        let preferredOrder = [
+            "reasonsForService",
+            "type", 
+            "size",
+            "color",
+            "machineType",
+            "machineBrand",
+            "waitTime"
+        ]
+        
+        let allCategories = Array(dropdownManager.options.keys)
+        let ordered = preferredOrder.filter { allCategories.contains($0) }
+        let remaining = allCategories.filter { !preferredOrder.contains($0) }
+        
+        return ordered + remaining.sorted()
     }
     
     // MARK: - Editable Content (Admin/SuperAdmin)
@@ -141,6 +143,20 @@ struct DropdownManagerView: View {
                     .foregroundColor(.secondary)
             }
             .padding(.horizontal)
+            
+            // Add Option Button
+            Button(action: {
+                showingAddOption = true
+            }) {
+                HStack {
+                    Image(systemName: "plus.circle.fill")
+                    Text("Add New Option")
+                }
+                .font(.subheadline)
+                .fontWeight(.medium)
+                .foregroundColor(.blue)
+                .padding(.horizontal)
+            }
             
             // Options List
             List {
@@ -189,19 +205,35 @@ struct DropdownManagerView: View {
             }
             .padding(.horizontal)
             
-            // Request Changes Button
-            Button(action: {
-                // TODO: Implement request changes functionality
-            }) {
-                HStack {
-                    Image(systemName: "exclamationmark.bubble")
-                    Text("Request Changes")
+            // Action Buttons
+            HStack {
+                Button(action: {
+                    // TODO: Implement request changes functionality
+                }) {
+                    HStack {
+                        Image(systemName: "exclamationmark.bubble")
+                        Text("Request Changes")
+                    }
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                    .foregroundColor(.blue)
                 }
-                .font(.subheadline)
-                .fontWeight(.medium)
-                .foregroundColor(.blue)
-                .padding(.horizontal)
+                
+                Spacer()
+                
+                Button(action: {
+                    showingAddOption = true
+                }) {
+                    HStack {
+                        Image(systemName: "plus.circle.fill")
+                        Text("Add New Option")
+                    }
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                    .foregroundColor(.blue)
+                }
             }
+            .padding(.horizontal)
             
             // Options List (Read-Only)
             List {
@@ -268,43 +300,43 @@ struct DropdownManagerView: View {
     
     // MARK: - Add Option Sheet
     private var addOptionSheet: some View {
-        NavigationView {
-            VStack(spacing: 20) {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Label")
-                        .font(.headline)
-                    TextField("Display name", text: $newOptionLabel)
-                        .textFieldStyle(RoundedBorderTextFieldStyle())
+        VStack(spacing: 20) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Label")
+                    .font(.headline)
+                TextField("Display name", text: $newOptionLabel)
+                    .textFieldStyle(RoundedBorderTextFieldStyle())
+            }
+            
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Value")
+                    .font(.headline)
+                TextField("Internal value", text: $newOptionValue)
+                    .textFieldStyle(RoundedBorderTextFieldStyle())
+            }
+            
+            Spacer()
+            
+            HStack {
+                Button("Cancel") {
+                    showingAddOption = false
+                    resetNewOptionFields()
                 }
-                
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Value")
-                        .font(.headline)
-                    TextField("Internal value", text: $newOptionValue)
-                        .textFieldStyle(RoundedBorderTextFieldStyle())
-                }
+                .buttonStyle(.bordered)
                 
                 Spacer()
+                
+                Button("Add") {
+                    addNewOption()
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(newOptionLabel.isEmpty || newOptionValue.isEmpty)
             }
             .padding()
-            .navigationTitle("Add Option")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Cancel") {
-                        showingAddOption = false
-                        resetNewOptionFields()
-                    }
-                }
-                
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Add") {
-                        addNewOption()
-                    }
-                    .disabled(newOptionLabel.isEmpty || newOptionValue.isEmpty)
-                }
-            }
         }
+        .padding()
+        .navigationTitle("Add Option")
+        .navigationBarTitleDisplayMode(.inline)
     }
     
     // MARK: - Helper Methods
@@ -357,6 +389,7 @@ struct DropdownManagerView: View {
 
 // MARK: - DropdownManager Extensions
 extension DropdownManager {
+    @MainActor
     func addOption(_ option: DropdownOption, to category: String) {
         if options[category] == nil {
             options[category] = []
@@ -365,16 +398,19 @@ extension DropdownManager {
         incrementSchemaVersion()
     }
     
+    @MainActor
     func removeOption(_ option: DropdownOption, from category: String) {
         options[category]?.removeAll { $0.id == option.id }
         incrementSchemaVersion()
     }
     
+    @MainActor
     func moveOptions(from source: IndexSet, to destination: Int, in category: String) {
         options[category]?.move(fromOffsets: source, toOffset: destination)
         incrementSchemaVersion()
     }
     
+    @MainActor
     private func incrementSchemaVersion() {
         // Increment the schema version when dropdowns are modified
         DropdownVersionService.shared.incrementVersion()

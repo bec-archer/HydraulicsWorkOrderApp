@@ -194,8 +194,8 @@ struct RouterView: View {
                                 .environmentObject(appState)
                                 .onAppear { print("🔍 DEBUG: RouterView switching to UserManagerView") }
                         case .dropdownManager:
-                            Text("Dropdown Manager - Coming Soon")
-                                .navigationTitle("Dropdown Manager")
+                            DropdownManagerView()
+                                .environmentObject(appState)
                                 .onAppear { print("🔍 DEBUG: RouterView switching to DropdownManagerView") }
                         case .customers:
                             CustomersView()

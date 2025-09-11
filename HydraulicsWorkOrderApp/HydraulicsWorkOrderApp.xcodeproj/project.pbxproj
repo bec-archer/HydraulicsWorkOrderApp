@@ -76,6 +76,7 @@
 				Utilities/ThemeManager.swift,
 				Views/Admin/DataMigrationView.swift,
 				Views/Admin/DeletedWorkOrdersView.swift,
+				Views/Admin/DropdownManagerView.swift,
 				Views/Admin/MyWorkItemsView.swift,
 				Views/Admin/SettingsView.swift,
 				Views/Admin/SyncStatusView.swift,

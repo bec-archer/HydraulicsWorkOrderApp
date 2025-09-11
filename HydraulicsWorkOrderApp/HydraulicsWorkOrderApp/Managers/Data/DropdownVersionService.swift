@@ -102,4 +102,12 @@ class DropdownVersionService: ObservableObject {
     func getNonEditableItems(_ items: [WO_Item]) -> [WO_Item] {
         return items.filter { !canEditItem($0) }
     }
+    
+    /// Increment the current schema version when dropdowns are modified
+    func incrementVersion() {
+        // This would typically update a stored version number
+        // For now, we'll rely on the DropdownSchema.currentVersion constant
+        // In a full implementation, this would increment a stored version
+        print("🔍 DEBUG: DropdownVersionService.incrementVersion() called - version management active")
+    }
 }
