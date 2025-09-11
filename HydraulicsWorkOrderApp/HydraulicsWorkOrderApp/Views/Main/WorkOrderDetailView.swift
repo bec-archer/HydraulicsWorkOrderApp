@@ -398,7 +398,7 @@ struct WorkOrderDetailView: View {
                         HStack(spacing: 4) {
                             Image(systemName: "phone.fill")
                                 .font(.caption)
-                            Text(formatPhoneNumber(viewModel.workOrder.customerPhone))
+                            Text(viewModel.workOrder.customerPhone.formattedPhoneNumber)
                                 .font(.caption)
                                 .fontWeight(.semibold)
                         }
@@ -420,7 +420,7 @@ struct WorkOrderDetailView: View {
         )
         .accessibilityElement(children: .combine)
         .accessibilityLabel(
-            "Work Order \(viewModel.workOrder.workOrderNumber), created \(viewModel.workOrder.timestamp, format: .dateTime.month(.abbreviated).day().year().hour().minute()), customer \(viewModel.workOrder.customerName), phone \(formatPhoneNumber(viewModel.workOrder.customerPhone))\(viewModel.workOrder.flagged ? ", flagged" : "")"
+            "Work Order \(viewModel.workOrder.workOrderNumber), created \(viewModel.workOrder.timestamp, format: .dateTime.month(.abbreviated).day().year().hour().minute()), customer \(viewModel.workOrder.customerName), phone \(viewModel.workOrder.customerPhone.formattedPhoneNumber)\(viewModel.workOrder.flagged ? ", flagged" : "")"
         )
     }
     
@@ -552,7 +552,7 @@ struct WorkOrderDetailView: View {
                     Text(viewModel.currentStatus)
                         .font(.subheadline)
                         .fontWeight(.medium)
-                        .foregroundColor(statusColor(viewModel.currentStatus))
+                        .foregroundColor(viewModel.getStatusColor(viewModel.currentStatus))
                     Spacer()
                 }
                 
@@ -828,17 +828,6 @@ struct WorkOrderDetailView: View {
                                                 }
                                             }
                                             .buttonStyle(PlainButtonStyle())
-                                        } else if item.imageUrls.count == 4 {
-                                            // Keep 2×2 shape when exactly 3 extras (add a subtle filler)
-                                            Rectangle()
-                                                .fill(ThemeManager.shared.border.opacity(0.08))
-                                                .frame(width: thumbSize, height: thumbSize)
-                                                .cornerRadius(ThemeManager.shared.cardCornerRadius - 6)
-                                                .overlay(
-                                                    Image(systemName: "photo")
-                                                        .font(.system(size: 18, weight: .regular))
-                                                        .foregroundColor(ThemeManager.shared.textSecondary)
-                                                )
                                         }
                                     }
                                     .frame(width: primarySize, alignment: .leading) // grid width matches primary
@@ -1032,14 +1021,14 @@ struct WorkOrderDetailView: View {
             }
         }
         
-        private func isReasonPerformed(_ reason: String) -> Bool {
+        func isReasonPerformed(_ reason: String) -> Bool {
             let expectedStatus = "Service Performed — \(reason)"
             return item.statusHistory.contains { status in
                 status.status == expectedStatus
             }
         }
 
-        private func summaryLineForItem(_ item: WO_Item) -> String {
+        func summaryLineForItem(_ item: WO_Item) -> String {
             // Builds: Size / Color / Machine / Brand / Wait (skip empties)
             let size = item.dropdowns["size"]
             let color = item.dropdowns["color"]
@@ -1058,44 +1047,6 @@ struct WorkOrderDetailView: View {
     
     // MARK: - Helper Methods
     
-    private func formatPhoneNumber(_ phoneNumber: String) -> String {
-        // Remove all non-digit characters
-        let digits = phoneNumber.replacingOccurrences(of: "[^0-9]", with: "", options: .regularExpression)
-        
-        // Format with dashes based on length
-        if digits.count == 10 {
-            // Format as XXX-XXX-XXXX
-            let areaCode = String(digits.prefix(3))
-            let firstThree = String(digits.dropFirst(3).prefix(3))
-            let lastFour = String(digits.suffix(4))
-            return "\(areaCode)-\(firstThree)-\(lastFour)"
-        } else if digits.count == 11 && digits.hasPrefix("1") {
-            // Format as 1-XXX-XXX-XXXX
-            let countryCode = String(digits.prefix(1))
-            let areaCode = String(digits.dropFirst(1).prefix(3))
-            let firstThree = String(digits.dropFirst(4).prefix(3))
-            let lastFour = String(digits.suffix(4))
-            return "\(countryCode)-\(areaCode)-\(firstThree)-\(lastFour)"
-        } else {
-            // Return original if not a standard format
-            return phoneNumber
-        }
-    }
-    
-    private func statusColor(_ status: String) -> Color {
-        switch status.lowercased() {
-        case "checked in":
-            return .blue
-        case "in progress":
-            return .orange
-        case "completed":
-            return .green
-        case "closed":
-            return .gray
-        default:
-            return .primary
-        }
-    }
 }
 
 // MARK: - PhoneActionSheet
