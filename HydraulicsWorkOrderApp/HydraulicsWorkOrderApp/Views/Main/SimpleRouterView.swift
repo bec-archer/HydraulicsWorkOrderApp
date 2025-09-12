@@ -109,16 +109,21 @@ struct SimpleRouterView: View {
                 }
                 .buttonStyle(.plain)
                 
-                // Add New Work Order button
+                // Dynamic Navigation Button
                 Button {
-                    print("🔍 DEBUG: Add New Work Order button tapped - navigating to new work order")
-                    appState.currentView = .newWorkOrder
+                    if appState.currentView == .newWorkOrder {
+                        print("🔍 DEBUG: Check In Work Order button tapped")
+                        appState.triggerCheckIn()
+                    } else {
+                        print("🔍 DEBUG: Add New Work Order button tapped - navigating to new work order")
+                        appState.currentView = .newWorkOrder
+                    }
                 } label: {
                     HStack(spacing: 4) {
-                        Image(systemName: "plus")
+                        Image(systemName: appState.currentView == .newWorkOrder ? "checkmark" : "plus")
                             .font(.subheadline)
                             .fontWeight(.bold)
-                        Text("Add New Work Order")
+                        Text(appState.currentView == .newWorkOrder ? "Check In Work Order" : "Add New Work Order")
                             .font(.subheadline)
                             .fontWeight(.bold)
                     }

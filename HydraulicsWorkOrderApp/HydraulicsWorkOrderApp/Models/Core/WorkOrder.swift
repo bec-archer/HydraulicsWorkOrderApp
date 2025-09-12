@@ -267,7 +267,16 @@ extension WorkOrder {
     }
     
     var isComplete: Bool {
-        status == "Done" || status == "Completed"
+        // Check work order status first
+        if status == "Done" || status == "Completed" || status == "Complete" {
+            return true
+        }
+        
+        // Also check if any items are complete (for cases where work order status isn't updated)
+        return items.contains { item in
+            let currentStatus = item.statusHistory.last?.status ?? ""
+            return currentStatus.lowercased() == "complete"
+        }
     }
     
     var isInProgress: Bool {

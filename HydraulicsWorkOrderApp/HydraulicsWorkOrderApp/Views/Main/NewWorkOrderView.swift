@@ -83,6 +83,15 @@ struct NewWorkOrderView: View {
             .toolbar { toolbarContent() }
             .safeAreaInset(edge: .bottom) { stickyCheckIn() }
             .scrollDismissesKeyboard(.immediately)
+            .onChange(of: appState.triggerCheckInWorkOrder) { _, _ in
+                // Trigger check-in when requested from SimpleRouterView
+                if viewModel.canCheckIn {
+                    saveWorkOrder {
+                        dismiss()
+                        appState.currentView = .activeWorkOrders
+                    }
+                }
+            }
             
             // Alerts and Sheets
             .alert("Validation Error", isPresented: $viewModel.showError) {

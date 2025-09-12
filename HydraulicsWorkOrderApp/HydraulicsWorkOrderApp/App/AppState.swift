@@ -36,6 +36,9 @@ class AppState: ObservableObject {
     @Published var selectedWorkOrder: WorkOrder? = nil  // For work order detail navigation
     @Published var selectedWorkOrderItem: WO_Item? = nil  // For work order item detail navigation
     @Published var selectedWorkOrderItemIndex: Int? = nil  // Index of the item in the work order
+    
+    // Action triggers for cross-view communication
+    @Published var triggerCheckInWorkOrder: Bool = false  // Trigger check-in from SimpleRouterView
 
     // ───── Current Logged-in User Info ─────
     @Published var currentUser: User? = nil  // The actual logged-in user from database
@@ -107,7 +110,12 @@ class AppState: ObservableObject {
         currentView = .workOrderDetail
         print("🔍 DEBUG: Current currentView is now: \(currentView)")
         splitVisibility = .detailOnly
-        print("🔍 DEBUG: Navigation complete")
+    }
+    
+    // Trigger check-in from SimpleRouterView
+    func triggerCheckIn() {
+        print("🔍 DEBUG: AppState.triggerCheckIn called")
+        triggerCheckInWorkOrder.toggle()  // Toggle to trigger the action
     }
     
     // Navigate to work order item detail

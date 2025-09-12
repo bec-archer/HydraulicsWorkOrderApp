@@ -348,8 +348,12 @@ struct WorkOrderCardThumbnailGrid: View {
                         url: info.url,
                         itemStatus: StatusMapping.ItemStatus(for: info.item),
                         typeQtyLabel: "\(info.item.type.isEmpty ? "Item" : info.item.type) × 1",
-                        onLongPress: onImageLongPress
+                        onLongPress: onImageLongPress,
+                        isWorkOrderComplete: workOrder.isComplete
                     )
+                    .onAppear {
+                        print("🔍 DEBUG: SquareThumb created - WO: \(workOrder.workOrderNumber), status: '\(workOrder.status)', isComplete: \(workOrder.isComplete)")
+                    }
                 }
             } else if displayCount == 2 {
                 // 2 items: TWO full-width rectangular images stacked vertically
@@ -360,7 +364,8 @@ struct WorkOrderCardThumbnailGrid: View {
                             height: doubleHeight,
                             itemStatus: StatusMapping.ItemStatus(for: info.item),
                             typeQtyLabel: "\(info.item.type.isEmpty ? "Item" : info.item.type) × 1",
-                            onLongPress: onImageLongPress
+                            onLongPress: onImageLongPress,
+                            isWorkOrderComplete: workOrder.isComplete
                         )
                     }
                 }
@@ -377,7 +382,8 @@ struct WorkOrderCardThumbnailGrid: View {
                             itemStatus: StatusMapping.ItemStatus(for: info.item),
                             showPlusBadge: (idx == 3 && totalItems > 4) ? (totalItems - 3) : nil,
                             typeQtyLabel: "\(info.item.type.isEmpty ? "Item" : info.item.type) × 1",
-                            onLongPress: onImageLongPress
+                            onLongPress: onImageLongPress,
+                            isWorkOrderComplete: workOrder.isComplete
                         )
                     }
                 }
@@ -413,6 +419,7 @@ private struct SquareThumb: View {
     let itemStatus: StatusMapping.ItemStatus
     var typeQtyLabel: String = ""
     let onLongPress: (URL) -> Void
+    let isWorkOrderComplete: Bool  // NEW: Add completion status
 
     var body: some View {
         GeometryReader { geo in
@@ -436,6 +443,38 @@ private struct SquareThumb: View {
                 .frame(width: geo.size.width, height: geo.size.width) // ⬅️ fixed square frame (like WorkOrderDetailView)
                 .clipped()
                 .cornerRadius(ThemeManager.shared.cardCornerRadius - 2)
+
+                // Green "Complete" banner (diagonal across top-left corner)
+                if isWorkOrderComplete {
+                    VStack {
+                        HStack {
+                            Text("COMPLETE")
+                                .font(.caption2)
+                                .fontWeight(.bold)
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 4)
+                                        .fill(Color.green)
+                                )
+                                .rotationEffect(.degrees(-15))
+                                .shadow(color: .black.opacity(0.3), radius: 2, x: 1, y: 1)
+                            Spacer()
+                        }
+                        Spacer()
+                    }
+                    .padding(8)
+                    .onAppear {
+                        print("🟢 DEBUG: Green COMPLETE banner showing for work order")
+                    }
+                } else {
+                    // Debug: Show when banner is NOT showing
+                    Color.clear
+                        .onAppear {
+                            print("🔍 DEBUG: Work order NOT complete - isWorkOrderComplete: \(isWorkOrderComplete)")
+                        }
+                }
 
                 // Indicator dot (inside)
                 OverlayDot(color: itemStatus.color, size: 10)
@@ -477,6 +516,7 @@ private struct FullWidthThumb: View {
     let itemStatus: StatusMapping.ItemStatus
     var typeQtyLabel: String = ""
     let onLongPress: (URL) -> Void
+    let isWorkOrderComplete: Bool  // NEW: Add completion status
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
@@ -516,6 +556,29 @@ private struct FullWidthThumb: View {
             .frame(maxWidth: .infinity)
             .clipped()
             .cornerRadius(10)
+
+            // Green "Complete" banner (diagonal across top-left corner)
+            if isWorkOrderComplete {
+                VStack {
+                    HStack {
+                        Text("COMPLETE")
+                            .font(.caption2)
+                            .fontWeight(.bold)
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(
+                                RoundedRectangle(cornerRadius: 4)
+                                    .fill(Color.green)
+                            )
+                            .rotationEffect(.degrees(-15))
+                            .shadow(color: .black.opacity(0.3), radius: 2, x: 1, y: 1)
+                        Spacer()
+                    }
+                    Spacer()
+                }
+                .padding(8)
+            }
 
             // Indicator dot (top-right, inside the image)
             OverlayDot(color: itemStatus.color, size: 10)
@@ -560,6 +623,7 @@ private struct GridThumb: View {
     let showPlusBadge: Int?
     var typeQtyLabel: String = ""
     let onLongPress: (URL) -> Void
+    let isWorkOrderComplete: Bool  // NEW: Add completion status
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
@@ -598,6 +662,29 @@ private struct GridThumb: View {
             .frame(width: size, height: size)
             .clipped()
             .cornerRadius(10)
+
+            // Green "Complete" banner (diagonal across top-left corner)
+            if isWorkOrderComplete {
+                VStack {
+                    HStack {
+                        Text("COMPLETE")
+                            .font(.caption2)
+                            .fontWeight(.bold)
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 3)
+                            .background(
+                                RoundedRectangle(cornerRadius: 4)
+                                    .fill(Color.green)
+                            )
+                            .rotationEffect(.degrees(-15))
+                            .shadow(color: .black.opacity(0.3), radius: 2, x: 1, y: 1)
+                        Spacer()
+                    }
+                    Spacer()
+                }
+                .padding(6)
+            }
 
             // "+Qty" badge for overflow (centered)
             if let overflow = showPlusBadge, overflow > 0 {
