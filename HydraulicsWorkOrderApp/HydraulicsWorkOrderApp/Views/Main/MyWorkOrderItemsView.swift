@@ -15,8 +15,11 @@ struct MyWorkOrderItemsView: View {
     @StateObject private var workOrdersDB = WorkOrdersDatabase.shared
     @State private var filteredItemData: [WorkOrderItemData] = []
     @State private var isLoading = true
-    @State private var selectedItemData: WorkOrderItemData?
     @State private var showItemDetailSheet = false
+    @State private var itemDataForSheet: WorkOrderItemData?
+    @State private var sheetItemData: WorkOrderItemData?
+    @State private var capturedItemData: WorkOrderItemData?
+    @State private var displayItemData: WorkOrderItemData?
 
     var body: some View {
         // ───── BODY ─────
@@ -49,8 +52,23 @@ struct MyWorkOrderItemsView: View {
                             workOrder: itemData.workOrder,
                             itemIndex: itemData.itemIndex,
                             onTap: {
-                                selectedItemData = itemData
-                                showItemDetailSheet = true
+                                print("🔍 DEBUG: Tapped on item: \(itemData.workOrder.workOrderNumber)-\(String(format: "%03d", itemData.itemIndex + 1))")
+                                print("🔍 DEBUG: Capturing itemData: \(itemData.workOrder.workOrderNumber)")
+                                
+                                // Capture the data immediately
+                                capturedItemData = itemData
+                                itemDataForSheet = itemData
+                                sheetItemData = itemData
+                                
+                                print("🔍 DEBUG: capturedItemData is now: \(capturedItemData?.workOrder.workOrderNumber ?? "nil")")
+                                print("🔍 DEBUG: itemDataForSheet is now: \(itemDataForSheet?.workOrder.workOrderNumber ?? "nil")")
+                                print("🔍 DEBUG: sheetItemData is now: \(sheetItemData?.workOrder.workOrderNumber ?? "nil")")
+                                
+                                // Use a small delay to ensure state is set before presenting sheet
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                    showItemDetailSheet = true
+                                    print("🔍 DEBUG: showItemDetailSheet set to: \(showItemDetailSheet)")
+                                }
                             }
                         )
                     }
@@ -67,14 +85,146 @@ struct MyWorkOrderItemsView: View {
         .refreshable {
             loadFilteredItems()
         }
-        .sheet(isPresented: $showItemDetailSheet) {
-            if let itemData = selectedItemData {
-                SimpleItemDetailSheet(
-                    workOrder: itemData.workOrder,
-                    item: itemData.item,
-                    itemIndex: itemData.itemIndex
-                )
-                .environmentObject(appState)
+        .fullScreenCover(isPresented: $showItemDetailSheet) {
+            VStack {
+                Text("Item Details")
+                    .font(.title)
+                    .padding()
+                
+                if let itemData = displayItemData {
+                    Text("Work Order: \(itemData.workOrder.workOrderNumber)")
+                        .font(.headline)
+                        .padding()
+                    
+                    Text("Item: \(itemData.item.type)")
+                        .font(.subheadline)
+                        .padding()
+                    
+                    Text("Customer: \(itemData.workOrder.customerName)")
+                        .font(.subheadline)
+                        .padding()
+                    
+                    // ───── Reasons for Service ─────
+                    if !itemData.item.reasonsForService.isEmpty {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Reasons for Service")
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                            
+                            ForEach(itemData.item.reasonsForService, id: \.self) { reason in
+                                HStack(spacing: 8) {
+                                    Image(systemName: itemData.item.completedReasons.contains(reason) ? "checkmark.square.fill" : "square")
+                                        .foregroundColor(itemData.item.completedReasons.contains(reason) ? .green : .secondary)
+                                    
+                                    // ───── Display reason with note for "Other" ─────
+                                    if reason.lowercased().contains("other") && !(itemData.item.reasonNotes?.isEmpty ?? true) {
+                                        Text("\(reason) • \(itemData.item.reasonNotes ?? "")")
+                                            .font(.caption)
+                                            .foregroundColor(.primary)
+                                    } else {
+                                        Text(reason)
+                                            .font(.caption)
+                                            .foregroundColor(.primary)
+                                    }
+                                    
+                                    Spacer()
+                                }
+                            }
+                        }
+                        .padding()
+                        .background(Color(.systemGray6))
+                        .cornerRadius(8)
+                    }
+                    
+                    // ───── Status History ─────
+                    if !itemData.item.statusHistory.isEmpty {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Status History")
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                            
+                            ForEach(itemData.item.statusHistory.reversed(), id: \.timestamp) { status in
+                                HStack {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(status.status)
+                                            .font(.caption)
+                                            .fontWeight(.medium)
+                                        
+                                        Text("by \(status.user)")
+                                            .font(.caption2)
+                                            .foregroundColor(.secondary)
+                                    }
+                                    
+                                    Spacer()
+                                    
+                                    Text(status.timestamp, format: .dateTime.month(.abbreviated).day().year().hour().minute())
+                                        .font(.caption2)
+                                        .foregroundColor(.secondary)
+                                }
+                                .padding(.vertical, 2)
+                            }
+                        }
+                        .padding()
+                        .background(Color(.systemGray6))
+                        .cornerRadius(8)
+                    }
+                    
+                    Text("Debug: displayItemData is available")
+                        .font(.caption)
+                        .foregroundColor(.green)
+                        .padding()
+                } else {
+                    Text("Work Order: UNKNOWN")
+                        .font(.headline)
+                        .padding()
+                    
+                    Text("Item: UNKNOWN")
+                        .font(.subheadline)
+                        .padding()
+                    
+                    Text("Customer: UNKNOWN")
+                        .font(.subheadline)
+                        .padding()
+                    
+                    Text("Debug: displayItemData is nil")
+                        .font(.caption)
+                        .foregroundColor(.red)
+                        .padding()
+                }
+                
+                Button("Close") {
+                    showItemDetailSheet = false
+                    itemDataForSheet = nil
+                    sheetItemData = nil
+                    capturedItemData = nil
+                    displayItemData = nil
+                }
+                .padding()
+                .background(Color.blue)
+                .foregroundColor(.white)
+                .cornerRadius(8)
+                
+                Spacer()
+            }
+            .padding()
+            .onAppear {
+                print("🔍 DEBUG: Sheet appeared, capturedItemData is: \(capturedItemData?.workOrder.workOrderNumber ?? "nil")")
+                print("🔍 DEBUG: Sheet appeared, itemDataForSheet is: \(itemDataForSheet?.workOrder.workOrderNumber ?? "nil")")
+                print("🔍 DEBUG: Sheet appeared, sheetItemData is: \(sheetItemData?.workOrder.workOrderNumber ?? "nil")")
+                
+                // Set displayItemData from any available source
+                if let data = capturedItemData {
+                    displayItemData = data
+                    print("🔍 DEBUG: Set displayItemData from capturedItemData: \(data.workOrder.workOrderNumber)")
+                } else if let data = itemDataForSheet {
+                    displayItemData = data
+                    print("🔍 DEBUG: Set displayItemData from itemDataForSheet: \(data.workOrder.workOrderNumber)")
+                } else if let data = sheetItemData {
+                    displayItemData = data
+                    print("🔍 DEBUG: Set displayItemData from sheetItemData: \(data.workOrder.workOrderNumber)")
+                } else {
+                    print("🔍 DEBUG: No data available to set displayItemData")
+                }
             }
         }
         // END
@@ -285,9 +435,16 @@ struct MyWorkOrderItemCard: View {
                                     .foregroundColor(item.completedReasons.contains(reason) ? .green : .secondary)
                                     .font(.caption)
                                 
-                                Text(reason)
-                                    .font(.caption)
-                                    .foregroundColor(.primary)
+                                // ───── Display reason with note for "Other" ─────
+                                if reason.lowercased().contains("other") && !(item.reasonNotes?.isEmpty ?? true) {
+                                    Text("\(reason) • \(item.reasonNotes ?? "")")
+                                        .font(.caption)
+                                        .foregroundColor(.primary)
+                                } else {
+                                    Text(reason)
+                                        .font(.caption)
+                                        .foregroundColor(.primary)
+                                }
                                 
                                 Spacer()
                             }
@@ -302,7 +459,7 @@ struct MyWorkOrderItemCard: View {
                             .font(.caption)
                             .foregroundColor(.secondary)
                         Spacer()
-                        Text(lastStatus.timestamp, style: .relative)
+                        Text(lastStatus.timestamp, format: .dateTime.month(.abbreviated).day().year().hour().minute())
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
@@ -439,15 +596,24 @@ struct MyWorkOrderItemCard: View {
     }
 }
 
-// MARK: - SimpleItemDetailSheet
-struct SimpleItemDetailSheet: View {
+// MARK: - ItemDetailSheet
+struct ItemDetailSheet: View {
     let workOrder: WorkOrder
     let item: WO_Item
     let itemIndex: Int
     
     @EnvironmentObject private var appState: AppState
     @Environment(\.dismiss) private var dismiss
+    @StateObject private var workOrdersDB = WorkOrdersDatabase.shared
     
+    // ───── State for functionality ─────
+    @State private var showStatusSelection = false
+    @State private var showAddNotes = false
+    @State private var showGallery = false
+    @State private var showImageViewer = false
+    @State private var selectedImageURL: URL?
+    
+    // ───── Computed Properties ─────
     private var itemDisplayName: String {
         "\(workOrder.workOrderNumber)-\(String(format: "%03d", itemIndex + 1))"
     }
@@ -457,184 +623,829 @@ struct SimpleItemDetailSheet: View {
     }
     
     var body: some View {
-        NavigationView {
+        VStack(spacing: 0) {
+            // ───── Custom Navigation Header ─────
+            HStack {
+                Button("Back") {
+                    dismiss()
+                }
+                .foregroundColor(.blue)
+                
+                Spacer()
+                
+                Text("Item Details")
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                
+                Spacer()
+                
+                Menu {
+                    Button("Change Status") {
+                        showStatusSelection = true
+                    }
+                    
+                    Button("Add Notes") {
+                        showAddNotes = true
+                    }
+                    
+                    Button("View Full Work Order") {
+                        dismiss()
+                        appState.navigateToWorkOrderDetail(workOrder)
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                        .foregroundColor(.blue)
+                }
+            }
+            .padding()
+            .background(Color(.systemBackground))
+            
+            Divider()
+            
+            // ───── Content ─────
             ScrollView {
                 VStack(spacing: 20) {
-                    // ───── Item Header ─────
-                    VStack(alignment: .leading, spacing: 12) {
-                        HStack {
-                            Text(itemDisplayName)
-                                .font(.title2)
-                                .fontWeight(.bold)
-                            
-                            Spacer()
-                            
-                            StatusBadge(status: currentStatus)
-                        }
-                        
-                        Text(item.type)
-                            .font(.title3)
-                            .foregroundColor(.secondary)
-                    }
-                    .padding()
-                    .background(Color(.systemGray6))
-                    .cornerRadius(12)
+                    // ───── Item Header Card ─────
+                    itemHeaderCard
                     
-                    // ───── Customer Info ─────
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Customer")
-                            .font(.headline)
-                        
-                        Text(workOrder.customerName)
-                            .font(.subheadline)
-                        
-                        if !workOrder.customerPhone.isEmpty {
-                            HStack {
-                                Text(workOrder.customerPhone)
-                                    .font(.subheadline)
-                                
-                                Spacer()
-                                
-                                Button(action: {
-                                    if let url = URL(string: "tel:\(workOrder.customerPhone)") {
-                                        UIApplication.shared.open(url)
-                                    }
-                                }) {
-                                    Image(systemName: "phone")
-                                        .foregroundColor(.blue)
-                                }
-                            }
-                        }
-                    }
-                    .padding()
-                    .background(Color(.systemGray6))
-                    .cornerRadius(12)
+                    // ───── Item Images Section ─────
+                    itemImagesSection
                     
-                    // ───── Reasons for Service ─────
-                    if !item.reasonsForService.isEmpty {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Reasons for Service")
-                                .font(.headline)
-                            
-                            ForEach(item.reasonsForService, id: \.self) { reason in
-                                HStack(spacing: 8) {
-                                    Image(systemName: item.completedReasons.contains(reason) ? "checkmark.square.fill" : "square")
-                                        .foregroundColor(item.completedReasons.contains(reason) ? .green : .secondary)
-                                    
-                                    Text(reason)
-                                        .font(.subheadline)
-                                    
-                                    Spacer()
-                                }
-                            }
-                        }
-                        .padding()
-                        .background(Color(.systemGray6))
-                        .cornerRadius(12)
-                    }
+                    // ───── Item Details Section ─────
+                    itemDetailsSection
                     
-                    // ───── Status History ─────
-                    if !item.statusHistory.isEmpty {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Status History")
-                                .font(.headline)
-                            
-                            ForEach(item.statusHistory.reversed(), id: \.timestamp) { status in
-                                HStack {
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(status.status)
-                                            .font(.subheadline)
-                                            .fontWeight(.medium)
-                                        
-                                        Text("by \(status.user)")
-                                            .font(.caption)
-                                            .foregroundColor(.secondary)
-                                    }
-                                    
-                                    Spacer()
-                                    
-                                    Text(status.timestamp, style: .relative)
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                }
-                                .padding(.vertical, 4)
-                            }
-                        }
-                        .padding()
-                        .background(Color(.systemGray6))
-                        .cornerRadius(12)
+                    // ───── Status & Notes Section ─────
+                    statusAndNotesSection
+                }
+                .padding()
+            }
+        }
+        .sheet(isPresented: $showStatusSelection) {
+            StatusSelectionView(
+                currentStatus: currentStatus,
+                onStatusSelected: { newStatus in
+                    Task {
+                        await updateItemStatus(newStatus)
                     }
-                    
-                    // ───── Notes ─────
-                    if !item.notes.isEmpty {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Notes")
-                                .font(.headline)
-                            
-                            ForEach(item.notes.reversed(), id: \.timestamp) { note in
-                                VStack(alignment: .leading, spacing: 4) {
-                                    reasonServiceNoteText(note.text)
-                                    
-                                    HStack {
-                                        Text("by \(note.user)")
-                                            .font(.caption)
-                                            .foregroundColor(.secondary)
-                                        
-                                        Spacer()
-                                        
-                                        Text(note.timestamp, style: .relative)
-                                            .font(.caption)
-                                            .foregroundColor(.secondary)
-                                    }
+                    showStatusSelection = false
+                }
+            )
+        }
+        .sheet(isPresented: $showAddNotes) {
+            AddNotesView(
+                workOrder: workOrder,
+                item: item,
+                itemIndex: itemIndex,
+                onNotesAdded: { noteText, images in
+                    Task {
+                        await addItemNote(noteText, images: images)
+                    }
+                    showAddNotes = false
+                }
+            )
+        }
+        .sheet(isPresented: $showGallery) {
+            ImageGalleryView(images: item.imageUrls, title: itemDisplayName)
+        }
+        .sheet(isPresented: $showImageViewer) {
+            if let imageURL = selectedImageURL {
+                FullScreenImageViewer(imageURL: imageURL, isPresented: $showImageViewer)
+            }
+        }
+    }
+    
+    // MARK: - View Components
+    
+    @ViewBuilder
+    private var itemHeaderCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text(itemDisplayName)
+                    .font(.title2)
+                    .fontWeight(.bold)
+                
+                Spacer()
+                
+                StatusBadge(status: currentStatus)
+            }
+            
+            Text(item.type)
+                .font(.title3)
+                .foregroundColor(.secondary)
+        }
+        .padding()
+        .background(Color(.systemGray6))
+        .cornerRadius(12)
+    }
+    
+    @ViewBuilder
+    private var itemImagesSection: some View {
+        if !item.imageUrls.isEmpty {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Images")
+                    .font(.headline)
+                
+                LazyVGrid(columns: [
+                    GridItem(.flexible()),
+                    GridItem(.flexible()),
+                    GridItem(.flexible())
+                ], spacing: 8) {
+                    ForEach(Array(item.imageUrls.prefix(6).enumerated()), id: \.offset) { index, imageURL in
+                        AsyncImage(url: URL(string: imageURL)) { image in
+                            image
+                                .resizable()
+                                .scaledToFill()
+                                .frame(height: 80)
+                                .clipped()
+                                .cornerRadius(8)
+                                .onTapGesture {
+                                    selectedImageURL = URL(string: imageURL)
+                                    showImageViewer = true
                                 }
-                                .padding(.vertical, 4)
-                            }
+                        } placeholder: {
+                            Rectangle()
+                                .fill(Color(.systemGray5))
+                                .frame(height: 80)
+                                .cornerRadius(8)
                         }
-                        .padding()
-                        .background(Color(.systemGray6))
-                        .cornerRadius(12)
                     }
                 }
-                        .padding()
+                
+                if item.imageUrls.count > 6 {
+                    Button("View All Images") {
+                        showGallery = true
                     }
-                    .navigationTitle("Item Details")
-                    .navigationBarTitleDisplayMode(.inline)
-                    .toolbar {
-                        ToolbarItem(placement: .navigationBarTrailing) {
-                            Button("Done") {
-                                dismiss()
+                    .font(.caption)
+                    .foregroundColor(.blue)
+                }
+            }
+            .padding()
+            .background(Color(.systemGray6))
+            .cornerRadius(12)
+        }
+    }
+    
+    @ViewBuilder
+    private var itemDetailsSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Item Details")
+                .font(.headline)
+            
+            // ───── Customer Info ─────
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Customer")
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                
+                Text(workOrder.customerName)
+                    .font(.subheadline)
+                
+                if !workOrder.customerPhone.isEmpty {
+                    HStack {
+                        Text(workOrder.customerPhone)
+                            .font(.subheadline)
+                        
+                        Spacer()
+                        
+                        Button(action: {
+                            if let url = URL(string: "tel:\(workOrder.customerPhone)") {
+                                UIApplication.shared.open(url)
+                            }
+                        }) {
+                            Image(systemName: "phone")
+                                .foregroundColor(.blue)
+                        }
+                    }
+                }
+            }
+            
+            // ───── Dropdown Details ─────
+            if !item.dropdowns.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Specifications")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                    
+                    ForEach(Array(item.dropdowns.keys.sorted()), id: \.self) { key in
+                        if let value = item.dropdowns[key], !value.isEmpty {
+                            HStack {
+                                Text("\(key):")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                                Text(value)
+                                    .font(.caption)
+                                    .foregroundColor(.primary)
+                                Spacer()
                             }
                         }
                     }
                 }
             }
             
-            @ViewBuilder
-            func reasonServiceNoteText(_ text: String) -> some View {
-                // Check if this is a Reasons for Service note (starts with ✅ or ❌)
-                if text.hasPrefix("✅") || text.hasPrefix("❌") {
-                    let components = text.components(separatedBy: " • ")
-                    if components.count == 2 {
-                        let emoji = components[0]
-                        let reasonText = components[1]
-                        
-                        HStack(spacing: 4) {
-                            Text(emoji)
-                                .font(.subheadline)
-                            Text(reasonText)
-                                .font(.subheadline)
-                                .fontWeight(.bold)
-                        }
-                    } else {
-                        Text(text)
-                            .font(.subheadline)
-                    }
-                } else {
-                    Text(text)
+            // ───── Reasons for Service ─────
+            if !item.reasonsForService.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Reasons for Service")
                         .font(.subheadline)
+                        .fontWeight(.medium)
+                    
+                    ForEach(item.reasonsForService, id: \.self) { reason in
+                        HStack(spacing: 8) {
+                            Button(action: {
+                                toggleReasonCompletion(reason)
+                            }) {
+                                Image(systemName: item.completedReasons.contains(reason) ? "checkmark.square.fill" : "square")
+                                    .foregroundColor(item.completedReasons.contains(reason) ? .green : .secondary)
+                            }
+                            
+                            // ───── Display reason with note for "Other" ─────
+                            if reason.lowercased().contains("other") && !(item.reasonNotes?.isEmpty ?? true) {
+                                Text("\(reason) • \(item.reasonNotes ?? "")")
+                                    .font(.caption)
+                                    .foregroundColor(.primary)
+                            } else {
+                                Text(reason)
+                                    .font(.caption)
+                                    .foregroundColor(.primary)
+                            }
+                            
+                            Spacer()
+                        }
+                    }
                 }
             }
         }
+        .padding()
+        .background(Color(.systemGray6))
+        .cornerRadius(12)
+    }
+    
+    @ViewBuilder
+    private var statusAndNotesSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Status & Notes")
+                .font(.headline)
+            
+            // ───── Status History ─────
+            if !item.statusHistory.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Status History")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                    
+                    ForEach(item.statusHistory.reversed(), id: \.timestamp) { status in
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(status.status)
+                                    .font(.caption)
+                                    .fontWeight(.medium)
+                                
+                                Text("by \(status.user)")
+                                    .font(.caption2)
+                                    .foregroundColor(.secondary)
+                            }
+                            
+                            Spacer()
+                            
+                            Text(status.timestamp, format: .dateTime.month(.abbreviated).day().year().hour().minute())
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                        }
+                        .padding(.vertical, 2)
+                    }
+                }
+            }
+            
+            // ───── Notes ─────
+            if !item.notes.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Notes")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                    
+                    ForEach(item.notes.reversed(), id: \.timestamp) { note in
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(note.text)
+                                .font(.caption)
+                                .foregroundColor(.primary)
+                            
+                            HStack {
+                                Text("by \(note.user)")
+                                    .font(.caption2)
+                                    .foregroundColor(.secondary)
+                                
+                                Spacer()
+                                
+                                Text(note.timestamp, format: .dateTime.month(.abbreviated).day().year().hour().minute())
+                                    .font(.caption2)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                        .padding(.vertical, 2)
+                    }
+                }
+            }
+        }
+        .padding()
+        .background(Color(.systemGray6))
+        .cornerRadius(12)
+    }
+    
+    // MARK: - Actions
+    
+    private func updateItemStatus(_ newStatus: String) async {
+        do {
+            var updatedWorkOrder = workOrder
+            updatedWorkOrder.items[itemIndex].statusHistory.append(
+                WO_Status(
+                    status: newStatus,
+                    user: appState.currentUserName,
+                    timestamp: Date(),
+                    notes: nil
+                )
+            )
+            updatedWorkOrder.items[itemIndex].lastModified = Date()
+            updatedWorkOrder.items[itemIndex].lastModifiedBy = appState.currentUserName
+            updatedWorkOrder.lastModified = Date()
+            updatedWorkOrder.lastModifiedBy = appState.currentUserName
+            
+            try await workOrdersDB.updateWorkOrder(updatedWorkOrder)
+        } catch {
+            print("❌ Error updating item status: \(error)")
+        }
+    }
+    
+    private func addItemNote(_ noteText: String, images: [UIImage]) async {
+        do {
+            var updatedWorkOrder = workOrder
+            updatedWorkOrder.items[itemIndex].notes.append(
+                WO_Note(
+                    workOrderId: workOrder.id,
+                    itemId: item.id.uuidString,
+                    user: appState.currentUserName,
+                    text: noteText,
+                    timestamp: Date(),
+                    imageUrls: []
+                )
+            )
+            updatedWorkOrder.items[itemIndex].lastModified = Date()
+            updatedWorkOrder.items[itemIndex].lastModifiedBy = appState.currentUserName
+            updatedWorkOrder.lastModified = Date()
+            updatedWorkOrder.lastModifiedBy = appState.currentUserName
+            
+            try await workOrdersDB.updateWorkOrder(updatedWorkOrder)
+        } catch {
+            print("❌ Error adding item note: \(error)")
+        }
+    }
+    
+    private func toggleReasonCompletion(_ reason: String) {
+        Task {
+            do {
+                var updatedWorkOrder = workOrder
+                if updatedWorkOrder.items[itemIndex].completedReasons.contains(reason) {
+                    updatedWorkOrder.items[itemIndex].completedReasons.removeAll { $0 == reason }
+                } else {
+                    updatedWorkOrder.items[itemIndex].completedReasons.append(reason)
+                }
+                updatedWorkOrder.items[itemIndex].lastModified = Date()
+                updatedWorkOrder.items[itemIndex].lastModifiedBy = appState.currentUserName
+                updatedWorkOrder.lastModified = Date()
+                updatedWorkOrder.lastModifiedBy = appState.currentUserName
+                
+                try await workOrdersDB.updateWorkOrder(updatedWorkOrder)
+            } catch {
+                print("❌ Error toggling reason completion: \(error)")
+            }
+        }
+    }
+}
+
+// MARK: - FullItemDetailSheet
+struct FullItemDetailSheet: View {
+    let workOrder: WorkOrder
+    let item: WO_Item
+    let itemIndex: Int
+    let onClose: () -> Void
+    
+    @EnvironmentObject private var appState: AppState
+    @StateObject private var workOrdersDB = WorkOrdersDatabase.shared
+    
+    // ───── State for functionality ─────
+    @State private var showStatusSelection = false
+    @State private var showAddNotes = false
+    @State private var showGallery = false
+    @State private var showImageViewer = false
+    @State private var selectedImageURL: URL?
+    
+    // ───── Computed Properties ─────
+    private var itemDisplayName: String {
+        "\(workOrder.workOrderNumber)-\(String(format: "%03d", itemIndex + 1))"
+    }
+    
+    private var currentStatus: String {
+        item.statusHistory.last?.status ?? "Checked In"
+    }
+    
+    var body: some View {
+        VStack(spacing: 0) {
+            // ───── Custom Navigation Header ─────
+            HStack {
+                Button("Back") {
+                    onClose()
+                }
+                .foregroundColor(.blue)
+                
+                Spacer()
+                
+                Text("Item Details")
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                
+                Spacer()
+                
+                Menu {
+                    Button("Change Status") {
+                        showStatusSelection = true
+                    }
+                    
+                    Button("Add Notes") {
+                        showAddNotes = true
+                    }
+                    
+                    Button("View Full Work Order") {
+                        onClose()
+                        appState.navigateToWorkOrderDetail(workOrder)
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                        .foregroundColor(.blue)
+                }
+            }
+            .padding()
+            .background(Color(.systemBackground))
+            
+            Divider()
+            
+            // ───── Content ─────
+            ScrollView {
+                VStack(spacing: 20) {
+                    // ───── Item Header Card ─────
+                    itemHeaderCard
+                    
+                    // ───── Item Images Section ─────
+                    itemImagesSection
+                    
+                    // ───── Item Details Section ─────
+                    itemDetailsSection
+                    
+                    // ───── Status & Notes Section ─────
+                    statusAndNotesSection
+                }
+                .padding()
+            }
+        }
+        .sheet(isPresented: $showStatusSelection) {
+            StatusSelectionView(
+                currentStatus: currentStatus,
+                onStatusSelected: { newStatus in
+                    Task {
+                        await updateItemStatus(newStatus)
+                    }
+                    showStatusSelection = false
+                }
+            )
+        }
+        .sheet(isPresented: $showAddNotes) {
+            AddNotesView(
+                workOrder: workOrder,
+                item: item,
+                itemIndex: itemIndex,
+                onNotesAdded: { noteText, images in
+                    Task {
+                        await addItemNote(noteText, images: images)
+                    }
+                    showAddNotes = false
+                }
+            )
+        }
+        .sheet(isPresented: $showGallery) {
+            ImageGalleryView(images: item.imageUrls, title: itemDisplayName)
+        }
+        .sheet(isPresented: $showImageViewer) {
+            if let imageURL = selectedImageURL {
+                FullScreenImageViewer(imageURL: imageURL, isPresented: $showImageViewer)
+            }
+        }
+    }
+    
+    // MARK: - View Components
+    
+    @ViewBuilder
+    private var itemHeaderCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text(itemDisplayName)
+                    .font(.title2)
+                    .fontWeight(.bold)
+                
+                Spacer()
+                
+                StatusBadge(status: currentStatus)
+            }
+            
+            Text(item.type)
+                .font(.title3)
+                .foregroundColor(.secondary)
+        }
+        .padding()
+        .background(Color(.systemGray6))
+        .cornerRadius(12)
+    }
+    
+    @ViewBuilder
+    private var itemImagesSection: some View {
+        if !item.imageUrls.isEmpty {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Images")
+                    .font(.headline)
+                
+                LazyVGrid(columns: [
+                    GridItem(.flexible()),
+                    GridItem(.flexible()),
+                    GridItem(.flexible())
+                ], spacing: 8) {
+                    ForEach(Array(item.imageUrls.prefix(6).enumerated()), id: \.offset) { index, imageURL in
+                        AsyncImage(url: URL(string: imageURL)) { image in
+                            image
+                                .resizable()
+                                .scaledToFill()
+                                .frame(height: 80)
+                                .clipped()
+                                .cornerRadius(8)
+                                .onTapGesture {
+                                    selectedImageURL = URL(string: imageURL)
+                                    showImageViewer = true
+                                }
+                        } placeholder: {
+                            Rectangle()
+                                .fill(Color(.systemGray5))
+                                .frame(height: 80)
+                                .cornerRadius(8)
+                        }
+                    }
+                }
+                
+                if item.imageUrls.count > 6 {
+                    Button("View All Images") {
+                        showGallery = true
+                    }
+                    .font(.caption)
+                    .foregroundColor(.blue)
+                }
+            }
+            .padding()
+            .background(Color(.systemGray6))
+            .cornerRadius(12)
+        }
+    }
+    
+    @ViewBuilder
+    private var itemDetailsSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Item Details")
+                .font(.headline)
+            
+            // ───── Customer Info ─────
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Customer")
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                
+                Text(workOrder.customerName)
+                    .font(.subheadline)
+                
+                if !workOrder.customerPhone.isEmpty {
+                    HStack {
+                        Text(workOrder.customerPhone)
+                            .font(.subheadline)
+                        
+                        Spacer()
+                        
+                        Button(action: {
+                            if let url = URL(string: "tel:\(workOrder.customerPhone)") {
+                                UIApplication.shared.open(url)
+                            }
+                        }) {
+                            Image(systemName: "phone")
+                                .foregroundColor(.blue)
+                        }
+                    }
+                }
+            }
+            
+            // ───── Dropdown Details ─────
+            if !item.dropdowns.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Specifications")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                    
+                    ForEach(Array(item.dropdowns.keys.sorted()), id: \.self) { key in
+                        if let value = item.dropdowns[key], !value.isEmpty {
+                            HStack {
+                                Text("\(key):")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                                Text(value)
+                                    .font(.caption)
+                                    .foregroundColor(.primary)
+                                Spacer()
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // ───── Reasons for Service ─────
+            if !item.reasonsForService.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Reasons for Service")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                    
+                    ForEach(item.reasonsForService, id: \.self) { reason in
+                        HStack(spacing: 8) {
+                            Button(action: {
+                                toggleReasonCompletion(reason)
+                            }) {
+                                Image(systemName: item.completedReasons.contains(reason) ? "checkmark.square.fill" : "square")
+                                    .foregroundColor(item.completedReasons.contains(reason) ? .green : .secondary)
+                            }
+                            
+                            // ───── Display reason with note for "Other" ─────
+                            if reason.lowercased().contains("other") && !(item.reasonNotes?.isEmpty ?? true) {
+                                Text("\(reason) • \(item.reasonNotes ?? "")")
+                                    .font(.caption)
+                                    .foregroundColor(.primary)
+                            } else {
+                                Text(reason)
+                                    .font(.caption)
+                                    .foregroundColor(.primary)
+                            }
+                            
+                            Spacer()
+                        }
+                    }
+                }
+            }
+        }
+        .padding()
+        .background(Color(.systemGray6))
+        .cornerRadius(12)
+    }
+    
+    @ViewBuilder
+    private var statusAndNotesSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Status & Notes")
+                .font(.headline)
+            
+            // ───── Status History ─────
+            if !item.statusHistory.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Status History")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                    
+                    ForEach(item.statusHistory.reversed(), id: \.timestamp) { status in
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(status.status)
+                                    .font(.caption)
+                                    .fontWeight(.medium)
+                                
+                                Text("by \(status.user)")
+                                    .font(.caption2)
+                                    .foregroundColor(.secondary)
+                            }
+                            
+                            Spacer()
+                            
+                            Text(status.timestamp, format: .dateTime.month(.abbreviated).day().year().hour().minute())
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                        }
+                        .padding(.vertical, 2)
+                    }
+                }
+            }
+            
+            // ───── Notes ─────
+            if !item.notes.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Notes")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                    
+                    ForEach(item.notes.reversed(), id: \.timestamp) { note in
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(note.text)
+                                .font(.caption)
+                                .foregroundColor(.primary)
+                            
+                            HStack {
+                                Text("by \(note.user)")
+                                    .font(.caption2)
+                                    .foregroundColor(.secondary)
+                                
+                                Spacer()
+                                
+                                Text(note.timestamp, format: .dateTime.month(.abbreviated).day().year().hour().minute())
+                                    .font(.caption2)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                        .padding(.vertical, 2)
+                    }
+                }
+            }
+        }
+        .padding()
+        .background(Color(.systemGray6))
+        .cornerRadius(12)
+    }
+    
+    // MARK: - Actions
+    
+    private func updateItemStatus(_ newStatus: String) async {
+        do {
+            var updatedWorkOrder = workOrder
+            updatedWorkOrder.items[itemIndex].statusHistory.append(
+                WO_Status(
+                    status: newStatus,
+                    user: appState.currentUserName,
+                    timestamp: Date(),
+                    notes: nil
+                )
+            )
+            updatedWorkOrder.items[itemIndex].lastModified = Date()
+            updatedWorkOrder.items[itemIndex].lastModifiedBy = appState.currentUserName
+            updatedWorkOrder.lastModified = Date()
+            updatedWorkOrder.lastModifiedBy = appState.currentUserName
+            
+            try await workOrdersDB.updateWorkOrder(updatedWorkOrder)
+        } catch {
+            print("❌ Error updating item status: \(error)")
+        }
+    }
+    
+    private func addItemNote(_ noteText: String, images: [UIImage]) async {
+        do {
+            var updatedWorkOrder = workOrder
+            updatedWorkOrder.items[itemIndex].notes.append(
+                WO_Note(
+                    workOrderId: workOrder.id,
+                    itemId: item.id.uuidString,
+                    user: appState.currentUserName,
+                    text: noteText,
+                    timestamp: Date(),
+                    imageUrls: []
+                )
+            )
+            updatedWorkOrder.items[itemIndex].lastModified = Date()
+            updatedWorkOrder.items[itemIndex].lastModifiedBy = appState.currentUserName
+            updatedWorkOrder.lastModified = Date()
+            updatedWorkOrder.lastModifiedBy = appState.currentUserName
+            
+            try await workOrdersDB.updateWorkOrder(updatedWorkOrder)
+        } catch {
+            print("❌ Error adding item note: \(error)")
+        }
+    }
+    
+    private func toggleReasonCompletion(_ reason: String) {
+        Task {
+            do {
+                var updatedWorkOrder = workOrder
+                if updatedWorkOrder.items[itemIndex].completedReasons.contains(reason) {
+                    updatedWorkOrder.items[itemIndex].completedReasons.removeAll { $0 == reason }
+                } else {
+                    updatedWorkOrder.items[itemIndex].completedReasons.append(reason)
+                }
+                updatedWorkOrder.items[itemIndex].lastModified = Date()
+                updatedWorkOrder.items[itemIndex].lastModifiedBy = appState.currentUserName
+                updatedWorkOrder.lastModified = Date()
+                updatedWorkOrder.lastModifiedBy = appState.currentUserName
+                
+                try await workOrdersDB.updateWorkOrder(updatedWorkOrder)
+            } catch {
+                print("❌ Error toggling reason completion: \(error)")
+            }
+        }
+    }
+}
+
 
 // ───── PREVIEW ─────
 #Preview {
