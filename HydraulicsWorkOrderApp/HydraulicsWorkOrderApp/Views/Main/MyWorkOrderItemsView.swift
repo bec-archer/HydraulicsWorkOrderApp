@@ -79,11 +79,7 @@ struct MyWorkOrderItemsView: View {
             ) {
                 selectedItemForSheet = nil
                 // Refresh the data when sheet is dismissed
-                Task {
-                    await MainActor.run {
-                        loadFilteredItems()
-                    }
-                }
+                loadFilteredItems()
             }
             .environmentObject(appState)
         }
@@ -1315,12 +1311,23 @@ struct ItemDetailSheetView: View {
     
     @EnvironmentObject var appState: AppState
     @StateObject private var workOrdersDB = WorkOrdersDatabase.shared
+    @State private var currentWorkOrder: WorkOrder
+    @State private var currentItem: WO_Item
     
     @State private var showImageViewer = false
     @State private var selectedImageURL: URL?
     @State private var showGallery = false
     @State private var showStatusSelection = false
     @State private var showAddNotes = false
+    
+    init(workOrder: WorkOrder, item: WO_Item, itemIndex: Int, onClose: @escaping () -> Void) {
+        self.workOrder = workOrder
+        self.item = item
+        self.itemIndex = itemIndex
+        self.onClose = onClose
+        self._currentWorkOrder = State(initialValue: workOrder)
+        self._currentItem = State(initialValue: item)
+    }
     
     var body: some View {
         NavigationStack {
@@ -1329,7 +1336,7 @@ struct ItemDetailSheetView: View {
                     // Header row: Composite item number • Reasons (checkboxes) • StatusBadge
                     HStack(alignment: .top, spacing: 12) {
                         // Left: Composite WO_Number-ItemIndex (e.g., 250826-001-003)
-                        Text("\(workOrder.workOrderNumber)-\(String(format: "%03d", itemIndex + 1))")
+                        Text("\(currentWorkOrder.workOrderNumber)-\(String(format: "%03d", itemIndex + 1))")
                             .font(.headline)
                             .foregroundColor(ThemeManager.shared.textPrimary)
                             .lineLimit(1)
@@ -1339,7 +1346,7 @@ struct ItemDetailSheetView: View {
                         
                         // Middle: Reasons for Service (chosen at intake) — check to log "Service Performed — <Reason>"
                         VStack(alignment: .leading, spacing: 6) {
-                            ForEach(item.reasonsForService, id: \.self) { reason in
+                            ForEach(currentItem.reasonsForService, id: \.self) { reason in
                                 HStack(spacing: 8) {
                                     Button(action: {
                                         toggleReasonCompletion(reason)
@@ -1349,8 +1356,8 @@ struct ItemDetailSheetView: View {
                                     }
                                     
                                     // ───── Display reason with note for "Other" ─────
-                                    if reason.lowercased().contains("other") && !(item.reasonNotes?.isEmpty ?? true) {
-                                        Text("\(reason) • \(item.reasonNotes ?? "")")
+                                    if reason.lowercased().contains("other") && !(currentItem.reasonNotes?.isEmpty ?? true) {
+                                        Text("\(reason) • \(currentItem.reasonNotes ?? "")")
                                 .font(.subheadline)
                                             .foregroundColor(ThemeManager.shared.textPrimary)
                                             .lineLimit(1)
@@ -1371,7 +1378,7 @@ struct ItemDetailSheetView: View {
                             Button(action: {
                                 showStatusSelection = true
                             }) {
-                                StatusBadge(status: getActualItemStatus(item))
+                                StatusBadge(status: getActualItemStatus(currentItem))
                             }
                             .buttonStyle(PlainButtonStyle())
                             
@@ -1387,15 +1394,15 @@ struct ItemDetailSheetView: View {
                     }
                     
                     // Type line
-                    Text(item.type.isEmpty ? "Item" : item.type)
+                    Text(currentItem.type.isEmpty ? "Item" : currentItem.type)
                             .font(.subheadline)
                         .foregroundColor(ThemeManager.shared.textSecondary)
                         .lineLimit(1)
                         .truncationMode(.tail)
                     
                     // Size / Color / Machine / Brand / Wait summary (muted), with inline "Other" note if present
-                    if !summaryLineForItem(item).isEmpty {
-                        Text(summaryLineForItem(item))
+                    if !summaryLineForItem(currentItem).isEmpty {
+                        Text(summaryLineForItem(currentItem))
                             .font(.caption)
                             .foregroundColor(ThemeManager.shared.textSecondary)
                             .lineLimit(1)
@@ -1413,7 +1420,7 @@ struct ItemDetailSheetView: View {
                             
                             VStack(spacing: 8) {
                                 // PRIMARY 1:1 image
-                                if let firstImageURL = item.imageUrls.first {
+                                if let firstImageURL = currentItem.imageUrls.first {
                                     AsyncImage(url: URL(string: firstImageURL)) { image in
                                         image
                                             .resizable()
@@ -1445,8 +1452,8 @@ struct ItemDetailSheetView: View {
                                 }
                                 
                                 // 2×2 thumbnails directly beneath primary (images 2,3,4, +Qty)
-                                if item.imageUrls.count > 1 {
-                                    let extras = Array(item.imageUrls.dropFirst())
+                                if currentItem.imageUrls.count > 1 {
+                                    let extras = Array(currentItem.imageUrls.dropFirst())
                                     LazyVGrid(
                                         columns: [
                                             GridItem(.fixed(thumbSize), spacing: gridSpacing),
@@ -1474,14 +1481,14 @@ struct ItemDetailSheetView: View {
                                         }
                                         
                                         // +Qty tile if there are 6 or more total images
-                                        if item.imageUrls.count >= 6 {
+                                        if currentItem.imageUrls.count >= 6 {
                                             Button(action: {
                                                 // Show gallery for all images
                                                 showGallery = true
                                             }) {
                                                 ZStack {
                                                     // Show the 5th image (index 4) as background
-                                                    AsyncImage(url: URL(string: item.imageUrls[4])) { image in
+                                                    AsyncImage(url: URL(string: currentItem.imageUrls[4])) { image in
                                                         image
                                                             .resizable()
                                                             .aspectRatio(contentMode: .fill)
@@ -1502,7 +1509,7 @@ struct ItemDetailSheetView: View {
                                                         .cornerRadius(ThemeManager.shared.cardCornerRadius - 6)
                                                     
                                                     // +Qty text
-                                                    Text("+\(item.imageUrls.count - 4)")
+                                                    Text("+\(currentItem.imageUrls.count - 4)")
                                                         .font(.headline)
                                                         .foregroundColor(.white)
                                                 }
@@ -1579,11 +1586,11 @@ struct ItemDetailSheetView: View {
             }
         }
         .fullScreenCover(isPresented: $showGallery) {
-            ImageGalleryView(images: item.imageUrls, title: "\(workOrder.workOrderNumber)-\(String(format: "%03d", itemIndex + 1))")
+            ImageGalleryView(images: currentItem.imageUrls, title: "\(currentWorkOrder.workOrderNumber)-\(String(format: "%03d", itemIndex + 1))")
         }
         .fullScreenCover(isPresented: $showStatusSelection) {
             StatusSelectionView(
-                currentStatus: item.statusHistory.last?.status ?? "Checked In",
+                currentStatus: currentItem.statusHistory.last?.status ?? "Checked In",
                 onStatusSelected: { newStatus in
                     updateItemStatus(newStatus)
                     showStatusSelection = false
@@ -1592,8 +1599,8 @@ struct ItemDetailSheetView: View {
         }
         .fullScreenCover(isPresented: $showAddNotes) {
             AddNotesView(
-                workOrder: workOrder,
-                item: item,
+                workOrder: currentWorkOrder,
+                item: currentItem,
                 itemIndex: itemIndex,
                 onNotesAdded: { noteText, images in
                     addItemNote(noteText, images: images)
@@ -1612,7 +1619,7 @@ struct ItemDetailSheetView: View {
     
     // MARK: - Helper Functions
     func isReasonPerformed(_ reason: String) -> Bool {
-        return item.completedReasons.contains(reason)
+        return currentItem.completedReasons.contains(reason)
     }
     
     func getActualItemStatus(_ item: WO_Item) -> String {
@@ -1640,6 +1647,31 @@ struct ItemDetailSheetView: View {
         return components.joined(separator: " • ")
     }
     
+    // MARK: - Data Refresh
+    private func refreshData() {
+        Task {
+            do {
+                let latestWorkOrder = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<WorkOrder, Error>) in
+                    workOrdersDB.fetchWorkOrder(woId: workOrder.id) { result in
+                        switch result {
+                        case .success(let workOrder):
+                            continuation.resume(returning: workOrder)
+                        case .failure(let error):
+                            continuation.resume(throwing: error)
+                        }
+                    }
+                }
+                
+                await MainActor.run {
+                    currentWorkOrder = latestWorkOrder
+                    currentItem = latestWorkOrder.items[itemIndex]
+                }
+            } catch {
+                print("❌ Error refreshing data: \(error)")
+            }
+        }
+    }
+    
     // MARK: - Timeline Item Structure
     struct TimelineItem: Identifiable {
         let id: UUID
@@ -1658,7 +1690,7 @@ struct ItemDetailSheetView: View {
         var timelineItems: [TimelineItem] = []
         
         // Add notes
-        for note in item.notes {
+        for note in currentItem.notes {
             timelineItems.append(TimelineItem(
                 id: note.id,
                 timestamp: note.timestamp,
@@ -1681,7 +1713,7 @@ struct ItemDetailSheetView: View {
         }
         
         // Add status history
-        for status in item.statusHistory {
+        for status in currentItem.statusHistory {
             timelineItems.append(TimelineItem(
                 id: UUID(),
                 timestamp: status.timestamp,
@@ -1703,7 +1735,19 @@ struct ItemDetailSheetView: View {
     private func updateItemStatus(_ newStatus: String) {
         Task {
             do {
-                var updatedWorkOrder = workOrder
+                // Fetch the latest work order from the database
+                let latestWorkOrder = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<WorkOrder, Error>) in
+                    workOrdersDB.fetchWorkOrder(woId: workOrder.id) { result in
+                        switch result {
+                        case .success(let workOrder):
+                            continuation.resume(returning: workOrder)
+                        case .failure(let error):
+                            continuation.resume(throwing: error)
+                        }
+                    }
+                }
+                var updatedWorkOrder = latestWorkOrder
+                
                 let status = WO_Status(
                     status: newStatus,
                     user: appState.currentUserName,
@@ -1715,6 +1759,11 @@ struct ItemDetailSheetView: View {
                 updatedWorkOrder.lastModifiedBy = appState.currentUserName
                 
                 try await workOrdersDB.updateWorkOrder(updatedWorkOrder)
+                
+                // Refresh the data to show the updated status
+                await MainActor.run {
+                    refreshData()
+                }
             } catch {
                 print("❌ Error updating item status: \(error)")
             }
@@ -1724,7 +1773,19 @@ struct ItemDetailSheetView: View {
     private func addItemNote(_ noteText: String, images: [UIImage]) {
         Task {
             do {
-                var updatedWorkOrder = workOrder
+                // Fetch the latest work order from the database
+                let latestWorkOrder = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<WorkOrder, Error>) in
+                    workOrdersDB.fetchWorkOrder(woId: workOrder.id) { result in
+                        switch result {
+                        case .success(let workOrder):
+                            continuation.resume(returning: workOrder)
+                        case .failure(let error):
+                            continuation.resume(throwing: error)
+                        }
+                    }
+                }
+                var updatedWorkOrder = latestWorkOrder
+                
                 let note = WO_Note(
                     workOrderId: workOrder.id,
                     itemId: item.id.uuidString,
@@ -1739,6 +1800,11 @@ struct ItemDetailSheetView: View {
                 updatedWorkOrder.lastModifiedBy = appState.currentUserName
                 
                 try await workOrdersDB.updateWorkOrder(updatedWorkOrder)
+                
+                // Refresh the data to show the new note
+                await MainActor.run {
+                    refreshData()
+                }
             } catch {
                 print("❌ Error adding item note: \(error)")
             }
@@ -1748,7 +1814,18 @@ struct ItemDetailSheetView: View {
     private func toggleReasonCompletion(_ reason: String) {
         Task {
             do {
-                var updatedWorkOrder = workOrder
+                // Fetch the latest work order from the database
+                let latestWorkOrder = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<WorkOrder, Error>) in
+                    workOrdersDB.fetchWorkOrder(woId: workOrder.id) { result in
+                        switch result {
+                        case .success(let workOrder):
+                            continuation.resume(returning: workOrder)
+                        case .failure(let error):
+                            continuation.resume(throwing: error)
+                        }
+                    }
+                }
+                var updatedWorkOrder = latestWorkOrder
                 
                 if updatedWorkOrder.items[itemIndex].completedReasons.contains(reason) {
                     updatedWorkOrder.items[itemIndex].completedReasons.removeAll { $0 == reason }
@@ -1760,12 +1837,18 @@ struct ItemDetailSheetView: View {
                 updatedWorkOrder.lastModifiedBy = appState.currentUserName
                 
                 try await workOrdersDB.updateWorkOrder(updatedWorkOrder)
+                
+                // Refresh the data to show the updated reason completion
+                await MainActor.run {
+                    refreshData()
+                }
             } catch {
                 print("❌ Error toggling reason completion: \(error)")
             }
         }
     }
 }
+
 
 
 // ───── PREVIEW ─────
