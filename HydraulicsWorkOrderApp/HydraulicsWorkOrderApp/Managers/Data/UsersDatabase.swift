@@ -164,21 +164,19 @@ final class UsersDatabase: ObservableObject {
                 for doc in docs {
                     do {
                         var user = try doc.data(as: User.self)
-                        // Manually set @DocumentID if it's missing
-                        if user.id.isEmpty {
-                            user = User(
-                                id: doc.documentID,
-                                displayName: user.displayName,
-                                phoneE164: user.phoneE164,
-                                role: user.role,
-                                isActive: user.isActive,
-                                pin: user.pin,  // CRITICAL: Don't lose the PIN!
-                                createdAt: user.createdAt,
-                                updatedAt: user.updatedAt,
-                                createdByUserId: user.createdByUserId,
-                                updatedByUserId: user.updatedByUserId
-                            )
-                        }
+                        // Always use the Firestore document ID to ensure consistency
+                        user = User(
+                            id: doc.documentID,
+                            displayName: user.displayName,
+                            phoneE164: user.phoneE164,
+                            role: user.role,
+                            isActive: user.isActive,
+                            pin: user.pin,  // CRITICAL: Don't lose the PIN!
+                            createdAt: user.createdAt,
+                            updatedAt: user.updatedAt,
+                            createdByUserId: user.createdByUserId,
+                            updatedByUserId: user.updatedByUserId
+                        )
                         decoded.append(user)
                         #if DEBUG
                         print("✅ Successfully decoded User: \(user.displayName) (ID: \(user.id)) - Active: \(user.isActive)")
@@ -276,8 +274,18 @@ final class UsersDatabase: ObservableObject {
         // Check if this is actually an update (user exists) or a create (user doesn't exist)
         let existingUser = users.first(where: { $0.id == user.id })
         if existingUser == nil {
-            print("⚠️ WARNING: User with ID \(user.id) not found in cache - this might be a create operation")
-            print("⚠️ If you're trying to update a user, ensure the ID matches exactly")
+            print("⚠️ WARNING: User with ID \(user.id) not found in cache")
+            print("⚠️ This could be due to ID mismatch between local cache and Firestore")
+            print("⚠️ User details: \(user.displayName), Phone: \(user.phoneE164 ?? "none")")
+            
+            // Try to find user by display name and phone as fallback
+            if let fallbackUser = users.first(where: { 
+                $0.displayName == user.displayName && $0.phoneE164 == user.phoneE164 
+            }) {
+                print("⚠️ Found matching user by name/phone with different ID: \(fallbackUser.id)")
+                print("⚠️ This suggests the user was created with UUID but Firestore has different ID")
+                print("⚠️ The update will proceed with the provided user ID")
+            }
         }
         
         // Update local cache immediately for UI responsiveness
@@ -370,14 +378,15 @@ final class UsersDatabase: ObservableObject {
                         phoneE164: userForWrite.phoneE164,
                         role: userForWrite.role,
                         isActive: userForWrite.isActive,
+                        pin: userForWrite.pin,
                         createdAt: userForWrite.createdAt,
                         updatedAt: userForWrite.updatedAt,
                         createdByUserId: userForWrite.createdByUserId,
                         updatedByUserId: userForWrite.updatedByUserId
                     )
-                    if let index = self?.users.firstIndex(where: { $0.id == user.id }) {
-                        self?.users[index] = updatedUser
-                    }
+                    // Remove the old user (with UUID) and add the new user (with Firestore ID)
+                    self?.users.removeAll { $0.id == user.id }
+                    self?.users.append(updatedUser)
                     #if DEBUG
                     print("✅ User created successfully: \(updatedUser.displayName) with ID: \(docRef.documentID)")
                     #endif
@@ -420,6 +429,29 @@ final class UsersDatabase: ObservableObject {
         print("  - PIN: \(user.pin ?? "nil")")
         print("  - Updated At: \(Date())")
         
+        // First check if the document exists
+        db.collection(collectionName).document(user.id).getDocument { [weak self] document, error in
+            if let error = error {
+                print("❌ Error checking if document exists: \(error.localizedDescription)")
+                return
+            }
+            
+            if let document = document, document.exists {
+                print("✅ Document exists, proceeding with update")
+                // Document exists, proceed with update
+                self?.performFirestoreUpdate(user: user, userData: userData)
+            } else {
+                print("❌ Document does not exist with ID: \(user.id)")
+                print("❌ This will create a duplicate user! Aborting update.")
+                print("❌ User should be found by name/phone and updated with correct Firestore ID")
+                
+                // Try to find the user by name and phone to get the correct Firestore ID
+                self?.findAndUpdateUserByDetails(user: user, userData: userData)
+            }
+        }
+    }
+    
+    private func performFirestoreUpdate(user: User, userData: [String: Any]) {
         // Use setData with merge to update existing document
         db.collection(collectionName).document(user.id).setData(userData, merge: true) { [weak self] error in
             if let error = error {
@@ -442,6 +474,63 @@ final class UsersDatabase: ObservableObject {
             // Verify the update by reading the document back
             self?.verifyFirestoreUpdate(user)
         }
+    }
+    
+    private func findAndUpdateUserByDetails(user: User, userData: [String: Any]) {
+        print("🔍 Searching for user by name and phone to find correct Firestore ID")
+        
+        // Search for user by display name and phone number
+        db.collection(collectionName)
+            .whereField("displayName", isEqualTo: user.displayName)
+            .whereField("phoneE164", isEqualTo: user.phoneE164 as Any)
+            .getDocuments { [weak self] snapshot, error in
+                if let error = error {
+                    print("❌ Error searching for user: \(error.localizedDescription)")
+                    return
+                }
+                
+                guard let docs = snapshot?.documents, !docs.isEmpty else {
+                    print("❌ No user found with matching name and phone")
+                    print("❌ This suggests the user was never properly created in Firestore")
+                    return
+                }
+                
+                if docs.count > 1 {
+                    print("⚠️ Found \(docs.count) users with matching name and phone - this indicates duplicates")
+                }
+                
+                // Use the first (most recent) document
+                let correctDoc = docs.first!
+                let correctId = correctDoc.documentID
+                print("✅ Found user with correct Firestore ID: \(correctId)")
+                
+                // Create a new user with the correct ID
+                let correctedUser = User(
+                    id: correctId,
+                    displayName: user.displayName,
+                    phoneE164: user.phoneE164,
+                    role: user.role,
+                    isActive: user.isActive,
+                    pin: user.pin,
+                    createdAt: user.createdAt,
+                    updatedAt: user.updatedAt,
+                    createdByUserId: user.createdByUserId,
+                    updatedByUserId: user.updatedByUserId
+                )
+                
+                // Update the local cache with the corrected user
+                DispatchQueue.main.async { [weak self] in
+                    if let index = self?.users.firstIndex(where: { 
+                        $0.displayName == user.displayName && $0.phoneE164 == user.phoneE164 
+                    }) {
+                        self?.users[index] = correctedUser
+                        print("✅ Updated local cache with correct Firestore ID")
+                    }
+                }
+                
+                // Now perform the update with the correct ID
+                self?.performFirestoreUpdate(user: correctedUser, userData: userData)
+            }
     }
     
     /// Verify that the Firestore update actually persisted

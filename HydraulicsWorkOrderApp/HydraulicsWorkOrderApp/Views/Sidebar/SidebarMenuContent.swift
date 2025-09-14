@@ -60,7 +60,7 @@ struct SidebarMenuContent: View {
             // ───── Section: Account ─────
             Section("Account") {
                 Button {
-                    appState.navigateToView(.settings)
+                    appState.navigateToView(.myLoginInfo)
                     dismissAction?()
                 } label: {
                     Label("Change PIN", systemImage: "key.horizontal")
