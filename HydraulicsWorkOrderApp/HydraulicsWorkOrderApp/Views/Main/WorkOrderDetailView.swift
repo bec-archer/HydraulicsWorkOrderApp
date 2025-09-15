@@ -1480,7 +1480,7 @@ struct AddNoteSheet: View {
                         let note = WO_Note(
                             id: UUID(),
                             workOrderId: workOrder.id,
-                            user: "Tech", // TODO: Get from auth
+                            user: AppState.shared.currentUserName,
                             text: noteText,
                             timestamp: Date()
                         )

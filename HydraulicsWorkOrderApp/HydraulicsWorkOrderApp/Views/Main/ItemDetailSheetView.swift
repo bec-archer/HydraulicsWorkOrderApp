@@ -587,9 +587,9 @@ struct ItemDetailSheetView: View {
                 }
             }
         }
-        .onChange(of: showImageViewer) { newValue in
-            if newValue {
-                print("🔍 DEBUG: fullScreenCover triggered - showImageViewer: \(newValue)")
+        .onChange(of: showImageViewer) {
+            if showImageViewer {
+                print("🔍 DEBUG: fullScreenCover triggered - showImageViewer: \(showImageViewer)")
                 print("🔍 DEBUG: fullScreenCover triggered - selectedImageURL: \(selectedImageURL?.absoluteString ?? "nil")")
             }
         }

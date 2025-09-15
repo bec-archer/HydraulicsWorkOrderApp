@@ -46,7 +46,7 @@ struct WOItemUpdater {
         of workOrder: inout WorkOrder,
         itemId: UUID,
         newStatus: String,
-        user: String = "Tech"
+        user: String
     ) {
         guard let idx = workOrder.items.firstIndex(where: { $0.id == itemId }) else { return }
         let ts = Date()

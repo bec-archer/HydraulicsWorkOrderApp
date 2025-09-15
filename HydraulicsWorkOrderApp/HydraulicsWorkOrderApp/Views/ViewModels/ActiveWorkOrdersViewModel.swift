@@ -184,7 +184,7 @@ class ActiveWorkOrdersViewModel: ObservableObject {
                 var updatedWorkOrder = workOrder
                 updatedWorkOrder.flagged.toggle()
                 updatedWorkOrder.lastModified = Date()
-                updatedWorkOrder.lastModifiedBy = "Tech" // TODO: Get from auth
+                updatedWorkOrder.lastModifiedBy = AppState.shared.currentUserName
                 
                 try await workOrdersDB.updateWorkOrder(updatedWorkOrder)
                 

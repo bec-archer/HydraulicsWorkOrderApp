@@ -131,7 +131,7 @@ class OfflineManager: ObservableObject {
     // Change status while offline
     @MainActor func changeStatusOffline(for item: WO_Item, newStatus: String) {
         var updatedItem = item
-        let user = AppState.shared.currentUserName.isEmpty ? "Tech" : AppState.shared.currentUserName
+        let user = AppState.shared.currentUserName
         let statusEntry = WO_Status(status: newStatus, user: user, timestamp: Date())
         updatedItem.statusHistory.append(statusEntry)
         saveWorkOrderChange(updatedItem, changeType: .update)

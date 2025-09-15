@@ -273,7 +273,7 @@ class NewWorkOrderViewModel: ObservableObject {
                     updatedItem.statusHistory = [
                         WO_Status(
                             status: "Checked In",
-                            user: "Tech",
+                            user: AppState.shared.currentUserName,
                             timestamp: Date(),
                             notes: nil
                         )
@@ -306,7 +306,7 @@ class NewWorkOrderViewModel: ObservableObject {
             print("🔍 DEBUG: Building WorkOrder with \(builtItems.count) items")
             let workOrder = WorkOrder(
                 id: UUID().uuidString,                    // Generate new UUID for Core Data
-                createdBy: "Tech",
+                createdBy: AppState.shared.currentUserName,
                 customerId: customer.id.uuidString,
                 customerName: customer.name,
                 customerCompany: customer.company,
@@ -326,7 +326,7 @@ class NewWorkOrderViewModel: ObservableObject {
                 dropdowns: [:],
                 dropdownSchemaVersion: 1,
                 lastModified: Date(),
-                lastModifiedBy: "Tech",
+                lastModifiedBy: AppState.shared.currentUserName,
                 tagBypassReason: nil,
                 isDeleted: false,
                 syncStatus: "pending",                    // Mark as pending sync
