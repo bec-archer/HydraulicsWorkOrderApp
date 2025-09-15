@@ -10,9 +10,7 @@ struct ItemDetailSheetView: View {
     
     @EnvironmentObject var appState: AppState
     
-    // Local state management - completely isolated from database updates
-    @State private var currentItem: WO_Item
-    @State private var completedReasons: [String] = []
+    // Simple state management - no local item state
     @State private var isUpdating = false
     @State private var hasAppeared = false
     @State private var lastButtonTapTime: Date = Date.distantPast
@@ -23,18 +21,30 @@ struct ItemDetailSheetView: View {
     @State private var showGallery = false
     @State private var showStatusSelection = false
     @State private var showAddNotes = false
+    @State private var showCompletionDetailsSheet = false
+    @State private var selectedItemForCompletion: WO_Item?
+    @State private var selectedItemIndexForCompletion: Int?
     
     init(workOrder: WorkOrder, item: WO_Item, itemIndex: Int, onClose: @escaping () -> Void) {
         self.workOrder = workOrder
         self.item = item
         self.itemIndex = itemIndex
         self.onClose = onClose
-        self._currentItem = State(initialValue: item)
-        self._completedReasons = State(initialValue: item.completedReasons)
     }
     
-    // Use local state instead of database to prevent excessive re-rendering
-    // Removed computed property to prevent excessive re-rendering
+    // Always get fresh data from the database
+    private var currentItem: WO_Item {
+        let workOrdersDB = WorkOrdersDatabase.shared
+        if let latestWorkOrder = workOrdersDB.workOrders.first(where: { $0.id == workOrder.id }),
+           itemIndex < latestWorkOrder.items.count {
+            return latestWorkOrder.items[itemIndex]
+        }
+        return item // Fallback to original item
+    }
+    
+    private var completedReasons: [String] {
+        return currentItem.completedReasons
+    }
     
     
     // MARK: - View Components
@@ -96,6 +106,7 @@ struct ItemDetailSheetView: View {
             
             // Right: StatusBadge (tappable) and Add Notes button
             VStack(spacing: 8) {
+                let _ = print("🔍 DEBUG: Rendering status button section - isUpdating: \(isUpdating)")
                 Button(action: {
                     print("🔍 DEBUG: Status button tapped - setting showStatusSelection to true")
                     print("🔍 DEBUG: isUpdating when status button tapped: \(isUpdating)")
@@ -105,11 +116,30 @@ struct ItemDetailSheetView: View {
                 }) {
                     StatusBadge(status: getActualItemStatus(currentItem))
                 }
+                .onAppear {
+                    print("🔍 DEBUG: Status button appeared - isUpdating: \(isUpdating)")
+                }
                 .buttonStyle(PlainButtonStyle())
                 .disabled(isUpdating)
                 .onTapGesture {
                     print("🔍 DEBUG: Status button onTapGesture triggered")
+                    print("🔍 DEBUG: isUpdating when onTapGesture: \(isUpdating)")
+                    if !isUpdating {
+                        showStatusSelection = true
+                        print("🔍 DEBUG: showStatusSelection set to true via onTapGesture")
+                    }
                 }
+                .simultaneousGesture(
+                    TapGesture()
+                        .onEnded {
+                            print("🔍 DEBUG: Status button simultaneous gesture triggered")
+                            print("🔍 DEBUG: isUpdating when simultaneous gesture: \(isUpdating)")
+                            if !isUpdating {
+                                showStatusSelection = true
+                                print("🔍 DEBUG: showStatusSelection set to true via simultaneous gesture")
+                            }
+                        }
+                )
                 .overlay(
                     isUpdating ? 
                     ProgressView()
@@ -303,13 +333,28 @@ struct ItemDetailSheetView: View {
             .navigationBarBackButtonHidden(true)
             .toolbar(content: {
                 ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Close") {
+                    Button(action: {
                         print("🔍 DEBUG: 🎯 CLOSE BUTTON TAPPED")
                         onClose()
+                    }) {
+                        Text("Close")
+                            .foregroundColor(.blue)
+                            .font(.system(size: 16, weight: .medium))
                     }
                     .onAppear {
                         print("🔍 DEBUG: Close button appeared")
                     }
+                    .onTapGesture {
+                        print("🔍 DEBUG: 🎯 CLOSE BUTTON TAP GESTURE")
+                        onClose()
+                    }
+                    .simultaneousGesture(
+                        TapGesture()
+                            .onEnded {
+                                print("🔍 DEBUG: 🎯 CLOSE BUTTON SIMULTANEOUS GESTURE")
+                                onClose()
+                            }
+                    )
                 }
             })
         }
@@ -323,11 +368,7 @@ struct ItemDetailSheetView: View {
             print("🔍 DEBUG: Initial currentItem.completedReasons: \(currentItem.completedReasons)")
             print("🔍 DEBUG: Initial completedReasons state: \(completedReasons)")
             
-        // Sync completedReasons state with currentItem
-        if completedReasons != currentItem.completedReasons {
-            print("🔍 DEBUG: Syncing completedReasons state with currentItem")
-            completedReasons = currentItem.completedReasons
-        }
+        // No need to sync state - computed properties always return fresh data
         
         // TEMPORARILY DISABLED: State synchronization to test button responsiveness
         // CRITICAL: Sync with database state to prevent freezing
@@ -375,6 +416,9 @@ struct ItemDetailSheetView: View {
             showGallery = false
             showStatusSelection = false
             showAddNotes = false
+            showCompletionDetailsSheet = false
+            selectedItemForCompletion = nil
+            selectedItemIndexForCompletion = nil
             
             print("🔍 DEBUG: All state reset on disappear")
         }
@@ -386,7 +430,18 @@ struct ItemDetailSheetView: View {
                 currentStatus: getActualItemStatus(currentItem),
                 onStatusSelected: { newStatus in
                     print("🔍 DEBUG: ItemDetailSheetView - Status selected: \(newStatus)")
-                    updateItemStatus(newStatus)
+                    
+                    // Check if status is "Complete" - show completion details sheet first
+                    if newStatus.lowercased() == "complete" {
+                        print("🔍 DEBUG: Complete status requested - showing completion details sheet")
+                        selectedItemForCompletion = currentItem
+                        selectedItemIndexForCompletion = itemIndex
+                        showCompletionDetailsSheet = true
+                        // Note: Status will only change to Complete AFTER completion details are saved
+                    } else {
+                        // For other statuses, update directly
+                        updateItemStatus(newStatus)
+                    }
                     showStatusSelection = false
                     print("🔍 DEBUG: ItemDetailSheetView - Status selection sheet dismissed")
                 }
@@ -406,6 +461,30 @@ struct ItemDetailSheetView: View {
             .onDisappear {
                 print("🔍 DEBUG: Add Notes sheet dismissed, refreshing data")
                 // refreshData() removed - no longer needed
+            }
+        }
+        .sheet(isPresented: $showCompletionDetailsSheet) {
+            if let item = selectedItemForCompletion, let itemIndex = selectedItemIndexForCompletion {
+                CompletionDetailsSheet(
+                    workOrder: workOrder,
+                    item: item,
+                    itemIndex: itemIndex,
+                    onCompletionDetailsSaved: { partsUsed, hoursWorked, cost in
+                        Task {
+                            // Only change status to Complete after completion details are saved
+                            await updateItemStatusWithCompletion(
+                                "Complete",
+                                partsUsed: partsUsed,
+                                hoursWorked: hoursWorked,
+                                cost: cost
+                            )
+                        }
+                    },
+                    onCompletionCancelled: {
+                        // If user cancels, don't change the status - it remains as it was
+                        print("🔍 DEBUG: Completion details sheet cancelled - status unchanged")
+                    }
+                )
             }
         }
         .fullScreenCover(isPresented: $showImageViewer) {
@@ -450,7 +529,12 @@ struct ItemDetailSheetView: View {
     }
     
     func getActualItemStatus(_ item: WO_Item) -> String {
-        return item.statusHistory.last?.status ?? "Checked In"
+        let status = item.statusHistory.last?.status ?? "Checked In"
+        print("🔍 DEBUG: getActualItemStatus called - statusHistory count: \(item.statusHistory.count), last status: \(status)")
+        if item.statusHistory.count > 0 {
+            print("🔍 DEBUG: Last 3 statuses: \(item.statusHistory.suffix(3).map { $0.status })")
+        }
+        return status
     }
     
     func summaryLineForItem(_ item: WO_Item) -> String {
@@ -488,38 +572,32 @@ struct ItemDetailSheetView: View {
             }
             
             do {
-                // Use the shared database instance
+                // Get fresh data from database
                 let workOrdersDB = WorkOrdersDatabase.shared
+                var updatedWorkOrder = workOrder
+                var updatedItem = currentItem
                 
-                // Update local state first on main actor
-                await MainActor.run {
-                    print("🔍 DEBUG: Before update - completedReasons: \(completedReasons)")
-                    if completedReasons.contains(reason) {
-                        completedReasons.removeAll { $0 == reason }
-                        print("🔍 DEBUG: Removed reason: \(reason)")
-                    } else {
-                        completedReasons.append(reason)
-                        print("🔍 DEBUG: Added reason: \(reason)")
-                    }
-                    print("🔍 DEBUG: After update - completedReasons: \(completedReasons)")
-                    print("🔍 DEBUG: Local state updated for reason: \(reason)")
+                // Toggle the reason
+                if updatedItem.completedReasons.contains(reason) {
+                    updatedItem.completedReasons.removeAll { $0 == reason }
+                    print("🔍 DEBUG: Removed reason: \(reason)")
+                } else {
+                    updatedItem.completedReasons.append(reason)
+                    print("🔍 DEBUG: Added reason: \(reason)")
                 }
                 
-                // Update the database using the existing method
+                updatedItem.lastModified = Date()
+                updatedItem.lastModifiedBy = appState.currentUserName
+                
+                // Update work order
+                updatedWorkOrder.items[itemIndex] = updatedItem
+                updatedWorkOrder.lastModified = Date()
+                updatedWorkOrder.lastModifiedBy = appState.currentUserName
+                
                 print("🔍 DEBUG: Starting database update for work order: \(workOrder.id)")
-                try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-                    workOrdersDB.updateCompletedReasons(completedReasons, for: workOrder.id, itemIndex: itemIndex) { result in
-                        switch result {
-                        case .success:
-                            print("🔍 DEBUG: Database update successful for work order: \(workOrder.id)")
-                            continuation.resume()
-                        case .failure(let error):
-                            print("🔍 DEBUG: Database update failed for work order: \(workOrder.id), error: \(error)")
-                            continuation.resume(throwing: error)
-                        }
-                    }
-                }
+                try await workOrdersDB.updateWorkOrder(updatedWorkOrder)
                 print("🔍 DEBUG: Database update completed for work order: \(workOrder.id)")
+                
             } catch {
                 print("❌ Error toggling reason completion: \(error)")
             }
@@ -548,51 +626,30 @@ struct ItemDetailSheetView: View {
             }
             
             do {
-                // Use the shared database instance
+                // Get fresh data from database
                 let workOrdersDB = WorkOrdersDatabase.shared
-                
-                // Update local state first
+                var updatedWorkOrder = workOrder
                 var updatedItem = currentItem
+                
+                // Add new status
                 let status = WO_Status(
                     status: newStatus,
                     user: appState.currentUserName,
                     timestamp: Date()
                 )
                 updatedItem.statusHistory.append(status)
-                currentItem = updatedItem
-                print("🔍 DEBUG: Local state updated for status: \(newStatus)")
+                updatedItem.lastModified = Date()
+                updatedItem.lastModifiedBy = appState.currentUserName
                 
-                // Update the database using the existing method
-                let note = WO_Note(
-                    workOrderId: workOrder.id,
-                    itemId: String(itemIndex),
-                    user: appState.currentUserName,
-                    text: "Status changed to \(newStatus)",
-                    timestamp: Date()
-                )
+                // Update work order
+                updatedWorkOrder.items[itemIndex] = updatedItem
+                updatedWorkOrder.lastModified = Date()
+                updatedWorkOrder.lastModifiedBy = appState.currentUserName
                 
                 print("🔍 DEBUG: Starting database update for status change to: \(newStatus)")
-                try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-                    workOrdersDB.updateItemStatusAndNote(newStatus, note: note, for: workOrder.id) { result in
-                        switch result {
-                        case .success:
-                            print("🔍 DEBUG: Database update successful for status change to: \(newStatus)")
-                            continuation.resume()
-                        case .failure(let error):
-                            print("🔍 DEBUG: Database update failed for status change to: \(newStatus), error: \(error)")
-                            continuation.resume(throwing: error)
-                        }
-                    }
-                }
+                try await workOrdersDB.updateWorkOrder(updatedWorkOrder)
                 print("🔍 DEBUG: Database update completed for status change to: \(newStatus)")
                 
-                // Add a small delay to ensure the database update is reflected
-                try await Task.sleep(nanoseconds: 50_000_000) // 0.05 seconds
-                
-                // Refresh data after successful update
-                await MainActor.run {
-                    // refreshData() removed - no longer needed
-                }
             } catch {
                 print("❌ Error updating item status: \(error)")
             }
@@ -601,6 +658,52 @@ struct ItemDetailSheetView: View {
                 isUpdating = false
                 print("🔍 DEBUG: isUpdating reset to false")
             }
+        }
+    }
+    
+    private func updateItemStatusWithCompletion(_ newStatus: String, partsUsed: String, hoursWorked: String, cost: String) async {
+        print("🔍 DEBUG: updateItemStatusWithCompletion called with status: \(newStatus)")
+        print("🔍 DEBUG: Parts: '\(partsUsed)', Hours: '\(hoursWorked)', Cost: '\(cost)'")
+        
+        await MainActor.run { 
+            isUpdating = true
+        }
+        
+        do {
+            // Get fresh data from database
+            let workOrdersDB = WorkOrdersDatabase.shared
+            var updatedWorkOrder = workOrder
+            var updatedItem = currentItem
+            
+            // Add new status and completion details
+            let status = WO_Status(
+                status: newStatus,
+                user: appState.currentUserName,
+                timestamp: Date()
+            )
+            updatedItem.statusHistory.append(status)
+            updatedItem.partsUsed = partsUsed
+            updatedItem.hoursWorked = hoursWorked
+            updatedItem.finalCost = cost
+            updatedItem.lastModified = Date()
+            updatedItem.lastModifiedBy = appState.currentUserName
+            
+            // Update work order
+            updatedWorkOrder.items[itemIndex] = updatedItem
+            updatedWorkOrder.lastModified = Date()
+            updatedWorkOrder.lastModifiedBy = appState.currentUserName
+            
+            print("🔍 DEBUG: Starting database update for status change to: \(newStatus) with completion details")
+            try await workOrdersDB.updateWorkOrder(updatedWorkOrder)
+            print("🔍 DEBUG: Database update completed for status change to: \(newStatus) with completion details")
+            
+        } catch {
+            print("❌ Error updating item status with completion details: \(error)")
+        }
+        
+        await MainActor.run {
+            isUpdating = false
+            print("🔍 DEBUG: isUpdating reset to false")
         }
     }
     
@@ -631,8 +734,7 @@ struct ItemDetailSheetView: View {
                     timestamp: Date()
                 )
                 updatedItem.notes.append(note)
-                currentItem = updatedItem
-                print("🔍 DEBUG: Local state updated for note: \(noteText)")
+                print("🔍 DEBUG: Note added to item: \(noteText)")
                 
                 // Update the database using the existing method
                 try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
