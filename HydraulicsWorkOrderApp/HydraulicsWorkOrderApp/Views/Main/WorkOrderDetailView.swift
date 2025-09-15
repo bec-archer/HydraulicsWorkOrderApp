@@ -1669,7 +1669,9 @@ struct StatusSelectionView: View {
                 VStack(spacing: 12) {
                     ForEach(statusOptions, id: \.0) { status, color in
                         Button(action: {
+                            print("🔍 DEBUG: StatusSelectionView - Status button tapped: \(status)")
                             onStatusSelected(status)
+                            print("🔍 DEBUG: StatusSelectionView - onStatusSelected called")
                         }) {
                             HStack {
                                 // Status color indicator

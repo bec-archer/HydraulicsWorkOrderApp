@@ -26,8 +26,12 @@ class InactivityManager: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
     
     // Configuration
-    private let inactivityTimeout: TimeInterval = 60.0 // 1 minute
     private let warningTime: TimeInterval = 10.0 // Show warning 10 seconds before logout
+    
+    // Get timeout from DevSettingsManager (Admin/SuperAdmin configurable)
+    private var inactivityTimeout: TimeInterval {
+        DevSettingsManager.shared.inactivityTimeout
+    }
     
     // MARK: - Initialization
     private init() {

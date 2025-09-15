@@ -24,6 +24,7 @@ final class DevSettingsManager: ObservableObject {
         static let enableAnonAuth = "dev_enableAnonAuth"
         static let bypassLogin    = "dev_bypassLogin"
         static let enforceTagScan = "dev_enforceTagScan"
+        static let inactivityTimeout = "dev_inactivityTimeout"
     }
 
     // ───── Dev Toggles (Published) ─────
@@ -49,6 +50,11 @@ final class DevSettingsManager: ObservableObject {
     @Published var enableAnonAuth: Bool = UserDefaults.standard.object(forKey: Keys.enableAnonAuth) as? Bool ?? true {
         didSet { UserDefaults.standard.set(enableAnonAuth, forKey: Keys.enableAnonAuth) }
     }
+    
+    // Inactivity timeout in seconds (Admin/SuperAdmin configurable)
+    @Published var inactivityTimeout: TimeInterval = UserDefaults.standard.object(forKey: Keys.inactivityTimeout) as? TimeInterval ?? 120.0 {
+        didSet { UserDefaults.standard.set(inactivityTimeout, forKey: Keys.inactivityTimeout) }
+    }
 
     // ───── SuperAdmin-Gated Setter ─────
     // ───── SuperAdmin-Gated Setter (uses AppState verifier) ─────
@@ -56,6 +62,13 @@ final class DevSettingsManager: ObservableObject {
     func setBypassLogin(_ newValue: Bool, pin: String) -> Bool {
         guard AppState.shared.verifySuperAdmin(pin: pin) else { return false }
         skipLogin = newValue
+        return true
+    }
+    
+    @discardableResult
+    func setInactivityTimeout(_ newValue: TimeInterval, pin: String) -> Bool {
+        guard AppState.shared.verifySuperAdmin(pin: pin) else { return false }
+        inactivityTimeout = newValue
         return true
     }
 
@@ -66,11 +79,13 @@ final class DevSettingsManager: ObservableObject {
         if defaults.object(forKey: Keys.enableAnonAuth) == nil { defaults.set(true,  forKey: Keys.enableAnonAuth) }
         if defaults.object(forKey: Keys.bypassLogin)    == nil { defaults.set(false, forKey: Keys.bypassLogin) }
         if defaults.object(forKey: Keys.enforceTagScan) == nil { defaults.set(false, forKey: Keys.enforceTagScan) }
+        if defaults.object(forKey: Keys.inactivityTimeout) == nil { defaults.set(120.0, forKey: Keys.inactivityTimeout) }
 
         // Ensure published values reflect stored defaults on launch
         self.enableAnonAuth   = defaults.bool(forKey: Keys.enableAnonAuth)
         self.skipLogin        = defaults.bool(forKey: Keys.bypassLogin)
         self.skipTagScan      = defaults.bool(forKey: Keys.enforceTagScan)
+        self.inactivityTimeout = defaults.double(forKey: Keys.inactivityTimeout)
 
         // ───── Debug Override: always bypass login in DEBUG builds ─────
         #if DEBUG
