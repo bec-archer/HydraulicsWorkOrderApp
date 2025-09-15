@@ -328,6 +328,13 @@ struct SimpleRouterView: View {
             TagScanningView(isPresented: $showTagScanner)
                 .environmentObject(appState)
         }
+        .onChange(of: appState.currentView) {
+            // Reset inactivity timer when navigating to/from Active Work Orders or Work Order Details
+            if appState.currentView == .activeWorkOrders || appState.currentView == .workOrderDetail {
+                print("🔍 DEBUG: User navigated to \(appState.currentView) - resetting inactivity timer")
+                InactivityManager.shared.recordActivity()
+            }
+        }
     }
 }
 
