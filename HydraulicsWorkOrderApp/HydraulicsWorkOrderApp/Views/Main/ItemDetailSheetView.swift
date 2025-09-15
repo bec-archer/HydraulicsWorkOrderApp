@@ -37,8 +37,11 @@ struct ItemDetailSheetView: View {
         let workOrdersDB = WorkOrdersDatabase.shared
         if let latestWorkOrder = workOrdersDB.workOrders.first(where: { $0.id == workOrder.id }),
            itemIndex < latestWorkOrder.items.count {
-            return latestWorkOrder.items[itemIndex]
+            let item = latestWorkOrder.items[itemIndex]
+            print("🔍 DEBUG: currentItem computed - notes count: \(item.notes.count)")
+            return item
         }
+        print("🔍 DEBUG: currentItem computed - using fallback item, notes count: \(item.notes.count)")
         return item // Fallback to original item
     }
     
@@ -173,7 +176,23 @@ struct ItemDetailSheetView: View {
                 .buttonStyle(PlainButtonStyle())
                 .onTapGesture {
                     print("🔍 DEBUG: Add Notes button onTapGesture triggered")
+                    print("🔍 DEBUG: isUpdating when onTapGesture: \(isUpdating)")
+                    if !isUpdating {
+                        showAddNotes = true
+                        print("🔍 DEBUG: showAddNotes set to true via onTapGesture")
+                    }
                 }
+                .simultaneousGesture(
+                    TapGesture()
+                        .onEnded {
+                            print("🔍 DEBUG: Add Notes button simultaneous gesture triggered")
+                            print("🔍 DEBUG: isUpdating when simultaneous gesture: \(isUpdating)")
+                            if !isUpdating {
+                                showAddNotes = true
+                                print("🔍 DEBUG: showAddNotes set to true via simultaneous gesture")
+                            }
+                        }
+                )
             }
         }
     }
@@ -291,6 +310,7 @@ struct ItemDetailSheetView: View {
             // Right: Notes & Status
             VStack(alignment: .leading, spacing: 12) {
                 // ───── Notes ─────
+                let _ = print("🔍 DEBUG: Notes section - currentItem.notes.count: \(currentItem.notes.count)")
                 if !currentItem.notes.isEmpty {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Notes")
@@ -298,10 +318,42 @@ struct ItemDetailSheetView: View {
                             .fontWeight(.medium)
                         
                         ForEach(currentItem.notes.reversed(), id: \.timestamp) { note in
+                            let _ = print("🔍 DEBUG: Rendering note: '\(note.text)' by \(note.user), images: \(note.imageUrls.count)")
                             VStack(alignment: .leading, spacing: 4) {
-                                Text(note.text)
-                                    .font(.caption)
-                                    .foregroundColor(.primary)
+                                // Note text (only show if not empty)
+                                if !note.text.isEmpty {
+                                    Text(note.text)
+                                        .font(.caption)
+                                        .foregroundColor(.primary)
+                                }
+                                
+                                // Note images (if any)
+                                if !note.imageUrls.isEmpty {
+                                    ScrollView(.horizontal, showsIndicators: false) {
+                                        HStack(spacing: 8) {
+                                            ForEach(note.imageUrls, id: \.self) { imageURL in
+                                                AsyncImage(url: URL(string: imageURL)) { image in
+                                                    image
+                                                        .resizable()
+                                                        .aspectRatio(contentMode: .fill)
+                                                        .frame(width: 80, height: 80)
+                                                        .clipped()
+                                                        .cornerRadius(8)
+                                                        .onTapGesture {
+                                                            selectedImageURL = URL(string: imageURL)
+                                                            showImageViewer = true
+                                                        }
+                                                } placeholder: {
+                                                    Rectangle()
+                                                        .fill(Color.gray.opacity(0.3))
+                                                        .frame(width: 80, height: 80)
+                                                        .cornerRadius(8)
+                                                }
+                                            }
+                                        }
+                                        .padding(.horizontal, 1)
+                                    }
+                                }
                                 
                                 HStack {
                                     Text("by \(note.user)")
@@ -321,6 +373,8 @@ struct ItemDetailSheetView: View {
                     .padding()
                     .background(Color(.systemGray6))
                     .cornerRadius(12)
+                } else {
+                    let _ = print("🔍 DEBUG: No notes to display - currentItem.notes is empty")
                 }
             }
         }
@@ -767,40 +821,67 @@ struct ItemDetailSheetView: View {
             }
             
             do {
-                // Use the shared database instance
+                // Get fresh data from database
                 let workOrdersDB = WorkOrdersDatabase.shared
-                
-                // Update local state first
+                var updatedWorkOrder = workOrder
                 var updatedItem = currentItem
+                
+                // Upload images if any
+                var imageUrls: [String] = []
+                var thumbnailUrls: [String] = []
+                if !images.isEmpty {
+                    print("🔍 DEBUG: Uploading \(images.count) images for note")
+                    let imageService = ImageManagementService.shared
+                    let result = try await imageService.uploadImages(images, for: workOrder.id, itemId: currentItem.id)
+                    imageUrls = result.imageURLs
+                    thumbnailUrls = result.thumbnailURLs
+                    print("🔍 DEBUG: Successfully uploaded \(imageUrls.count) images and \(thumbnailUrls.count) thumbnails")
+                    for (index, url) in imageUrls.enumerated() {
+                        print("🔍 DEBUG: Image \(index + 1) URL: \(url)")
+                    }
+                    for (index, url) in thumbnailUrls.enumerated() {
+                        print("🔍 DEBUG: Thumbnail \(index + 1) URL: \(url)")
+                    }
+                }
+                
+                // Create the note with thumbnail URLs (for display in notes list)
                 let note = WO_Note(
                     workOrderId: workOrder.id,
                     itemId: String(itemIndex),
                     user: appState.currentUserName,
                     text: noteText,
-                    timestamp: Date()
+                    timestamp: Date(),
+                    imageUrls: thumbnailUrls // Use thumbnails for note display
                 )
                 updatedItem.notes.append(note)
+                
+                // Add full-size images to item's image arrays (for main gallery)
+                for imageUrl in imageUrls {
+                    updatedItem.imageUrls.append(imageUrl)
+                }
+                
+                // Add thumbnail URLs to item's thumbnail array (for main gallery thumbnails)
+                for thumbnailUrl in thumbnailUrls {
+                    updatedItem.thumbUrls.append(thumbnailUrl)
+                }
+                
+                updatedItem.lastModified = Date()
+                updatedItem.lastModifiedBy = appState.currentUserName
+                
                 print("🔍 DEBUG: Note added to item: \(noteText)")
+                print("🔍 DEBUG: Note has \(thumbnailUrls.count) thumbnail images")
+                print("🔍 DEBUG: Item now has \(updatedItem.imageUrls.count) full images and \(updatedItem.thumbUrls.count) thumbnails")
+                print("🔍 DEBUG: Updated item now has \(updatedItem.notes.count) notes")
                 
-                // Update the database using the existing method
-                try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-                    workOrdersDB.addItemNote(note, to: workOrder.id) { result in
-                        switch result {
-                        case .success:
-                            continuation.resume()
-                        case .failure(let error):
-                            continuation.resume(throwing: error)
-                        }
-                    }
-                }
+                // Update work order
+                updatedWorkOrder.items[itemIndex] = updatedItem
+                updatedWorkOrder.lastModified = Date()
+                updatedWorkOrder.lastModifiedBy = appState.currentUserName
                 
-                // Add a small delay to ensure the database update is reflected
-                try await Task.sleep(nanoseconds: 50_000_000) // 0.05 seconds
+                print("🔍 DEBUG: Starting database update for work order: \(workOrder.id)")
+                try await workOrdersDB.updateWorkOrder(updatedWorkOrder)
+                print("🔍 DEBUG: Database update completed for work order: \(workOrder.id)")
                 
-                // Refresh data after successful update
-                await MainActor.run {
-                    // refreshData() removed - no longer needed
-                }
             } catch {
                 print("❌ Error adding item note: \(error)")
             }
