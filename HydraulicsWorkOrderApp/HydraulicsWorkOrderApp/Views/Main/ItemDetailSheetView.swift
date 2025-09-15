@@ -307,64 +307,38 @@ struct ItemDetailSheetView: View {
                 }
             }
             
-            // Right: Notes & Status
+            // Right: Timeline (Notes & Status Changes)
             VStack(alignment: .leading, spacing: 12) {
-                // ───── Notes ─────
-                let _ = print("🔍 DEBUG: Notes section - currentItem.notes.count: \(currentItem.notes.count)")
-                if !currentItem.notes.isEmpty {
+                // ───── Timeline ─────
+                let timelineItems = getCombinedTimeline()
+                let _ = print("🔍 DEBUG: Timeline section - timelineItems.count: \(timelineItems.count)")
+                if !timelineItems.isEmpty {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("Notes")
+                        Text("Timeline")
                             .font(.subheadline)
                             .fontWeight(.medium)
                         
-                        ForEach(currentItem.notes.reversed(), id: \.timestamp) { note in
-                            let _ = print("🔍 DEBUG: Rendering note: '\(note.text)' by \(note.user), images: \(note.imageUrls.count)")
+                        ForEach(timelineItems, id: \.id) { timelineItem in
+                            let _ = print("🔍 DEBUG: Rendering timeline item: \(timelineItem.type) by \(timelineItem.user)")
                             VStack(alignment: .leading, spacing: 4) {
-                                // Note text (only show if not empty)
-                                if !note.text.isEmpty {
-                                    Text(note.text)
-                                        .font(.caption)
-                                        .foregroundColor(.primary)
-                                }
+                                // Timeline content
+                                timelineItem.content
                                 
-                                // Note images (if any)
-                                if !note.imageUrls.isEmpty {
-                                    ScrollView(.horizontal, showsIndicators: false) {
-                                        HStack(spacing: 8) {
-                                            ForEach(note.imageUrls, id: \.self) { imageURL in
-                                                AsyncImage(url: URL(string: imageURL)) { image in
-                                                    image
-                                                        .resizable()
-                                                        .aspectRatio(contentMode: .fill)
-                                                        .frame(width: 80, height: 80)
-                                                        .clipped()
-                                                        .cornerRadius(8)
-                                                        .onTapGesture {
-                                                            selectedImageURL = URL(string: imageURL)
-                                                            showImageViewer = true
-                                                        }
-                                                } placeholder: {
-                                                    Rectangle()
-                                                        .fill(Color.gray.opacity(0.3))
-                                                        .frame(width: 80, height: 80)
-                                                        .cornerRadius(8)
-                                                }
-                                            }
-                                        }
-                                        .padding(.horizontal, 1)
-                                    }
-                                }
-                                
+                                // User and timestamp
                                 HStack {
-                                    Text("by \(note.user)")
+                                    Text("by \(timelineItem.user)")
+                                        .font(.caption2)
+                                        .foregroundColor(.secondary)
+                                    
+                                    Text("•")
+                                        .font(.caption2)
+                                        .foregroundColor(.secondary)
+                                    
+                                    Text(timelineItem.timestamp, format: .dateTime.month(.abbreviated).day().year().hour().minute())
                                         .font(.caption2)
                                         .foregroundColor(.secondary)
                                     
                                     Spacer()
-                                    
-                                    Text(note.timestamp, format: .dateTime.month(.abbreviated).day().year().hour().minute())
-                                        .font(.caption2)
-                                        .foregroundColor(.secondary)
                                 }
                             }
                             .padding(.vertical, 2)
@@ -374,7 +348,7 @@ struct ItemDetailSheetView: View {
                     .background(Color(.systemGray6))
                     .cornerRadius(12)
                 } else {
-                    let _ = print("🔍 DEBUG: No notes to display - currentItem.notes is empty")
+                    let _ = print("🔍 DEBUG: No timeline items to display")
                 }
             }
         }
@@ -890,6 +864,177 @@ struct ItemDetailSheetView: View {
                 isUpdating = false
                 print("🔍 DEBUG: isUpdating reset to false")
             }
+        }
+    }
+    
+    // MARK: - Timeline Helper Functions
+    
+    /// Timeline item structure for combining notes and status changes
+    struct TimelineItem: Identifiable {
+        let id: UUID
+        let timestamp: Date
+        let user: String
+        let content: AnyView
+        let type: TimelineItemType
+        
+        enum TimelineItemType {
+            case note
+            case status
+            case initialStatus
+        }
+    }
+    
+    /// Get combined timeline of notes and status changes, sorted chronologically
+    func getCombinedTimeline() -> [TimelineItem] {
+        var timelineItems: [TimelineItem] = []
+        
+        // Add initial "Checked In" status if no status history exists
+        if currentItem.statusHistory.isEmpty {
+            timelineItems.append(TimelineItem(
+                id: UUID(),
+                timestamp: currentItem.lastModified,
+                user: "System",
+                content: AnyView(
+                    Text("Checked In")
+                        .font(.caption)
+                        .foregroundColor(ThemeManager.shared.textPrimary)
+                ),
+                type: .initialStatus
+            ))
+        }
+        
+        // Add status history items (excluding "Service Performed" entries)
+        for status in currentItem.statusHistory {
+            // Skip "Service Performed" entries since they're already tracked in notes
+            if !status.status.hasPrefix("Service Performed") {
+                timelineItems.append(TimelineItem(
+                    id: status.id,
+                    timestamp: status.timestamp,
+                    user: status.user,
+                    content: AnyView(
+                        Text(status.status)
+                            .font(.system(size: 12 * 1.2))
+                            .fontWeight(.bold)
+                            .foregroundColor(getStatusColor(status.status))
+                    ),
+                    type: .status
+                ))
+            }
+        }
+        
+        // Add note items
+        for note in currentItem.notes {
+            timelineItems.append(TimelineItem(
+                id: note.id,
+                timestamp: note.timestamp,
+                user: note.user,
+                content: AnyView(
+                    VStack(alignment: .leading, spacing: 4) {
+                        // Show text if available
+                        if !note.text.isEmpty {
+                            reasonServiceNoteText(note.text)
+                        }
+                        
+                        // Show image thumbnails if available
+                        if !note.imageUrls.isEmpty {
+                            let _ = print("🔍 DEBUG: Note has \(note.imageUrls.count) image URLs: \(note.imageUrls)")
+                            HStack(spacing: 4) {
+                                ForEach(note.imageUrls.prefix(3), id: \.self) { imageUrl in
+                                    Button(action: {
+                                        selectedImageURL = URL(string: imageUrl)
+                                        showImageViewer = true
+                                    }) {
+                                        AsyncImage(url: URL(string: imageUrl)) { image in
+                                            image
+                                                .resizable()
+                                                .aspectRatio(contentMode: .fill)
+                                                .frame(width: 48, height: 48)
+                                                .clipped()
+                                                .cornerRadius(6)
+                                        } placeholder: {
+                                            Rectangle()
+                                                .fill(ThemeManager.shared.border.opacity(0.3))
+                                                .frame(width: 48, height: 48)
+                                                .cornerRadius(6)
+                                        }
+                                    }
+                                    .buttonStyle(PlainButtonStyle())
+                                }
+                                
+                                // Show "+X more" if there are more than 3 images
+                                if note.imageUrls.count > 3 {
+                                    Text("+\(note.imageUrls.count - 3)")
+                                        .font(.system(size: 10 * 1.2))
+                                        .foregroundColor(ThemeManager.shared.textSecondary)
+                                        .frame(width: 48, height: 48)
+                                        .background(ThemeManager.shared.border.opacity(0.3))
+                                        .cornerRadius(6)
+                                }
+                            }
+                        }
+                        
+                        // Show "Image only" text if there's no text but there are images
+                        if note.text.isEmpty && !note.imageUrls.isEmpty {
+                            Text("Image only")
+                                .font(.system(size: 10 * 1.2))
+                                .foregroundColor(ThemeManager.shared.textSecondary)
+                                .italic()
+                        }
+                    }
+                ),
+                type: .note
+            ))
+        }
+        
+        // Sort all items by timestamp (oldest first)
+        return timelineItems.sorted { $0.timestamp < $1.timestamp }
+    }
+    
+    /// Get color for status display
+    func getStatusColor(_ status: String) -> Color {
+        switch status.lowercased() {
+        case "checked in":
+            return Color.blue
+        case "disassembly":
+            return Color.purple
+        case "in progress":
+            return Color.yellow
+        case "test failed":
+            return Color.red
+        case "complete", "completed":
+            return Color.green
+        case "closed":
+            return Color.gray
+        default:
+            return ThemeManager.shared.textPrimary
+        }
+    }
+    
+    /// Format reason service note text with emoji handling
+    @ViewBuilder
+    func reasonServiceNoteText(_ text: String) -> some View {
+        if text.hasPrefix("✅") || text.hasPrefix("❌") {
+            let components = text.components(separatedBy: " • ")
+            if components.count == 2 {
+                let emoji = components[0]
+                let reasonText = components[1]
+                
+                HStack(spacing: 4) {
+                    Text(emoji)
+                        .font(.system(size: 12 * 1.2))
+                    Text(reasonText)
+                        .font(.system(size: 12 * 1.2, weight: .bold))
+                        .foregroundColor(ThemeManager.shared.textPrimary)
+                }
+            } else {
+                Text(text)
+                    .font(.system(size: 12 * 1.2))
+                    .foregroundColor(ThemeManager.shared.textPrimary)
+            }
+        } else {
+            Text(text)
+                .font(.system(size: 12 * 1.2))
+                .foregroundColor(ThemeManager.shared.textPrimary)
         }
     }
 }
