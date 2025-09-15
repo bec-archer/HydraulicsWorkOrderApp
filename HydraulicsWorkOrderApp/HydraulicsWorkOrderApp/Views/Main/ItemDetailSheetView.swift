@@ -329,38 +329,73 @@ struct ItemDetailSheetView: View {
     var body: some View {
         let _ = print("🔍 DEBUG: ItemDetailSheetView body being re-rendered")
         NavigationStack {
-            ScrollView(.vertical, showsIndicators: true) {
-                SwiftUI.VStack(alignment: .leading, spacing: 12) {
-                    // Header row: Composite item number • Reasons (checkboxes) • StatusBadge
-                    headerRow
+            VStack(spacing: 0) {
+                // Custom header with close button
+                HStack {
+                    Button("Close") {
+                        print("🔍 DEBUG: 🎯 CLOSE BUTTON TAPPED")
+                        onClose()
+                    }
+                    .foregroundColor(.blue)
+                    .font(.system(size: 16, weight: .medium))
+                    .frame(minWidth: 60, minHeight: 44) // Larger touch target
+                    .background(Color.clear)
+                    .onAppear {
+                        print("🔍 DEBUG: Close button appeared")
+                    }
+                    .onTapGesture {
+                        print("🔍 DEBUG: 🎯 CLOSE BUTTON ONTAPGESTURE")
+                        onClose()
+                    }
+                    .simultaneousGesture(
+                        TapGesture()
+                            .onEnded {
+                                print("🔍 DEBUG: 🎯 CLOSE BUTTON SIMULTANEOUS GESTURE")
+                                onClose()
+                            }
+                    )
                     
-                    // Item details
-                    itemDetails
+                    Spacer()
                     
-                    // Main body split: Left (images) + Right (notes & status)
-                    mainBody
+                    Text("Item Details")
+                        .font(.headline)
+                        .fontWeight(.semibold)
+                    
+                    Spacer()
+                    
+                    // Invisible spacer to center the title
+                    Text("Close")
+                        .foregroundColor(.clear)
+                        .font(.system(size: 16, weight: .medium))
+                        .frame(minWidth: 60, minHeight: 44)
                 }
-                .padding(16)
-                .background(ThemeManager.shared.cardBackground)
-                .cornerRadius(ThemeManager.shared.cardCornerRadius)
-                .shadow(
-                    color: ThemeManager.shared.cardShadowColor.opacity(ThemeManager.shared.cardShadowOpacity),
-                    radius: 8,
-                    x: 0,
-                    y: 4
-                )
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+                .background(Color(.systemBackground))
+                
+                ScrollView(.vertical, showsIndicators: true) {
+                    SwiftUI.VStack(alignment: .leading, spacing: 12) {
+                        // Header row: Composite item number • Reasons (checkboxes) • StatusBadge
+                        headerRow
+                        
+                        // Item details
+                        itemDetails
+                        
+                        // Main body split: Left (images) + Right (notes & status)
+                        mainBody
+                    }
+                    .padding(16)
+                    .background(ThemeManager.shared.cardBackground)
+                    .cornerRadius(ThemeManager.shared.cardCornerRadius)
+                    .shadow(
+                        color: ThemeManager.shared.cardShadowColor.opacity(ThemeManager.shared.cardShadowOpacity),
+                        radius: 8,
+                        x: 0,
+                        y: 4
+                    )
+                }
             }
-            .navigationTitle("Item Details")
-            .navigationBarTitleDisplayMode(.inline)
-            .navigationBarBackButtonHidden(true)
-            .navigationBarItems(leading: 
-                Button("Close") {
-                    print("🔍 DEBUG: 🎯 CLOSE BUTTON TAPPED")
-                    onClose()
-                }
-                .foregroundColor(.blue)
-                .font(.system(size: 16, weight: .medium))
-            )
+            .navigationBarHidden(true)
         }
         .trackUserInteraction() // Track user interactions to prevent inactivity logout
         .onAppear {
