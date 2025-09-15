@@ -224,6 +224,17 @@ struct ItemDetailSheetView: View {
                                     showImageViewer = true
                                     print("🔍 DEBUG: showImageViewer set to: \(showImageViewer)")
                                 }
+                                .simultaneousGesture(
+                                    TapGesture()
+                                        .onEnded {
+                                            print("🔍 DEBUG: Primary image simultaneous gesture triggered")
+                                            print("🔍 DEBUG: Setting selectedImageURL to: \(firstImageURL)")
+                                            selectedImageURL = URL(string: firstImageURL)
+                                            print("🔍 DEBUG: selectedImageURL after setting: \(selectedImageURL?.absoluteString ?? "nil")")
+                                            showImageViewer = true
+                                            print("🔍 DEBUG: showImageViewer after setting: \(showImageViewer)")
+                                        }
+                                )
                         } placeholder: {
                             Rectangle()
                                 .fill(ThemeManager.shared.border.opacity(0.3))
@@ -254,6 +265,17 @@ struct ItemDetailSheetView: View {
                                             showImageViewer = true
                                             print("🔍 DEBUG: showImageViewer set to: \(showImageViewer)")
                                         }
+                                        .simultaneousGesture(
+                                            TapGesture()
+                                                .onEnded {
+                                                    print("🔍 DEBUG: Thumbnail image simultaneous gesture triggered")
+                                                    print("🔍 DEBUG: Setting selectedImageURL to: \(imageURL)")
+                                                    selectedImageURL = URL(string: imageURL)
+                                                    print("🔍 DEBUG: selectedImageURL after setting: \(selectedImageURL?.absoluteString ?? "nil")")
+                                                    showImageViewer = true
+                                                    print("🔍 DEBUG: showImageViewer after setting: \(showImageViewer)")
+                                                }
+                                        )
                                 } placeholder: {
                                     Rectangle()
                                         .fill(ThemeManager.shared.border.opacity(0.3))
@@ -331,32 +353,14 @@ struct ItemDetailSheetView: View {
             .navigationTitle("Item Details")
             .navigationBarTitleDisplayMode(.inline)
             .navigationBarBackButtonHidden(true)
-            .toolbar(content: {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button(action: {
-                        print("🔍 DEBUG: 🎯 CLOSE BUTTON TAPPED")
-                        onClose()
-                    }) {
-                        Text("Close")
-                            .foregroundColor(.blue)
-                            .font(.system(size: 16, weight: .medium))
-                    }
-                    .onAppear {
-                        print("🔍 DEBUG: Close button appeared")
-                    }
-                    .onTapGesture {
-                        print("🔍 DEBUG: 🎯 CLOSE BUTTON TAP GESTURE")
-                        onClose()
-                    }
-                    .simultaneousGesture(
-                        TapGesture()
-                            .onEnded {
-                                print("🔍 DEBUG: 🎯 CLOSE BUTTON SIMULTANEOUS GESTURE")
-                                onClose()
-                            }
-                    )
+            .navigationBarItems(leading: 
+                Button("Close") {
+                    print("🔍 DEBUG: 🎯 CLOSE BUTTON TAPPED")
+                    onClose()
                 }
-            })
+                .foregroundColor(.blue)
+                .font(.system(size: 16, weight: .medium))
+            )
         }
         .trackUserInteraction() // Track user interactions to prevent inactivity logout
         .onAppear {
@@ -516,7 +520,14 @@ struct ItemDetailSheetView: View {
                 .background(Color.black.opacity(0.8))
                 .onAppear {
                     print("🔍 DEBUG: FullScreenImageViewer - selectedImageURL is nil")
+                    print("🔍 DEBUG: showImageViewer state: \(showImageViewer)")
                 }
+            }
+        }
+        .onChange(of: showImageViewer) { newValue in
+            if newValue {
+                print("🔍 DEBUG: fullScreenCover triggered - showImageViewer: \(newValue)")
+                print("🔍 DEBUG: fullScreenCover triggered - selectedImageURL: \(selectedImageURL?.absoluteString ?? "nil")")
             }
         }
     }
