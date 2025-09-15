@@ -9,13 +9,13 @@ struct ItemDetailSheetView: View {
     let onClose: () -> Void
     
     @EnvironmentObject var appState: AppState
-    @StateObject private var workOrdersDB = WorkOrdersDatabase.shared
     
-    // Simplified state management
-    @State private var currentWorkOrder: WorkOrder
+    // Local state management - completely isolated from database updates
     @State private var currentItem: WO_Item
+    @State private var completedReasons: [String] = []
     @State private var isUpdating = false
     @State private var hasAppeared = false
+    @State private var lastButtonTapTime: Date = Date.distantPast
     
     // UI state
     @State private var showImageViewer = false
@@ -29,51 +29,20 @@ struct ItemDetailSheetView: View {
         self.item = item
         self.itemIndex = itemIndex
         self.onClose = onClose
-        self._currentWorkOrder = State(initialValue: workOrder)
         self._currentItem = State(initialValue: item)
+        self._completedReasons = State(initialValue: item.completedReasons)
     }
     
-    // Get the latest item data from the database
-    private var latestItem: WO_Item {
-        if let latestWorkOrder = workOrdersDB.workOrders.first(where: { $0.id == currentWorkOrder.id }),
-           let foundItem = latestWorkOrder.items.first(where: { $0.id == currentItem.id }) {
-            return foundItem
-        }
-        return currentItem
-    }
+    // Use local state instead of database to prevent excessive re-rendering
+    // Removed computed property to prevent excessive re-rendering
     
-    // Refresh data from database
-    private func refreshData() {
-        print("🔍 DEBUG: refreshData called")
-        
-        // Use the local workOrders array instead of fetching from Firebase
-        if let latestWorkOrder = workOrdersDB.workOrders.first(where: { $0.id == workOrder.id }) {
-            print("🔍 DEBUG: Found latest work order: \(latestWorkOrder.workOrderNumber)")
-            
-            // Only update if the data has actually changed to prevent infinite loops
-            if currentWorkOrder.id != latestWorkOrder.id || currentWorkOrder.lastModified != latestWorkOrder.lastModified {
-                currentWorkOrder = latestWorkOrder
-                if itemIndex < latestWorkOrder.items.count {
-                    let newItem = latestWorkOrder.items[itemIndex]
-                    currentItem = newItem
-                    print("🔍 DEBUG: Updated currentItem - status: \(newItem.statusHistory.last?.status ?? "none")")
-                    print("🔍 DEBUG: Current item status history count: \(newItem.statusHistory.count)")
-                    print("🔍 DEBUG: Current item notes count: \(newItem.notes.count)")
-                }
-            } else {
-                print("🔍 DEBUG: No changes detected, skipping update")
-            }
-        } else {
-            print("🔍 DEBUG: Could not find work order in local database")
-        }
-    }
     
     // MARK: - View Components
     
     private var headerRow: some View {
         HStack(alignment: .top, spacing: 12) {
             // Left: Composite WO_Number-ItemIndex (e.g., 250826-001-003)
-            Text("\(currentWorkOrder.workOrderNumber)-\(String(format: "%03d", itemIndex + 1))")
+            Text("\(workOrder.workOrderNumber)-\(String(format: "%03d", itemIndex + 1))")
                 .font(.headline)
                 .fontWeight(.semibold)
                 .foregroundColor(ThemeManager.shared.textPrimary)
@@ -84,26 +53,32 @@ struct ItemDetailSheetView: View {
             
             // Middle: Reasons for Service (chosen at intake) — check to log "Service Performed — <Reason>"
             VStack(alignment: .leading, spacing: 6) {
-                ForEach(Array(latestItem.reasonsForService.enumerated()), id: \.element) { index, reason in
+                ForEach(0..<currentItem.reasonsForService.count, id: \.self) { index in
+                    let reason = currentItem.reasonsForService[index]
+                    let _ = print("🔍 DEBUG: Rendering reason button \(index): '\(reason)' - isUpdating: \(isUpdating)")
                     HStack(spacing: 8) {
                         Button(action: {
-                            print("🔍 DEBUG: Reason button tapped for '\(reason)' (index: \(index))")
+                            print("🔍 DEBUG: 🎯 BUTTON ACTION CALLED for '\(reason)' (index: \(index))")
                             print("🔍 DEBUG: isUpdating when reason button tapped: \(isUpdating)")
                             print("🔍 DEBUG: Button action executing for reason: \(reason)")
                             toggleReasonCompletion(reason)
                         }) {
                             Image(systemName: isReasonPerformed(reason) ? "checkmark.square.fill" : "square")
                                 .foregroundColor(isReasonPerformed(reason) ? .green : ThemeManager.shared.textSecondary)
-                                .background(Color.red.opacity(0.1)) // Visual debug - red background
+                                .frame(width: 30, height: 30) // Larger touch target
                         }
                         .disabled(isUpdating)
-                        .onTapGesture {
-                            print("🔍 DEBUG: Reason button onTapGesture triggered for '\(reason)' (index: \(index))")
+                        .onAppear {
+                            print("🔍 DEBUG: Button for '\(reason)' appeared - isUpdating: \(isUpdating)")
+                            if index == 0 {
+                                print("🔍 DEBUG: 🎯 FIRST BUTTON ('\(reason)') APPEARED")
+                            }
                         }
+                        .buttonStyle(PlainButtonStyle())
                         
                         // ───── Display reason with note for "Other" ─────
-                        if reason.lowercased().contains("other") && !(latestItem.reasonNotes?.isEmpty ?? true) {
-                            Text("\(reason) • \(latestItem.reasonNotes ?? "")")
+                        if reason.lowercased().contains("other") && !(currentItem.reasonNotes?.isEmpty ?? true) {
+                            Text("\(reason) • \(currentItem.reasonNotes ?? "")")
                                 .font(.subheadline)
                                 .foregroundColor(ThemeManager.shared.textPrimary)
                                 .lineLimit(1)
@@ -128,7 +103,7 @@ struct ItemDetailSheetView: View {
                     showStatusSelection = true
                     print("🔍 DEBUG: showStatusSelection is now: \(showStatusSelection)")
                 }) {
-                    StatusBadge(status: getActualItemStatus(latestItem))
+                    StatusBadge(status: getActualItemStatus(currentItem))
                 }
                 .buttonStyle(PlainButtonStyle())
                 .disabled(isUpdating)
@@ -176,15 +151,15 @@ struct ItemDetailSheetView: View {
     private var itemDetails: some View {
         VStack(alignment: .leading, spacing: 12) {
             // Type line
-            Text(latestItem.type.isEmpty ? "Item" : latestItem.type)
+            Text(currentItem.type.isEmpty ? "Item" : currentItem.type)
                 .font(.subheadline)
                 .foregroundColor(ThemeManager.shared.textSecondary)
                 .lineLimit(1)
                 .truncationMode(.tail)
             
             // Size / Color / Machine / Brand / Wait summary (muted), with inline "Other" note if present
-            if !summaryLineForItem(latestItem).isEmpty {
-                Text(summaryLineForItem(latestItem))
+            if !summaryLineForItem(currentItem).isEmpty {
+                Text(summaryLineForItem(currentItem))
                     .font(.caption)
                     .foregroundColor(ThemeManager.shared.textSecondary)
                     .lineLimit(1)
@@ -204,7 +179,7 @@ struct ItemDetailSheetView: View {
                 
                 VStack(spacing: 8) {
                     // PRIMARY 1:1 image
-                    if let firstImageURL = latestItem.imageUrls.first {
+                    if let firstImageURL = currentItem.imageUrls.first {
                         AsyncImage(url: URL(string: firstImageURL)) { image in
                             image
                                 .resizable()
@@ -233,9 +208,9 @@ struct ItemDetailSheetView: View {
                     }
                     
                     // 2×2 THUMBNAIL GRID
-                    if latestItem.imageUrls.count > 1 {
+                    if currentItem.imageUrls.count > 1 {
                         LazyVGrid(columns: Array(repeating: GridItem(.fixed(thumbSize), spacing: gridSpacing), count: 2), spacing: gridSpacing) {
-                            ForEach(Array(latestItem.imageUrls.dropFirst().enumerated()), id: \.offset) { index, imageURL in
+                            ForEach(Array(currentItem.imageUrls.dropFirst().enumerated()), id: \.offset) { index, imageURL in
                                 AsyncImage(url: URL(string: imageURL)) { img in
                                     img.resizable()
                                         .scaledToFill()
@@ -264,13 +239,13 @@ struct ItemDetailSheetView: View {
             // Right: Notes & Status
             VStack(alignment: .leading, spacing: 12) {
                 // ───── Notes ─────
-                if !latestItem.notes.isEmpty {
+                if !currentItem.notes.isEmpty {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Notes")
                             .font(.subheadline)
                             .fontWeight(.medium)
                         
-                        ForEach(latestItem.notes.reversed(), id: \.timestamp) { note in
+                        ForEach(currentItem.notes.reversed(), id: \.timestamp) { note in
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(note.text)
                                     .font(.caption)
@@ -300,6 +275,7 @@ struct ItemDetailSheetView: View {
     }
     
     var body: some View {
+        let _ = print("🔍 DEBUG: ItemDetailSheetView body being re-rendered")
         NavigationStack {
             ScrollView(.vertical, showsIndicators: true) {
                 SwiftUI.VStack(alignment: .leading, spacing: 12) {
@@ -325,14 +301,17 @@ struct ItemDetailSheetView: View {
             .navigationTitle("Item Details")
             .navigationBarTitleDisplayMode(.inline)
             .navigationBarBackButtonHidden(true)
-            .toolbar {
+            .toolbar(content: {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button("Close") {
-                        print("🔍 DEBUG: Close button tapped")
+                        print("🔍 DEBUG: 🎯 CLOSE BUTTON TAPPED")
                         onClose()
                     }
+                    .onAppear {
+                        print("🔍 DEBUG: Close button appeared")
+                    }
                 }
-            }
+            })
         }
         .trackUserInteraction() // Track user interactions to prevent inactivity logout
         .onAppear {
@@ -341,31 +320,70 @@ struct ItemDetailSheetView: View {
             print("🔍 DEBUG: Currently viewing item index: \(itemIndex)")
             print("🔍 DEBUG: Currently viewing item type: \(item.type)")
             print("🔍 DEBUG: Item reasons for service: \(item.reasonsForService)")
-            print("🔍 DEBUG: isUpdating before reset: \(isUpdating)")
-            isUpdating = false // Reset updating state
-            print("🔍 DEBUG: isUpdating reset to false on appear")
-            print("🔍 DEBUG: isUpdating after reset: \(isUpdating)")
+            print("🔍 DEBUG: Initial currentItem.completedReasons: \(currentItem.completedReasons)")
+            print("🔍 DEBUG: Initial completedReasons state: \(completedReasons)")
             
-            // Prevent infinite loops by only refreshing on first appear
-            if !hasAppeared {
-                hasAppeared = true
-                refreshData()
-            }
+        // Sync completedReasons state with currentItem
+        if completedReasons != currentItem.completedReasons {
+            print("🔍 DEBUG: Syncing completedReasons state with currentItem")
+            completedReasons = currentItem.completedReasons
+        }
+        
+        // TEMPORARILY DISABLED: State synchronization to test button responsiveness
+        // CRITICAL: Sync with database state to prevent freezing
+        // Check if the database has more recent data than our local state
+        print("🔍 DEBUG: State synchronization temporarily disabled for testing")
+        // print("🔍 DEBUG: Checking database sync - workOrders count: \(WorkOrdersDatabase.shared.workOrders.count)")
+        // if let latestWorkOrder = WorkOrdersDatabase.shared.workOrders.first(where: { $0.id == workOrder.id }) {
+        //     print("🔍 DEBUG: Found work order in database: \(latestWorkOrder.workOrderNumber)")
+        //     if itemIndex < latestWorkOrder.items.count {
+        //         let latestItem = latestWorkOrder.items[itemIndex]
+        //         print("🔍 DEBUG: Database item completedReasons: \(latestItem.completedReasons)")
+        //         print("🔍 DEBUG: Local item completedReasons: \(currentItem.completedReasons)")
+        //         if latestItem.completedReasons != currentItem.completedReasons {
+        //             print("🔍 DEBUG: Database has newer data - syncing local state")
+        //             currentItem = latestItem
+        //             completedReasons = latestItem.completedReasons
+        //             print("🔍 DEBUG: State synchronized with database")
+        //         } else {
+        //             print("🔍 DEBUG: Database and local state are in sync")
+        //         }
+        //     } else {
+        //         print("🔍 DEBUG: Item index \(itemIndex) out of bounds for work order")
+        //     }
+        // } else {
+        //     print("🔍 DEBUG: Work order \(workOrder.workOrderNumber) not found in database")
+        // }
+            
+            // Only reset critical state that could cause freezing
+            isUpdating = false
+            lastButtonTapTime = Date.distantPast
+            
+            print("🔍 DEBUG: Critical state reset on appear")
         }
         .onDisappear {
             print("🔍 DEBUG: ItemDetailSheetView onDisappear")
             print("🔍 DEBUG: Closing work order: \(workOrder.workOrderNumber)")
             print("🔍 DEBUG: Closing item index: \(itemIndex)")
-            isUpdating = false // Reset updating state
-            hasAppeared = false // Reset appear flag
-            print("🔍 DEBUG: isUpdating reset to false on disappear")
+            
+            // Reset all state to prevent accumulation across sheet instances
+            isUpdating = false
+            hasAppeared = false
+            lastButtonTapTime = Date.distantPast
+            showImageViewer = false
+            selectedImageURL = nil
+            showGallery = false
+            showStatusSelection = false
+            showAddNotes = false
+            
+            print("🔍 DEBUG: All state reset on disappear")
         }
         .fullScreenCover(isPresented: $showGallery) {
-            ImageGalleryView(images: latestItem.imageUrls, title: "\(currentWorkOrder.workOrderNumber)-\(String(format: "%03d", itemIndex + 1))")
+            ImageGalleryView(images: currentItem.imageUrls, title: "\(workOrder.workOrderNumber)-\(String(format: "%03d", itemIndex + 1))")
         }
         .fullScreenCover(isPresented: $showStatusSelection) {
             StatusSelectionView(
-                currentStatus: getActualItemStatus(latestItem),
+                currentStatus: getActualItemStatus(currentItem),
                 onStatusSelected: { newStatus in
                     print("🔍 DEBUG: ItemDetailSheetView - Status selected: \(newStatus)")
                     updateItemStatus(newStatus)
@@ -381,13 +399,13 @@ struct ItemDetailSheetView: View {
                     showAddNotes = false
                     // Force refresh to show the new note immediately
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                        refreshData()
+                        // refreshData() removed - no longer needed
                     }
                 }
             )
             .onDisappear {
                 print("🔍 DEBUG: Add Notes sheet dismissed, refreshing data")
-                refreshData()
+                // refreshData() removed - no longer needed
             }
         }
         .fullScreenCover(isPresented: $showImageViewer) {
@@ -426,7 +444,9 @@ struct ItemDetailSheetView: View {
     
     // MARK: - Helper Functions
     func isReasonPerformed(_ reason: String) -> Bool {
-        return latestItem.completedReasons.contains(reason)
+        let result = completedReasons.contains(reason)
+        print("🔍 DEBUG: isReasonPerformed('\(reason)') = \(result), completedReasons: \(completedReasons)")
+        return result
     }
     
     func getActualItemStatus(_ item: WO_Item) -> String {
@@ -451,6 +471,14 @@ struct ItemDetailSheetView: View {
     private func toggleReasonCompletion(_ reason: String) {
         guard !isUpdating else { return }
         
+        // Debounce rapid button taps to prevent multiple simultaneous updates
+        let now = Date()
+        if now.timeIntervalSince(lastButtonTapTime) < 0.5 { // 500ms debounce
+            print("🔍 DEBUG: Button tap debounced - too soon since last tap")
+            return
+        }
+        lastButtonTapTime = now
+        
         // Track user interaction to reset inactivity timer
         InactivityManager.trackUserInteraction()
         
@@ -460,37 +488,38 @@ struct ItemDetailSheetView: View {
             }
             
             do {
-                // Fetch the latest work order from the database
-                let latestWorkOrder = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<WorkOrder, Error>) in
-                    workOrdersDB.fetchWorkOrder(woId: workOrder.id) { result in
+                // Use the shared database instance
+                let workOrdersDB = WorkOrdersDatabase.shared
+                
+                // Update local state first on main actor
+                await MainActor.run {
+                    print("🔍 DEBUG: Before update - completedReasons: \(completedReasons)")
+                    if completedReasons.contains(reason) {
+                        completedReasons.removeAll { $0 == reason }
+                        print("🔍 DEBUG: Removed reason: \(reason)")
+                    } else {
+                        completedReasons.append(reason)
+                        print("🔍 DEBUG: Added reason: \(reason)")
+                    }
+                    print("🔍 DEBUG: After update - completedReasons: \(completedReasons)")
+                    print("🔍 DEBUG: Local state updated for reason: \(reason)")
+                }
+                
+                // Update the database using the existing method
+                print("🔍 DEBUG: Starting database update for work order: \(workOrder.id)")
+                try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                    workOrdersDB.updateCompletedReasons(completedReasons, for: workOrder.id, itemIndex: itemIndex) { result in
                         switch result {
-                        case .success(let workOrder):
-                            continuation.resume(returning: workOrder)
+                        case .success:
+                            print("🔍 DEBUG: Database update successful for work order: \(workOrder.id)")
+                            continuation.resume()
                         case .failure(let error):
+                            print("🔍 DEBUG: Database update failed for work order: \(workOrder.id), error: \(error)")
                             continuation.resume(throwing: error)
                         }
                     }
                 }
-                var updatedWorkOrder = latestWorkOrder
-                
-                if updatedWorkOrder.items[itemIndex].completedReasons.contains(reason) {
-                    updatedWorkOrder.items[itemIndex].completedReasons.removeAll { $0 == reason }
-                } else {
-                    updatedWorkOrder.items[itemIndex].completedReasons.append(reason)
-                }
-                
-                updatedWorkOrder.lastModified = Date()
-                updatedWorkOrder.lastModifiedBy = appState.currentUserName
-                
-                try await workOrdersDB.updateWorkOrder(updatedWorkOrder)
-                
-                // Add a small delay to ensure the database update is reflected
-                try await Task.sleep(nanoseconds: 50_000_000) // 0.05 seconds
-                
-                // Refresh data after successful update
-                await MainActor.run {
-                    refreshData()
-                }
+                print("🔍 DEBUG: Database update completed for work order: \(workOrder.id)")
             } catch {
                 print("❌ Error toggling reason completion: \(error)")
             }
@@ -519,37 +548,50 @@ struct ItemDetailSheetView: View {
             }
             
             do {
-                // Fetch the latest work order from the database
-                let latestWorkOrder = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<WorkOrder, Error>) in
-                    workOrdersDB.fetchWorkOrder(woId: workOrder.id) { result in
-                        switch result {
-                        case .success(let workOrder):
-                            continuation.resume(returning: workOrder)
-                        case .failure(let error):
-                            continuation.resume(throwing: error)
-                        }
-                    }
-                }
-                var updatedWorkOrder = latestWorkOrder
+                // Use the shared database instance
+                let workOrdersDB = WorkOrdersDatabase.shared
                 
+                // Update local state first
+                var updatedItem = currentItem
                 let status = WO_Status(
                     status: newStatus,
                     user: appState.currentUserName,
                     timestamp: Date()
                 )
+                updatedItem.statusHistory.append(status)
+                currentItem = updatedItem
+                print("🔍 DEBUG: Local state updated for status: \(newStatus)")
                 
-                updatedWorkOrder.items[itemIndex].statusHistory.append(status)
-                updatedWorkOrder.lastModified = Date()
-                updatedWorkOrder.lastModifiedBy = appState.currentUserName
+                // Update the database using the existing method
+                let note = WO_Note(
+                    workOrderId: workOrder.id,
+                    itemId: String(itemIndex),
+                    user: appState.currentUserName,
+                    text: "Status changed to \(newStatus)",
+                    timestamp: Date()
+                )
                 
-                try await workOrdersDB.updateWorkOrder(updatedWorkOrder)
+                print("🔍 DEBUG: Starting database update for status change to: \(newStatus)")
+                try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                    workOrdersDB.updateItemStatusAndNote(newStatus, note: note, for: workOrder.id) { result in
+                        switch result {
+                        case .success:
+                            print("🔍 DEBUG: Database update successful for status change to: \(newStatus)")
+                            continuation.resume()
+                        case .failure(let error):
+                            print("🔍 DEBUG: Database update failed for status change to: \(newStatus), error: \(error)")
+                            continuation.resume(throwing: error)
+                        }
+                    }
+                }
+                print("🔍 DEBUG: Database update completed for status change to: \(newStatus)")
                 
                 // Add a small delay to ensure the database update is reflected
                 try await Task.sleep(nanoseconds: 50_000_000) // 0.05 seconds
                 
                 // Refresh data after successful update
                 await MainActor.run {
-                    refreshData()
+                    // refreshData() removed - no longer needed
                 }
             } catch {
                 print("❌ Error updating item status: \(error)")
@@ -576,19 +618,11 @@ struct ItemDetailSheetView: View {
             }
             
             do {
-                // Fetch the latest work order from the database
-                let latestWorkOrder = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<WorkOrder, Error>) in
-                    workOrdersDB.fetchWorkOrder(woId: workOrder.id) { result in
-                        switch result {
-                        case .success(let workOrder):
-                            continuation.resume(returning: workOrder)
-                        case .failure(let error):
-                            continuation.resume(throwing: error)
-                        }
-                    }
-                }
-                var updatedWorkOrder = latestWorkOrder
+                // Use the shared database instance
+                let workOrdersDB = WorkOrdersDatabase.shared
                 
+                // Update local state first
+                var updatedItem = currentItem
                 let note = WO_Note(
                     workOrderId: workOrder.id,
                     itemId: String(itemIndex),
@@ -596,19 +630,28 @@ struct ItemDetailSheetView: View {
                     text: noteText,
                     timestamp: Date()
                 )
+                updatedItem.notes.append(note)
+                currentItem = updatedItem
+                print("🔍 DEBUG: Local state updated for note: \(noteText)")
                 
-                updatedWorkOrder.items[itemIndex].notes.append(note)
-                updatedWorkOrder.lastModified = Date()
-                updatedWorkOrder.lastModifiedBy = appState.currentUserName
-                
-                try await workOrdersDB.updateWorkOrder(updatedWorkOrder)
+                // Update the database using the existing method
+                try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                    workOrdersDB.addItemNote(note, to: workOrder.id) { result in
+                        switch result {
+                        case .success:
+                            continuation.resume()
+                        case .failure(let error):
+                            continuation.resume(throwing: error)
+                        }
+                    }
+                }
                 
                 // Add a small delay to ensure the database update is reflected
                 try await Task.sleep(nanoseconds: 50_000_000) // 0.05 seconds
                 
                 // Refresh data after successful update
                 await MainActor.run {
-                    refreshData()
+                    // refreshData() removed - no longer needed
                 }
             } catch {
                 print("❌ Error adding item note: \(error)")

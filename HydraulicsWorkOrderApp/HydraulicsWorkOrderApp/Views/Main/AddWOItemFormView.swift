@@ -87,6 +87,9 @@ struct AddWOItemFormView: View {
             QRScannerView(
                 isPresented: $showQRScanner,
                 onCodeScanned: { scannedCode in
+                    // Track user interaction to reset inactivity timer
+                    InactivityManager.trackUserInteraction()
+                    
                     item.assetTagId = scannedCode
                     item.lastModified = Date()
                 }
@@ -145,6 +148,9 @@ struct AddWOItemFormView: View {
                             .autocorrectionDisabled(true)
                         
                         Button {
+                            // Track user interaction to reset inactivity timer
+                            InactivityManager.trackUserInteraction()
+                            
                             showQRScanner = true
                         } label: {
                             Image(systemName: "qrcode.viewfinder")
@@ -271,6 +277,9 @@ struct AddWOItemFormView: View {
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], alignment: .leading, spacing: 8) {
                 ForEach(reasonOptionsSnapshot, id: \.value) { option in
                     Button(action: {
+                        // Track user interaction to reset inactivity timer
+                        InactivityManager.trackUserInteraction()
+                        
                         if selectedReasons.contains(option.value) {
                             selectedReasons.remove(option.value)
                         } else {

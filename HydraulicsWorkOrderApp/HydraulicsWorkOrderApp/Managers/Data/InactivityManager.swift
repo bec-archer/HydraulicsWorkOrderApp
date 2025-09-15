@@ -78,6 +78,7 @@ class InactivityManager: ObservableObject {
     
     /// Handle user activity (call when user interacts with the app)
     func recordActivity() {
+        print("🔍 DEBUG: InactivityManager.recordActivity called - resetting timer")
         resetInactivityTimer()
     }
     
@@ -125,6 +126,7 @@ class InactivityManager: ObservableObject {
     }
     
     @objc private func handleUserInteraction() {
+        print("🔍 DEBUG: InactivityManager.handleUserInteraction called")
         recordActivity()
     }
     
@@ -148,6 +150,7 @@ class InactivityManager: ObservableObject {
     }
     
     private func handleInactivityTimeout() {
+        print("🔍 DEBUG: InactivityManager.handleInactivityTimeout called - performing logout")
         isActive = false
         showInactivityWarning = false
         performLogout()

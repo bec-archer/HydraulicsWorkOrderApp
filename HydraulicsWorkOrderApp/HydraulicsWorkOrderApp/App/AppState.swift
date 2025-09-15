@@ -175,6 +175,9 @@ class AppState: ObservableObject {
     }
     
     private func handleInactivityLogout() {
+        print("🔍 DEBUG: handleInactivityLogout called")
+        print("🔍 DEBUG: DevSettingsManager.shared.skipLogin = \(DevSettingsManager.shared.skipLogin)")
+        
         // Skip logout if dev bypass is enabled
         if DevSettingsManager.shared.skipLogin {
             print("🔍 DEBUG: Inactivity logout skipped - dev bypass enabled")

@@ -47,6 +47,9 @@ struct ImageCaptureServiceView: View {
             HStack(spacing: 12) {
                 // Camera Button
                 Button {
+                    // Track user interaction to reset inactivity timer
+                    InactivityManager.trackUserInteraction()
+                    
                     haptic.impactOccurred()
                     showCamera = true
                 } label: {
@@ -61,6 +64,9 @@ struct ImageCaptureServiceView: View {
                 
                 // Photo Library Button
                 Button {
+                    // Track user interaction to reset inactivity timer
+                    InactivityManager.trackUserInteraction()
+                    
                     haptic.impactOccurred()
                     showImagePicker = true
                 } label: {

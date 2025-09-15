@@ -121,9 +121,12 @@ struct MyWorkOrderItemsView: View {
                             note.user == appState.currentUserName
                         }
                         
-                        // Include if user has made any status updates or notes
-                        if !userStatusUpdates.isEmpty || !userNotes.isEmpty {
-                            print("🔍 DEBUG: Found item for user - WO: \(workOrder.workOrderNumber), Item: \(itemIndex), Status: \(item.statusHistory.last?.status ?? "none")")
+                        // Check if this item has completed reasons for service
+                        let hasCompletedReasons = !item.completedReasons.isEmpty
+                        
+                        // Include if user has made any status updates, notes, or completed reasons
+                        if !userStatusUpdates.isEmpty || !userNotes.isEmpty || hasCompletedReasons {
+                            print("🔍 DEBUG: Found item for user - WO: \(workOrder.workOrderNumber), Item: \(itemIndex), Status: \(item.statusHistory.last?.status ?? "none"), CompletedReasons: \(item.completedReasons)")
                             latestItemArray.append(WorkOrderItemData(
                                 item: item,
                                 workOrder: workOrder,

@@ -148,8 +148,28 @@ final class WorkOrdersDatabase: ObservableObject {
         }
     }
     
-    func updateCompletedReasons(_ reasons: [String], for workOrderId: String, completion: @escaping (Result<Void, Error>) -> Void) {
-        completion(.success(()))
+    func updateCompletedReasons(_ reasons: [String], for workOrderId: String, itemIndex: Int, completion: @escaping (Result<Void, Error>) -> Void) {
+        if let workOrderIndex = workOrders.firstIndex(where: { $0.id == workOrderId }),
+           itemIndex < workOrders[workOrderIndex].items.count {
+            
+            // Update local cache first
+            workOrders[workOrderIndex].items[itemIndex].completedReasons = reasons
+            workOrders[workOrderIndex].items[itemIndex].lastModified = Date()
+            workOrders[workOrderIndex].items[itemIndex].lastModifiedBy = "Current User" // TODO: Get actual user
+            
+            // Update Firebase using async/await
+            let workOrder = workOrders[workOrderIndex]
+            Task {
+                do {
+                    try await updateWorkOrder(workOrder)
+                    completion(.success(()))
+                } catch {
+                    completion(.failure(error))
+                }
+            }
+        } else {
+            completion(.failure(NSError(domain: "ItemNotFound", code: 0, userInfo: [NSLocalizedDescriptionKey: "Work order or item not found"])))
+        }
     }
     
     func applyItemImageURLs(_ imageURLs: [String], _ thumbURLs: [String], to workOrderId: String, itemId: UUID, completion: @escaping (Result<Void, Error>) -> Void) {

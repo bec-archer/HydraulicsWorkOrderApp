@@ -87,7 +87,6 @@ struct NewWorkOrderView: View {
                 // Trigger check-in when requested from SimpleRouterView
                 if viewModel.canCheckIn {
                     saveWorkOrder {
-                        dismiss()
                         appState.currentView = .activeWorkOrders
                     }
                 }
@@ -259,7 +258,6 @@ struct NewWorkOrderView: View {
             ToolbarItem(placement: .confirmationAction) {
                 Button {
                     saveWorkOrder {
-                        dismiss()
                         appState.currentView = .activeWorkOrders
                     }
                 } label: {
@@ -281,7 +279,6 @@ struct NewWorkOrderView: View {
 
                 Button {
                     saveWorkOrder {
-                        dismiss()
                         appState.currentView = .activeWorkOrders
                     }
                 } label: {
@@ -339,6 +336,9 @@ struct NewWorkOrderView: View {
     }
     
     private func selectCustomer(_ customer: Customer) {
+        // Track user interaction to reset inactivity timer
+        InactivityManager.trackUserInteraction()
+        
         if viewModel.selectedCustomer?.id == customer.id {
             print("⚠️ selectCustomer: already selected, skipping redundant update.")
             return
@@ -353,6 +353,9 @@ struct NewWorkOrderView: View {
     }
 
     private func addNewItem() {
+        // Track user interaction to reset inactivity timer
+        InactivityManager.trackUserInteraction()
+        
         print("➕ ITEM: Adding new item (current: \(viewModel.items.count))")
         
         showValidationNudge = false
@@ -366,19 +369,38 @@ struct NewWorkOrderView: View {
     }
     
     private func saveWorkOrder(onSuccess: (() -> Void)? = nil) {
+        print("🔍 DEBUG: saveWorkOrder called - tracking user interaction")
+        // Track user interaction to reset inactivity timer when save is initiated
+        InactivityManager.trackUserInteraction()
+        
         Task {
+            print("🔍 DEBUG: Starting saveWorkOrder task")
             await viewModel.saveWorkOrder()
+            print("🔍 DEBUG: saveWorkOrder task completed")
             
             if !viewModel.showError {
+                print("🔍 DEBUG: Save successful - tracking user interaction again")
+                // Track user interaction again after successful save to ensure timer is reset
+                InactivityManager.trackUserInteraction()
+                
                 // Success
                 savedWONumber = viewModel.workOrderNumber
                             showSaveBanner = true
                             draftWOId = UUID().uuidString
+                            print("🔍 DEBUG: About to call onSuccess callback")
                             onSuccess?()
+                            print("🔍 DEBUG: onSuccess callback completed")
+                            
+                            // Add a small delay to see if logout happens after navigation
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                                print("🔍 DEBUG: 0.5 seconds after onSuccess - currentView: \(appState.currentView), currentUser: \(appState.currentUser?.displayName ?? "nil")")
+                            }
 
                 // Reset form
                 await viewModel.resetForm()
                 expandedIndices = [0]
+            } else {
+                print("🔍 DEBUG: Save failed with error: \(viewModel.errorMessage ?? "Unknown error")")
             }
         }
     }
