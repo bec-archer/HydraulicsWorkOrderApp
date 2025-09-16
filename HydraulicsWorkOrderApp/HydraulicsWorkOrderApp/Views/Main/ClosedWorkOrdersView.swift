@@ -20,20 +20,7 @@ struct ClosedWorkOrdersView: View {
     // MARK: - Computed Properties
     private var closedWorkOrders: [WorkOrder] {
         // Use raw work orders from database, not the filtered activeWorkOrders
-        let allWorkOrders = viewModel.workOrders
-        let closed = allWorkOrders.filter { $0.isClosed && !$0.isDeleted }
-        
-        print("🔍 DEBUG: ClosedWorkOrdersView - Total work orders: \(allWorkOrders.count)")
-        print("🔍 DEBUG: ClosedWorkOrdersView - Closed work orders: \(closed.count)")
-        
-        for workOrder in allWorkOrders {
-            print("🔍 DEBUG: WO \(workOrder.workOrderNumber): Status=\(workOrder.status), isClosed=\(workOrder.isClosed), isDeleted=\(workOrder.isDeleted)")
-            if workOrder.isClosed {
-                print("  - Item statuses: \(workOrder.items.map { $0.statusHistory.last?.status ?? "none" })")
-            }
-        }
-        
-        return closed
+        viewModel.workOrders.filter { $0.isClosed && !$0.isDeleted }
     }
     
     private var flaggedClosedWorkOrders: [WorkOrder] {
