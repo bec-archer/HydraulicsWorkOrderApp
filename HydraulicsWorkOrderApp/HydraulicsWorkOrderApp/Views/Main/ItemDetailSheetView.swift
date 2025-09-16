@@ -53,180 +53,255 @@ struct ItemDetailSheetView: View {
     // MARK: - View Components
     
     private var headerRow: some View {
-        HStack(alignment: .top, spacing: 12) {
-            // Left: Composite WO_Number-ItemIndex (e.g., 250826-001-003)
-            Text("\(workOrder.workOrderNumber)-\(String(format: "%03d", itemIndex + 1))")
-                .font(.headline)
-                .fontWeight(.semibold)
-                .foregroundColor(ThemeManager.shared.textPrimary)
-                .lineLimit(1)
-                .truncationMode(.tail)
+        VStack(alignment: .leading, spacing: 8) {
+            // ───── Top Row: WO Item Number + Customer Info ─────
+            HStack(alignment: .top, spacing: 12) {
+                // Left: Composite WO_Number-ItemIndex (e.g., 250826-001-003)
+                Text("\(workOrder.workOrderNumber)-\(String(format: "%03d", itemIndex + 1))")
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(ThemeManager.shared.textPrimary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                
+                Spacer()
+                
+                // Right: Customer Information
+                customerInfoSection
+            }
             
-            Spacer()
+            // ───── Type Section ─────
+            VStack(alignment: .leading, spacing: 4) {
+                Text(currentItem.type.isEmpty ? "Item" : currentItem.type)
+                    .font(.title3)
+                    .fontWeight(.semibold)
+                    .foregroundColor(ThemeManager.shared.textPrimary)
+                
+                if !summaryLineForItem(currentItem).isEmpty {
+                    Text(summaryLineForItem(currentItem))
+                        .font(.caption)
+                        .foregroundColor(ThemeManager.shared.textSecondary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
+            }
             
-            // Middle: Reasons for Service (chosen at intake) — check to log "Service Performed — <Reason>"
-            VStack(alignment: .leading, spacing: 6) {
-                ForEach(0..<currentItem.reasonsForService.count, id: \.self) { index in
-                    let reason = currentItem.reasonsForService[index]
-                    let _ = print("🔍 DEBUG: Rendering reason button \(index): '\(reason)' - isUpdating: \(isUpdating)")
-                    HStack(spacing: 8) {
-                        Button(action: {
-                            print("🔍 DEBUG: 🎯 BUTTON ACTION CALLED for '\(reason)' (index: \(index))")
-                            print("🔍 DEBUG: isUpdating when reason button tapped: \(isUpdating)")
-                            print("🔍 DEBUG: Button action executing for reason: \(reason)")
-                            toggleReasonCompletion(reason)
-                        }) {
-                            Image(systemName: isReasonPerformed(reason) ? "checkmark.square.fill" : "square")
-                                .foregroundColor(isReasonPerformed(reason) ? .green : ThemeManager.shared.textSecondary)
-                                .frame(width: 30, height: 30) // Larger touch target
-                        }
-                        .disabled(isUpdating)
-                        .onAppear {
-                            print("🔍 DEBUG: Button for '\(reason)' appeared - isUpdating: \(isUpdating)")
-                            if index == 0 {
-                                print("🔍 DEBUG: 🎯 FIRST BUTTON ('\(reason)') APPEARED")
+            // ───── Reasons for Service Section ─────
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Reasons for Service:")
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                    .foregroundColor(Color.gray.opacity(0.7))
+                
+                // Grid layout for reasons
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 3), spacing: 6) {
+                    ForEach(0..<currentItem.reasonsForService.count, id: \.self) { index in
+                        let reason = currentItem.reasonsForService[index]
+                        let _ = print("🔍 DEBUG: Rendering reason button \(index): '\(reason)' - isUpdating: \(isUpdating)")
+                        HStack(spacing: 6) {
+                            Button(action: {
+                                print("🔍 DEBUG: 🎯 BUTTON ACTION CALLED for '\(reason)' (index: \(index))")
+                                print("🔍 DEBUG: isUpdating when reason button tapped: \(isUpdating)")
+                                print("🔍 DEBUG: Button action executing for reason: \(reason)")
+                                toggleReasonCompletion(reason)
+                            }) {
+                                Image(systemName: isReasonPerformed(reason) ? "checkmark.square.fill" : "square")
+                                    .foregroundColor(isReasonPerformed(reason) ? .green : ThemeManager.shared.textSecondary)
+                                    .frame(width: 20, height: 20)
                             }
-                        }
-                        .buttonStyle(PlainButtonStyle())
-                        
-                        // ───── Display reason with note for "Other" ─────
-                        if reason.lowercased().contains("other") && !(currentItem.reasonNotes?.isEmpty ?? true) {
-                            Text("\(reason) • \(currentItem.reasonNotes ?? "")")
-                                .font(.subheadline)
-                                .foregroundColor(ThemeManager.shared.textPrimary)
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.9)
-                        } else {
-                            Text(reason)
-                                .font(.subheadline)
-                                .foregroundColor(ThemeManager.shared.textPrimary)
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.9)
+                            .disabled(isUpdating)
+                            .onAppear {
+                                print("🔍 DEBUG: Button for '\(reason)' appeared - isUpdating: \(isUpdating)")
+                                if index == 0 {
+                                    print("🔍 DEBUG: 🎯 FIRST BUTTON ('\(reason)') APPEARED")
+                                }
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                            
+                            // ───── Display reason with note for "Other" ─────
+                            if reason.lowercased().contains("other") && !(currentItem.reasonNotes?.isEmpty ?? true) {
+                                Text("\(reason) • \(currentItem.reasonNotes ?? "")")
+                                    .font(.subheadline)
+                                    .foregroundColor(ThemeManager.shared.textPrimary)
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.8)
+                            } else {
+                                Text(reason)
+                                    .font(.subheadline)
+                                    .foregroundColor(ThemeManager.shared.textPrimary)
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.8)
+                            }
+                            
+                            Spacer()
                         }
                     }
                 }
             }
             
-            // Right: StatusBadge (tappable) and Add Notes button
-            VStack(spacing: 8) {
-                let _ = print("🔍 DEBUG: Rendering status button section - isUpdating: \(isUpdating)")
-                Button(action: {
-                    print("🔍 DEBUG: Status button tapped - setting showStatusSelection to true")
-                    print("🔍 DEBUG: isUpdating when status button tapped: \(isUpdating)")
-                    print("🔍 DEBUG: Status button action executing")
-                    showStatusSelection = true
-                    print("🔍 DEBUG: showStatusSelection is now: \(showStatusSelection)")
-                }) {
-                    StatusBadge(status: getActualItemStatus(currentItem))
-                }
-                .onAppear {
-                    print("🔍 DEBUG: Status button appeared - isUpdating: \(isUpdating)")
-                }
-                .buttonStyle(PlainButtonStyle())
-                .disabled(isUpdating)
-                .onTapGesture {
-                    print("🔍 DEBUG: Status button onTapGesture triggered")
-                    print("🔍 DEBUG: isUpdating when onTapGesture: \(isUpdating)")
-                    if !isUpdating {
-                        showStatusSelection = true
-                        print("🔍 DEBUG: showStatusSelection set to true via onTapGesture")
-                    }
-                }
-                .simultaneousGesture(
-                    TapGesture()
-                        .onEnded {
-                            print("🔍 DEBUG: Status button simultaneous gesture triggered")
-                            print("🔍 DEBUG: isUpdating when simultaneous gesture: \(isUpdating)")
-                            if !isUpdating {
-                                showStatusSelection = true
-                                print("🔍 DEBUG: showStatusSelection set to true via simultaneous gesture")
-                            }
-                        }
-                )
-                .overlay(
-                    isUpdating ? 
-                    ProgressView()
-                        .scaleEffect(0.8)
-                        .background(Color.white.opacity(0.8))
-                        .cornerRadius(8)
-                    : nil
-                )
+            // ───── Status Badge and Add Notes Section ─────
+            HStack {
+                Spacer()
                 
-                Button(action: {
-                    print("🔍 DEBUG: Add Notes button tapped")
-                    print("🔍 DEBUG: isUpdating: \(isUpdating)")
-                    print("🔍 DEBUG: showAddNotes before: \(showAddNotes)")
-                    print("🔍 DEBUG: Add Notes button action executing")
-                    showAddNotes = true
-                    print("🔍 DEBUG: showAddNotes after: \(showAddNotes)")
-                }) {
-                    VStack(spacing: 4) {
-                        Image(systemName: "note.text.badge.plus")
-                            .foregroundColor(ThemeManager.shared.linkColor)
-                            .font(.title3)
-                        Text("Add Note")
-                            .font(.caption)
-                            .foregroundColor(ThemeManager.shared.linkColor)
+                // Right: Status Badge and Add Notes button
+                VStack(spacing: 8) {
+                    let _ = print("🔍 DEBUG: Rendering status button section - isUpdating: \(isUpdating)")
+                    Button(action: {
+                        print("🔍 DEBUG: Status button tapped - setting showStatusSelection to true")
+                        print("🔍 DEBUG: isUpdating when status button tapped: \(isUpdating)")
+                        print("🔍 DEBUG: Status button action executing")
+                        showStatusSelection = true
+                        print("🔍 DEBUG: showStatusSelection is now: \(showStatusSelection)")
+                    }) {
+                        StatusBadge(status: getActualItemStatus(currentItem))
                     }
-                    .frame(width: 60, height: 50)
-                    .background(Color.blue.opacity(0.1))
-                    .cornerRadius(8)
-                }
-                .disabled(isUpdating)
-                .buttonStyle(PlainButtonStyle())
-                .onTapGesture {
-                    print("🔍 DEBUG: Add Notes button onTapGesture triggered")
-                    print("🔍 DEBUG: isUpdating when onTapGesture: \(isUpdating)")
-                    if !isUpdating {
-                        showAddNotes = true
-                        print("🔍 DEBUG: showAddNotes set to true via onTapGesture")
+                    .onAppear {
+                        print("🔍 DEBUG: Status button appeared - isUpdating: \(isUpdating)")
                     }
-                }
-                .simultaneousGesture(
-                    TapGesture()
-                        .onEnded {
-                            print("🔍 DEBUG: Add Notes button simultaneous gesture triggered")
-                            print("🔍 DEBUG: isUpdating when simultaneous gesture: \(isUpdating)")
-                            if !isUpdating {
-                                showAddNotes = true
-                                print("🔍 DEBUG: showAddNotes set to true via simultaneous gesture")
-                            }
+                    .buttonStyle(PlainButtonStyle())
+                    .disabled(isUpdating)
+                    .onTapGesture {
+                        print("🔍 DEBUG: Status button onTapGesture triggered")
+                        print("🔍 DEBUG: isUpdating when onTapGesture: \(isUpdating)")
+                        if !isUpdating {
+                            showStatusSelection = true
+                            print("🔍 DEBUG: showStatusSelection set to true via onTapGesture")
                         }
-                )
+                    }
+                    .simultaneousGesture(
+                        TapGesture()
+                            .onEnded {
+                                print("🔍 DEBUG: Status button simultaneous gesture triggered")
+                                print("🔍 DEBUG: isUpdating when simultaneous gesture: \(isUpdating)")
+                                if !isUpdating {
+                                    showStatusSelection = true
+                                    print("🔍 DEBUG: showStatusSelection set to true via simultaneous gesture")
+                                }
+                            }
+                    )
+                    .overlay(
+                        isUpdating ? 
+                        ProgressView()
+                            .scaleEffect(0.8)
+                            .background(Color.white.opacity(0.8))
+                            .cornerRadius(8)
+                        : nil
+                    )
+                    
+                    Button(action: {
+                        print("🔍 DEBUG: Add Notes button tapped")
+                        print("🔍 DEBUG: isUpdating: \(isUpdating)")
+                        print("🔍 DEBUG: showAddNotes before: \(showAddNotes)")
+                        print("🔍 DEBUG: Add Notes button action executing")
+                        showAddNotes = true
+                        print("🔍 DEBUG: showAddNotes after: \(showAddNotes)")
+                    }) {
+                        VStack(spacing: 4) {
+                            Image(systemName: "note.text.badge.plus")
+                                .foregroundColor(ThemeManager.shared.linkColor)
+                                .font(.title3)
+                            Text("Add Note")
+                                .font(.caption)
+                                .foregroundColor(ThemeManager.shared.linkColor)
+                        }
+                        .frame(width: 60, height: 50)
+                        .background(Color.blue.opacity(0.1))
+                        .cornerRadius(8)
+                    }
+                    .disabled(isUpdating)
+                    .buttonStyle(PlainButtonStyle())
+                    .onTapGesture {
+                        print("🔍 DEBUG: Add Notes button onTapGesture triggered")
+                        print("🔍 DEBUG: isUpdating when onTapGesture: \(isUpdating)")
+                        if !isUpdating {
+                            showAddNotes = true
+                            print("🔍 DEBUG: showAddNotes set to true via onTapGesture")
+                        }
+                    }
+                    .simultaneousGesture(
+                        TapGesture()
+                            .onEnded {
+                                print("🔍 DEBUG: Add Notes button simultaneous gesture triggered")
+                                print("🔍 DEBUG: isUpdating when simultaneous gesture: \(isUpdating)")
+                                if !isUpdating {
+                                    showAddNotes = true
+                                    print("🔍 DEBUG: showAddNotes set to true via simultaneous gesture")
+                                }
+                            }
+                    )
+                }
             }
         }
     }
     
-    private var itemDetails: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            // Type line
-            Text(currentItem.type.isEmpty ? "Item" : currentItem.type)
-                .font(.subheadline)
-                .foregroundColor(ThemeManager.shared.textSecondary)
-                .lineLimit(1)
-                .truncationMode(.tail)
+    // ───── Customer Info Section ─────
+    private var customerInfoSection: some View {
+        VStack(alignment: .trailing, spacing: 4) {
+            // Customer name with emoji tag if available
+            HStack(spacing: 6) {
+                if let emojiTag = workOrder.customerEmojiTag, !emojiTag.isEmpty {
+                    Text(emojiTag)
+                        .font(.subheadline)
+                }
+                Text(workOrder.customerName)
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                    .foregroundColor(ThemeManager.shared.textPrimary)
+            }
             
-            // Size / Color / Machine / Brand / Wait summary (muted), with inline "Other" note if present
-            if !summaryLineForItem(currentItem).isEmpty {
-                Text(summaryLineForItem(currentItem))
+            // Customer company if available
+            if let company = workOrder.customerCompany, !company.isEmpty {
+                Text(company)
                     .font(.caption)
                     .foregroundColor(ThemeManager.shared.textSecondary)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
+            }
+            
+            // Phone number (yellow and tappable)
+            Button(action: {
+                if let url = URL(string: "tel:\(workOrder.customerPhone)") {
+                    UIApplication.shared.open(url)
+                }
+            }) {
+                Text(workOrder.customerPhone)
+                    .font(.caption)
+                    .fontWeight(.medium)
+                    .foregroundColor(Color(red: 1.0, green: 0.77, blue: 0.0)) // #FFC500 yellow
+            }
+            .buttonStyle(PlainButtonStyle())
+            
+            // Email if available
+            if let email = workOrder.customerEmail, !email.isEmpty {
+                Text(email)
+                    .font(.caption)
+                    .foregroundColor(ThemeManager.shared.textSecondary)
+            }
+            
+            // Tax exempt indicator
+            if workOrder.customerTaxExempt {
+                HStack(spacing: 4) {
+                    Image(systemName: "checkmark.shield.fill")
+                        .foregroundColor(.green)
+                        .font(.caption)
+                    Text("Tax Exempt")
+                        .font(.caption)
+                        .foregroundColor(.green)
+                        .fontWeight(.medium)
+                }
             }
         }
     }
+    
     
     private var mainBody: some View {
         HStack(alignment: .top, spacing: 16) {
             // Left: Primary image (large, 1:1) + responsive 2×2 thumbnails beneath
-            VStack(spacing: 8) {
+            VStack(alignment: .leading, spacing: 8) {
                 // Use a fixed size that allows cards to expand
                 let primarySize: CGFloat = 300
                 let gridSpacing: CGFloat = 8
                 let thumbSize = (primarySize - gridSpacing) / 2.0
                 
-                VStack(spacing: 8) {
+                VStack(alignment: .leading, spacing: 8) {
                     // PRIMARY 1:1 image
                     if let firstImageURL = currentItem.imageUrls.first {
                         AsyncImage(url: URL(string: firstImageURL)) { image in
@@ -269,7 +344,7 @@ struct ItemDetailSheetView: View {
                     
                     // 2×2 THUMBNAIL GRID
                     if currentItem.imageUrls.count > 1 {
-                        LazyVGrid(columns: Array(repeating: GridItem(.fixed(thumbSize), spacing: gridSpacing), count: 2), spacing: gridSpacing) {
+                        LazyVGrid(columns: Array(repeating: GridItem(.fixed(thumbSize), spacing: gridSpacing), count: 2), alignment: .leading, spacing: gridSpacing) {
                             ForEach(Array(currentItem.imageUrls.dropFirst().enumerated()), id: \.offset) { index, imageURL in
                                 AsyncImage(url: URL(string: imageURL)) { img in
                                     img.resizable()
@@ -314,7 +389,7 @@ struct ItemDetailSheetView: View {
                 let _ = print("🔍 DEBUG: Timeline section - timelineItems.count: \(timelineItems.count)")
                 if !timelineItems.isEmpty {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("Timeline")
+                        Text("Notes & Status")
                             .font(.subheadline)
                             .fontWeight(.medium)
                         
@@ -403,24 +478,23 @@ struct ItemDetailSheetView: View {
                 
                 ScrollView(.vertical, showsIndicators: true) {
                     SwiftUI.VStack(alignment: .leading, spacing: 12) {
-                        // Header row: Composite item number • Reasons (checkboxes) • StatusBadge
+                        // Header row: WO Item Number, Customer Info, Reasons, Type with Status Badge
                         headerRow
-                        
-                        // Item details
-                        itemDetails
                         
                         // Main body split: Left (images) + Right (notes & status)
                         mainBody
                     }
                     .padding(16)
-                    .background(ThemeManager.shared.cardBackground)
-                    .cornerRadius(ThemeManager.shared.cardCornerRadius)
+                    .background(Color(.systemGray6))
+                    .cornerRadius(16)
                     .shadow(
-                        color: ThemeManager.shared.cardShadowColor.opacity(ThemeManager.shared.cardShadowOpacity),
+                        color: Color.black.opacity(0.1),
                         radius: 8,
                         x: 0,
                         y: 4
                     )
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
                 }
             }
             .navigationBarHidden(true)

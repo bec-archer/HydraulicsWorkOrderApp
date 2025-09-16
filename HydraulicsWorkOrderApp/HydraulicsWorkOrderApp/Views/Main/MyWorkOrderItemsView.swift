@@ -210,136 +210,163 @@ struct MyWorkOrderItemCard: View {
     
     var body: some View {
         Button(action: onTap) {
-            VStack(alignment: .leading, spacing: 12) {
-                // ───── Header Row ─────
-                HStack {
-                    // Work Order Number
-                    Text("\(workOrder.workOrderNumber)-\(String(format: "%03d", itemIndex + 1))")
-                        .font(.headline)
-                        .foregroundColor(.primary)
-                    
-                    Spacer()
-                    
-                    // Status Badge
-                    StatusBadge(status: currentStatus)
+            HStack(alignment: .top, spacing: 16) {
+                // ───── Left: Primary Image ─────
+                VStack {
+                    if let firstImageURL = item.imageUrls.first {
+                        AsyncImage(url: URL(string: firstImageURL)) { image in
+                            image
+                                .resizable()
+                                .scaledToFill()
+                                .frame(width: 300, height: 300)
+                                .clipped()
+                                .cornerRadius(12)
+                        } placeholder: {
+                            Rectangle()
+                                .fill(Color(.systemGray5))
+                                .frame(width: 300, height: 300)
+                                .cornerRadius(12)
+                        }
+                    } else {
+                        Rectangle()
+                            .fill(Color(.systemGray5))
+                            .frame(width: 300, height: 300)
+                            .cornerRadius(12)
+                    }
                 }
                 
-                // ───── Item Type and Details ─────
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(item.type)
-                        .font(.title3)
-                        .fontWeight(.medium)
-                        .foregroundColor(.primary)
+                // ───── Right: Content ─────
+                VStack(alignment: .leading, spacing: 12) {
+                    // ───── Header Row ─────
+                    HStack {
+                        // Work Order Number
+                        Text("\(workOrder.workOrderNumber)-\(String(format: "%03d", itemIndex + 1))")
+                            .font(.headline)
+                            .foregroundColor(.primary)
+                        
+                        Spacer()
+                        
+                        // Status Badge
+                        StatusBadge(status: currentStatus)
+                    }
                     
-                    // Show dropdown details if available
-                    if !item.dropdowns.isEmpty {
-                        ForEach(Array(item.dropdowns.keys.sorted()), id: \.self) { key in
-                            if let value = item.dropdowns[key], !value.isEmpty {
-                                HStack {
-                                    Text("\(key):")
+                    // ───── Item Type and Details ─────
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(item.type)
+                            .font(.title3)
+                            .fontWeight(.medium)
+                            .foregroundColor(.primary)
+                        
+                        // Show dropdown details if available
+                        if !item.dropdowns.isEmpty {
+                            ForEach(Array(item.dropdowns.keys.sorted()), id: \.self) { key in
+                                if let value = item.dropdowns[key], !value.isEmpty {
+                                    HStack {
+                                        Text("\(key):")
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                        Text(value)
+                                            .font(.caption)
+                                            .foregroundColor(.primary)
+                                        Spacer()
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    
+                    // ───── Customer Info (Tappable) ─────
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(workOrder.customerName)
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                                .foregroundColor(.primary)
+                            
+                            if !workOrder.customerPhone.isEmpty {
+                                Text(workOrder.customerPhone)
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                        
+                        Spacer()
+                        
+                        // Phone action button
+                        if !workOrder.customerPhone.isEmpty {
+                            Button(action: {
+                                if let url = URL(string: "tel:\(workOrder.customerPhone)") {
+                                    UIApplication.shared.open(url)
+                                }
+                            }) {
+                                Image(systemName: "phone")
+                                    .font(.subheadline)
+                                    .foregroundColor(.blue)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .padding(.vertical, 4)
+                    .padding(.horizontal, 8)
+                    .background(Color(.systemGray6))
+                    .cornerRadius(8)
+                    
+                    // ───── Reasons for Service ─────
+                    if !item.reasonsForService.isEmpty {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Reasons for Service:")
+                                .font(.caption)
+                                .fontWeight(.medium)
+                                .foregroundColor(.secondary)
+                            
+                            ForEach(item.reasonsForService, id: \.self) { reason in
+                                HStack(spacing: 8) {
+                                    Image(systemName: item.completedReasons.contains(reason) ? "checkmark.square.fill" : "square")
+                                        .foregroundColor(item.completedReasons.contains(reason) ? .green : .secondary)
                                         .font(.caption)
-                                        .foregroundColor(.secondary)
-                                    Text(value)
+                                    
+                                    // ───── Display reason with note for "Other" ─────
+                                    if reason.lowercased().contains("other") && !(item.reasonNotes?.isEmpty ?? true) {
+                                        Text("\(reason) • \(item.reasonNotes ?? "")")
+                                            .font(.caption)
+                                            .foregroundColor(.primary)
+                                    } else {
+                                    Text(reason)
                                         .font(.caption)
                                         .foregroundColor(.primary)
+                                    }
+                                    
                                     Spacer()
                                 }
                             }
                         }
                     }
-                }
-                
-                // ───── Customer Info (Tappable) ─────
-                HStack {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(workOrder.customerName)
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-                            .foregroundColor(.primary)
-                        
-                        if !workOrder.customerPhone.isEmpty {
-                            Text(workOrder.customerPhone)
+                    
+                    // ───── Recent Activity ─────
+                    if let lastStatus = item.statusHistory.last {
+                        HStack {
+                            Text("Last updated by \(lastStatus.user)")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                            Spacer()
+                            Text(lastStatus.timestamp, format: .dateTime.month(.abbreviated).day().year().hour().minute())
                                 .font(.caption)
                                 .foregroundColor(.secondary)
                         }
                     }
                     
-                    Spacer()
+                    // ───── Recent Note ─────
+                    if !recentNoteText.isEmpty {
+                        Text(recentNoteText)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .lineLimit(2)
+                            .padding(.top, 4)
+                    }
                     
-                    // Phone action button
-                    if !workOrder.customerPhone.isEmpty {
-                        Button(action: {
-                            if let url = URL(string: "tel:\(workOrder.customerPhone)") {
-                                UIApplication.shared.open(url)
-                            }
-                        }) {
-                            Image(systemName: "phone")
-                                .font(.subheadline)
-                                .foregroundColor(.blue)
-                        }
-                        .buttonStyle(.plain)
-                    }
+                    // ───── Parts Used Section ─────
+                    partsUsedSection
                 }
-                .padding(.vertical, 4)
-                .padding(.horizontal, 8)
-                .background(Color(.systemGray6))
-                .cornerRadius(8)
-                
-                // ───── Reasons for Service ─────
-                if !item.reasonsForService.isEmpty {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Reasons for Service:")
-                            .font(.caption)
-                            .fontWeight(.medium)
-                            .foregroundColor(.secondary)
-                        
-                        ForEach(item.reasonsForService, id: \.self) { reason in
-                            HStack(spacing: 8) {
-                                Image(systemName: item.completedReasons.contains(reason) ? "checkmark.square.fill" : "square")
-                                    .foregroundColor(item.completedReasons.contains(reason) ? .green : .secondary)
-                                    .font(.caption)
-                                
-                                // ───── Display reason with note for "Other" ─────
-                                if reason.lowercased().contains("other") && !(item.reasonNotes?.isEmpty ?? true) {
-                                    Text("\(reason) • \(item.reasonNotes ?? "")")
-                                        .font(.caption)
-                                        .foregroundColor(.primary)
-                                } else {
-                                Text(reason)
-                                    .font(.caption)
-                                    .foregroundColor(.primary)
-                                }
-                                
-                                Spacer()
-                            }
-                        }
-                    }
-                }
-                
-                // ───── Recent Activity ─────
-                if let lastStatus = item.statusHistory.last {
-                    HStack {
-                        Text("Last updated by \(lastStatus.user)")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                        Spacer()
-                        Text(lastStatus.timestamp, format: .dateTime.month(.abbreviated).day().year().hour().minute())
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                }
-                
-                // ───── Recent Note ─────
-                if !recentNoteText.isEmpty {
-                    Text(recentNoteText)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .lineLimit(2)
-                        .padding(.top, 4)
-                }
-                
-                // ───── Parts Used Section ─────
-                partsUsedSection
             }
             .padding(16)
             .background(Color(.systemBackground))
