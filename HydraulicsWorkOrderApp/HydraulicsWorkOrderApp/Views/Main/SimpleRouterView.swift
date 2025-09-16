@@ -14,6 +14,7 @@ struct SimpleRouterView: View {
     @EnvironmentObject private var appState: AppState
     @State private var isSidebarVisible = false
     @State private var showTagScanner = false
+    @State private var showClosedWorkOrdersFilters = false
     
     // MARK: - Computed Properties
     private var navigationTitle: String {
@@ -111,6 +112,7 @@ struct SimpleRouterView: View {
                         )
                     }
                     .buttonStyle(.plain)
+                    
                     
                     // Dynamic Navigation Button
                     Button {
@@ -264,7 +266,7 @@ struct SimpleRouterView: View {
                             case .activeWorkOrders:
                                 ActiveWorkOrdersView()
                             case .closedWorkOrders:
-                                ClosedWorkOrdersView()
+                                ClosedWorkOrdersView(showFilters: $showClosedWorkOrdersFilters)
                             case .newWorkOrder:
                                 NewWorkOrderView()
                             case .myWorkOrderItems:

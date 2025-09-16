@@ -144,13 +144,15 @@ class ImageResolverViewModel: ObservableObject {
 struct WorkOrderCardView: View {
     let workOrder: WorkOrder
     let customerTag: String?
+    let onTap: (() -> Void)?
     
     @State private var isFullScreenImagePresented = false
     @State private var selectedImageURL: URL?
     
-    init(workOrder: WorkOrder, customerTag: String? = nil) {
+    init(workOrder: WorkOrder, customerTag: String? = nil, onTap: (() -> Void)? = nil) {
         self.workOrder = workOrder
         self.customerTag = customerTag
+        self.onTap = onTap
     }
     
     // Add a stable identifier to prevent unnecessary recreation
@@ -159,24 +161,30 @@ struct WorkOrderCardView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            // Thumbnail Grid (computed directly from WO_Items)
-            WorkOrderCardThumbnailGrid(
-                workOrder: workOrder,
-                onImageLongPress: { imageURL in
-                    print("🔍 DEBUG: Long-press detected on image: \(imageURL.absoluteString)")
-                    print("🔍 DEBUG: Setting selectedImageURL to: \(imageURL.absoluteString)")
-                    selectedImageURL = imageURL
-                    print("🔍 DEBUG: selectedImageURL is now: \(selectedImageURL?.absoluteString ?? "nil")")
-                    isFullScreenImagePresented = true
-                    print("🔍 DEBUG: isFullScreenImagePresented set to: \(isFullScreenImagePresented)")
-                    print("🔍 DEBUG: Full-screen viewer should now be presented")
-                }
-            )
-            
-            // Main content
-            WorkOrderCardContent(workOrder: workOrder, customerTag: customerTag)
+        Button(action: {
+            onTap?()
+        }) {
+            VStack(spacing: 0) {
+                // Thumbnail Grid (computed directly from WO_Items)
+                WorkOrderCardThumbnailGrid(
+                    workOrder: workOrder,
+                    onImageLongPress: { imageURL in
+                        print("🔍 DEBUG: Long-press detected on image: \(imageURL.absoluteString)")
+                        print("🔍 DEBUG: Setting selectedImageURL to: \(imageURL.absoluteString)")
+                        selectedImageURL = imageURL
+                        print("🔍 DEBUG: selectedImageURL is now: \(selectedImageURL?.absoluteString ?? "nil")")
+                        isFullScreenImagePresented = true
+                        print("🔍 DEBUG: isFullScreenImagePresented set to: \(isFullScreenImagePresented)")
+                        print("🔍 DEBUG: Full-screen viewer should now be presented")
+                    },
+                    onImageTap: nil // Remove individual image tap since button handles it
+                )
+                
+                // Main content
+                WorkOrderCardContent(workOrder: workOrder, customerTag: customerTag, onTap: nil) // Remove individual content tap since button handles it
+            }
         }
+        .buttonStyle(PlainButtonStyle()) // Remove default button styling
         .background(ThemeManager.shared.cardBackground)
         .cornerRadius(ThemeManager.shared.cardCornerRadius)
         .shadow(
@@ -225,6 +233,7 @@ struct WorkOrderCardView: View {
 struct WorkOrderCardContent: View {
     let workOrder: WorkOrder
     let customerTag: String?
+    let onTap: (() -> Void)?
     
     private var itemSummaryLine: String {
         // First 3–4 items, "Type × Qty", joined with " • "
@@ -326,6 +335,7 @@ struct WorkOrderCardContent: View {
 struct WorkOrderCardThumbnailGrid: View {
     let workOrder: WorkOrder
     let onImageLongPress: (URL) -> Void
+    let onImageTap: (() -> Void)?
 
     // Layout dimensions
     private let singleHeight: CGFloat = 140      // unchanged (square path uses SquareThumb)
@@ -355,6 +365,7 @@ struct WorkOrderCardThumbnailGrid: View {
                         itemStatus: StatusMapping.ItemStatus(for: info.item),
                         typeQtyLabel: "\(info.item.type.isEmpty ? "Item" : info.item.type) × 1",
                         onLongPress: onImageLongPress,
+                        onTap: onImageTap,
                         isItemComplete: isItemComplete(info.item)
                     )
                     .onAppear {
@@ -371,6 +382,7 @@ struct WorkOrderCardThumbnailGrid: View {
                             itemStatus: StatusMapping.ItemStatus(for: info.item),
                             typeQtyLabel: "\(info.item.type.isEmpty ? "Item" : info.item.type) × 1",
                             onLongPress: onImageLongPress,
+                            onTap: onImageTap,
                             isItemComplete: isItemComplete(info.item)
                         )
                     }
@@ -389,6 +401,7 @@ struct WorkOrderCardThumbnailGrid: View {
                             showPlusBadge: (idx == 3 && totalItems > 4) ? (totalItems - 3) : nil,
                             typeQtyLabel: "\(info.item.type.isEmpty ? "Item" : info.item.type) × 1",
                             onLongPress: onImageLongPress,
+                            onTap: onImageTap,
                             isItemComplete: isItemComplete(info.item)
                         )
                     }
@@ -425,6 +438,7 @@ private struct SquareThumb: View {
     let itemStatus: StatusMapping.ItemStatus
     var typeQtyLabel: String = ""
     let onLongPress: (URL) -> Void
+    let onTap: (() -> Void)?
     let isItemComplete: Bool  // NEW: Add individual item completion status
 
     var body: some View {
@@ -522,6 +536,7 @@ private struct FullWidthThumb: View {
     let itemStatus: StatusMapping.ItemStatus
     var typeQtyLabel: String = ""
     let onLongPress: (URL) -> Void
+    let onTap: (() -> Void)?
     let isItemComplete: Bool  // NEW: Add individual item completion status
 
     var body: some View {
@@ -629,6 +644,7 @@ private struct GridThumb: View {
     let showPlusBadge: Int?
     var typeQtyLabel: String = ""
     let onLongPress: (URL) -> Void
+    let onTap: (() -> Void)?
     let isItemComplete: Bool  // NEW: Add individual item completion status
 
     var body: some View {
