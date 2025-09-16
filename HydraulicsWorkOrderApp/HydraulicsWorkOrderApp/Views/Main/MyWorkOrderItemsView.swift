@@ -275,6 +275,8 @@ struct MyWorkOrderItemCard: View {
     @State private var costText: String = ""
     @State private var isEditingParts: Bool = false
     @State private var isSavingParts: Bool = false
+    @State private var showStatusSelection: Bool = false
+    @State private var itemForCompletion: WO_Item?
     @StateObject private var workOrdersDB = WorkOrdersDatabase.shared
     
     // Get current status from statusHistory
@@ -324,8 +326,14 @@ struct MyWorkOrderItemCard: View {
                     
                     Spacer()
                     
-                    // Status Badge
-                    StatusBadge(status: currentStatus)
+                    // Status Badge (Tappable)
+                    Button(action: {
+                        print("🔍 DEBUG: Status badge tapped for item: \(workOrder.workOrderNumber)-\(String(format: "%03d", itemIndex + 1))")
+                        showStatusSelection = true
+                    }) {
+                        StatusBadge(status: currentStatus)
+                    }
+                    .buttonStyle(.plain)
                 }
                 
                 // ───── View Details Button ─────
@@ -495,6 +503,80 @@ struct MyWorkOrderItemCard: View {
             print("🔍 DEBUG: Work Order ID: \(workOrder.id)")
             print("🔍 DEBUG: Work Order Number: \(workOrder.workOrderNumber)")
             print("🔍 DEBUG: Item Index: \(itemIndex)")
+            print("🔍 DEBUG: Completion details - Parts: '\(item.partsUsed ?? "nil")', Hours: '\(item.hoursWorked ?? "nil")', Cost: '\(item.finalCost ?? "nil")'")
+        }
+        .onChange(of: item.partsUsed) { newValue in
+            partsUsedText = newValue ?? ""
+            print("🔍 DEBUG: Parts used changed to: '\(newValue ?? "nil")'")
+        }
+        .onChange(of: item.hoursWorked) { newValue in
+            hoursWorkedText = newValue ?? ""
+            print("🔍 DEBUG: Hours worked changed to: '\(newValue ?? "nil")'")
+        }
+        .onChange(of: item.finalCost) { newValue in
+            costText = newValue ?? ""
+            print("🔍 DEBUG: Final cost changed to: '\(newValue ?? "nil")'")
+        }
+        .sheet(isPresented: $showStatusSelection) {
+            StatusSelectionView(
+                currentStatus: currentStatus,
+                onStatusSelected: { newStatus in
+                    print("🔍 DEBUG: Status selected: \(newStatus)")
+                    
+                // Check if status is "Complete" - show completion details sheet first
+                if newStatus.lowercased() == "complete" {
+                    print("🔍 DEBUG: Complete status requested - showing completion details sheet")
+                    print("🔍 DEBUG: Item ID: \(item.id), Index: \(itemIndex)")
+                    
+                    // First dismiss the status selection sheet
+                    showStatusSelection = false
+                    
+                    // Set the item for completion details
+                    itemForCompletion = item
+                    print("🔍 DEBUG: itemForCompletion set to: \(item.id)")
+                    // Note: Status will only change to Complete AFTER completion details are saved
+                } else {
+                    // For other statuses, update directly
+                    Task {
+                        await updateItemStatus(newStatus)
+                    }
+                    showStatusSelection = false
+                }
+                }
+            )
+        }
+        .sheet(item: $itemForCompletion) { completionItem in
+            CompletionDetailsSheet(
+                workOrder: workOrder,
+                item: completionItem,
+                itemIndex: itemIndex,
+                onCompletionDetailsSaved: { partsUsed, hoursWorked, cost in
+                    print("🔍 DEBUG: CompletionDetailsSheet callback - Parts: '\(partsUsed)', Hours: '\(hoursWorked)', Cost: '\(cost)'")
+                    Task {
+                        // Only change status to Complete after completion details are saved
+                        await updateItemStatusWithCompletion(
+                            "Complete",
+                            partsUsed: partsUsed,
+                            hoursWorked: hoursWorked,
+                            cost: cost
+                        )
+                        
+                        // Notify parent view of data change
+                        DispatchQueue.main.async {
+                            onDataChanged?()
+                        }
+                    }
+                    itemForCompletion = nil
+                },
+                onCompletionCancelled: {
+                    // If user cancels, don't change the status - it remains as it was
+                    print("🔍 DEBUG: Completion details sheet cancelled - status unchanged")
+                    itemForCompletion = nil
+                }
+            )
+            .onAppear {
+                print("🔍 DEBUG: CompletionDetailsSheet presented for item: \(completionItem.id), index: \(itemIndex)")
+            }
         }
     }
     
@@ -730,6 +812,112 @@ struct MyWorkOrderItemCard: View {
                     print("🔍 DEBUG: Database update failed, refreshing to correct state...")
                     onDataChanged?()
                 }
+            }
+        }
+    }
+    
+    // MARK: - Update Item Status
+    private func updateItemStatus(_ newStatus: String) async {
+        print("🔍 DEBUG: updateItemStatus called with status: '\(newStatus)'")
+        print("🔍 DEBUG: Starting status update process...")
+        
+        do {
+            print("🔍 DEBUG: Creating updated work order copy...")
+            var updatedWorkOrder = workOrder
+            
+            // Add new status to status history
+            let newStatusEntry = WO_Status(
+                status: newStatus,
+                user: AppState.shared.currentUserName,
+                timestamp: Date(),
+                notes: "Status updated to \(newStatus)"
+            )
+            
+            updatedWorkOrder.items[itemIndex].statusHistory.append(newStatusEntry)
+            updatedWorkOrder.items[itemIndex].lastModified = Date()
+            updatedWorkOrder.items[itemIndex].lastModifiedBy = AppState.shared.currentUserName
+            updatedWorkOrder.lastModified = Date()
+            updatedWorkOrder.lastModifiedBy = AppState.shared.currentUserName
+            
+            print("🔍 DEBUG: Added status to history. Total statuses now: \(updatedWorkOrder.items[itemIndex].statusHistory.count)")
+            
+            print("🔍 DEBUG: Calling workOrdersDB.updateWorkOrder...")
+            print("🔍 DEBUG: Work Order ID: \(updatedWorkOrder.id)")
+            print("🔍 DEBUG: Work Order Number: \(updatedWorkOrder.workOrderNumber)")
+            
+            try await workOrdersDB.updateWorkOrder(updatedWorkOrder)
+            
+            print("✅ DEBUG: Successfully updated work order in database")
+            
+            // Refresh the data after successful database update
+            await MainActor.run {
+                print("🔍 DEBUG: Refreshing data after successful status update...")
+                onDataChanged?()
+            }
+            
+        } catch {
+            print("❌ DEBUG: Error updating item status: \(error)")
+            print("❌ DEBUG: Error details: \(error.localizedDescription)")
+            if let nsError = error as NSError? {
+                print("❌ DEBUG: NSError domain: \(nsError.domain)")
+                print("❌ DEBUG: NSError code: \(nsError.code)")
+                print("❌ DEBUG: NSError userInfo: \(nsError.userInfo)")
+            }
+        }
+    }
+    
+    // MARK: - Update Item Status With Completion Details
+    private func updateItemStatusWithCompletion(_ newStatus: String, partsUsed: String, hoursWorked: String, cost: String) async {
+        print("🔍 DEBUG: updateItemStatusWithCompletion called with status: '\(newStatus)'")
+        print("🔍 DEBUG: Parts: '\(partsUsed)', Hours: '\(hoursWorked)', Cost: '\(cost)'")
+        
+        do {
+            print("🔍 DEBUG: Creating updated work order copy...")
+            var updatedWorkOrder = workOrder
+            
+            // Update completion details
+            updatedWorkOrder.items[itemIndex].partsUsed = partsUsed.isEmpty ? nil : partsUsed
+            updatedWorkOrder.items[itemIndex].hoursWorked = hoursWorked.isEmpty ? nil : hoursWorked
+            updatedWorkOrder.items[itemIndex].finalCost = cost.isEmpty ? nil : cost
+            
+            // Add new status to status history
+            let newStatusEntry = WO_Status(
+                status: newStatus,
+                user: AppState.shared.currentUserName,
+                timestamp: Date(),
+                notes: "Status updated to \(newStatus) with completion details"
+            )
+            
+            updatedWorkOrder.items[itemIndex].statusHistory.append(newStatusEntry)
+            updatedWorkOrder.items[itemIndex].lastModified = Date()
+            updatedWorkOrder.items[itemIndex].lastModifiedBy = AppState.shared.currentUserName
+            updatedWorkOrder.lastModified = Date()
+            updatedWorkOrder.lastModifiedBy = AppState.shared.currentUserName
+            
+            print("🔍 DEBUG: Updated completion details - Parts: '\(updatedWorkOrder.items[itemIndex].partsUsed ?? "nil")', Hours: '\(updatedWorkOrder.items[itemIndex].hoursWorked ?? "nil")', Cost: '\(updatedWorkOrder.items[itemIndex].finalCost ?? "nil")'")
+            print("🔍 DEBUG: Added status to history. Total statuses now: \(updatedWorkOrder.items[itemIndex].statusHistory.count)")
+            
+            print("🔍 DEBUG: Calling workOrdersDB.updateWorkOrder...")
+            print("🔍 DEBUG: Work Order ID: \(updatedWorkOrder.id)")
+            print("🔍 DEBUG: Work Order Number: \(updatedWorkOrder.workOrderNumber)")
+            
+            try await workOrdersDB.updateWorkOrder(updatedWorkOrder)
+            
+            print("✅ DEBUG: Successfully updated work order in database")
+            
+            // Refresh the data after successful database update
+            await MainActor.run {
+                print("🔍 DEBUG: Refreshing data after successful completion status update...")
+                onDataChanged?()
+            }
+            
+        } catch {
+            print("❌ DEBUG: Error updating item status with completion: \(error)")
+            print("❌ DEBUG: Error details: \(error.localizedDescription)")
+            if let nsError = error as NSError? {
+                print("❌ DEBUG: NSError domain: \(nsError.domain)")
+                print("❌ DEBUG: NSError code: \(nsError.code)")
+                print("❌ DEBUG: NSError userInfo: \(nsError.userInfo)")
             }
         }
     }
