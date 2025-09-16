@@ -27,7 +27,7 @@ class ActiveWorkOrdersViewModel: ObservableObject {
         for workOrder in workOrders {
             print("🔍 DEBUG: Processing WO: \(workOrder.workOrderNumber) (ID: \(workOrder.id), Status: \(workOrder.status), Deleted: \(workOrder.isDeleted))")
             
-            if !workOrder.isDeleted && workOrder.status != "Closed" {
+            if !workOrder.isDeleted && !workOrder.isClosed {
                 // If we already have this WO_Number, keep the one with the most recent lastModified
                 if let existing = uniqueWorkOrders[workOrder.workOrderNumber] {
                     duplicatesFound[workOrder.workOrderNumber, default: 1] += 1

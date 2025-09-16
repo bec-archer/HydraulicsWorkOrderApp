@@ -20,7 +20,7 @@ struct ActiveWorkOrdersView: View {
         // Remove duplicates by WO_Number, keeping the most recent one
         var uniqueWorkOrders: [String: WorkOrder] = [:]
         for workOrder in db.workOrders {
-            if !workOrder.isDeleted && workOrder.status != "Closed" {
+            if !workOrder.isDeleted && !workOrder.isClosed {
                 // If we already have this WO_Number, keep the one with the most recent lastModified
                 if let existing = uniqueWorkOrders[workOrder.workOrderNumber] {
                     // Prefer work orders with Firestore IDs, then most recent

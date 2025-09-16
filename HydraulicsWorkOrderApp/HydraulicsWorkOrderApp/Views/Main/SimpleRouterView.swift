@@ -22,6 +22,8 @@ struct SimpleRouterView: View {
             return "Login"
         case .activeWorkOrders:
             return "Active Work Orders"
+        case .closedWorkOrders:
+            return "Closed Work Orders"
         case .newWorkOrder:
             return "New Work Order"
         case .myWorkOrderItems:
@@ -47,103 +49,105 @@ struct SimpleRouterView: View {
     
     var body: some View {
         VStack(spacing: 0) {
-            // ───── Top Navigation Bar ─────
-            HStack {
-                // Sidebar toggle button
-                Button {
-                    withAnimation(.easeInOut(duration: 0.3)) {
-                        isSidebarVisible.toggle()
-                    }
-                } label: {
-                    Image(systemName: isSidebarVisible ? "sidebar.left" : "sidebar.left")
-                        .font(.title2)
-                        .foregroundColor(Color(hex: "#FFC500"))
-                }
-                .buttonStyle(.plain)
-                
-                Text(navigationTitle)
-                    .font(.headline)
-                    .fontWeight(.bold)
-                
-                Spacer()
-                
-                // User info and logout
-                HStack(spacing: 12) {
-                    Text(appState.currentUserName)
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                    
-                            Button {
-                                print("🔍 DEBUG: Logout button tapped")
-                                // Reset user state
-                                appState.currentUser = nil
-                                appState.currentView = .login
-                            } label: {
-                        Image(systemName: "rectangle.portrait.and.arrow.right")
+            // ───── Top Navigation Bar (only show when authenticated) ─────
+            if appState.currentUser != nil {
+                HStack {
+                    // Sidebar toggle button
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.3)) {
+                            isSidebarVisible.toggle()
+                        }
+                    } label: {
+                        Image(systemName: isSidebarVisible ? "sidebar.left" : "sidebar.left")
                             .font(.title2)
-                            .foregroundColor(.red)
+                            .foregroundColor(Color(hex: "#FFC500"))
+                    }
+                    .buttonStyle(.plain)
+                    
+                    Text(navigationTitle)
+                        .font(.headline)
+                        .fontWeight(.bold)
+                    
+                    Spacer()
+                    
+                    // User info and logout
+                    HStack(spacing: 12) {
+                        Text(appState.currentUserName)
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                        
+                                Button {
+                                    print("🔍 DEBUG: Logout button tapped")
+                                    // Reset user state
+                                    appState.currentUser = nil
+                                    appState.currentView = .login
+                                } label: {
+                            Image(systemName: "rectangle.portrait.and.arrow.right")
+                                .font(.title2)
+                                .foregroundColor(.red)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    
+                    // Tag Scanner button
+                    Button {
+                        print("🔍 DEBUG: Tag Scanner button tapped")
+                        showTagScanner = true
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "qrcode.viewfinder")
+                                .font(.subheadline)
+                                .fontWeight(.bold)
+                            Text("Scan Tag")
+                                .font(.subheadline)
+                                .fontWeight(.bold)
+                        }
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 8)
+                        .background(
+                            Capsule()
+                                .fill(Color.blue)
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    
+                    // Dynamic Navigation Button
+                    Button {
+                        if appState.currentView == .newWorkOrder {
+                            print("🔍 DEBUG: Check In Work Order button tapped")
+                            appState.triggerCheckIn()
+                        } else {
+                            print("🔍 DEBUG: Add New Work Order button tapped - navigating to new work order")
+                            appState.currentView = .newWorkOrder
+                        }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: appState.currentView == .newWorkOrder ? "checkmark" : "plus")
+                                .font(.subheadline)
+                                .fontWeight(.bold)
+                            Text(appState.currentView == .newWorkOrder ? "Check In Work Order" : "Add New Work Order")
+                                .font(.subheadline)
+                                .fontWeight(.bold)
+                        }
+                        .foregroundColor(.black)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 8)
+                        .background(
+                            Capsule()
+                                .fill(Color(hex: "#FFC500"))
+                        )
                     }
                     .buttonStyle(.plain)
                 }
-                
-                // Tag Scanner button
-                Button {
-                    print("🔍 DEBUG: Tag Scanner button tapped")
-                    showTagScanner = true
-                } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "qrcode.viewfinder")
-                            .font(.subheadline)
-                            .fontWeight(.bold)
-                        Text("Scan Tag")
-                            .font(.subheadline)
-                            .fontWeight(.bold)
-                    }
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
-                    .background(
-                        Capsule()
-                            .fill(Color.blue)
-                    )
-                }
-                .buttonStyle(.plain)
-                
-                // Dynamic Navigation Button
-                Button {
-                    if appState.currentView == .newWorkOrder {
-                        print("🔍 DEBUG: Check In Work Order button tapped")
-                        appState.triggerCheckIn()
-                    } else {
-                        print("🔍 DEBUG: Add New Work Order button tapped - navigating to new work order")
-                        appState.currentView = .newWorkOrder
-                    }
-                } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: appState.currentView == .newWorkOrder ? "checkmark" : "plus")
-                            .font(.subheadline)
-                            .fontWeight(.bold)
-                        Text(appState.currentView == .newWorkOrder ? "Check In Work Order" : "Add New Work Order")
-                            .font(.subheadline)
-                            .fontWeight(.bold)
-                    }
-                    .foregroundColor(.black)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
-                    .background(
-                        Capsule()
-                            .fill(Color(hex: "#FFC500"))
-                    )
-                }
-                .buttonStyle(.plain)
+                .padding()
+                .background(Color(.systemGray6))
             }
-            .padding()
-            .background(Color(.systemGray6))
             
             // ───── Main Content Area ─────
             HStack(spacing: 0) {
-                // ───── Sidebar ─────
-                if isSidebarVisible {
+                // ───── Sidebar (only show when authenticated) ─────
+                if appState.currentUser != nil && isSidebarVisible {
                     VStack(alignment: .leading, spacing: 12) {
                         Text("Navigation")
                             .font(.headline)
@@ -158,6 +162,17 @@ struct SimpleRouterView: View {
                                 currentView: appState.currentView,
                                 onTap: { isSidebarVisible = false }
                             )
+                            
+                            // Closed Work Orders (Admin/Manager/SuperAdmin only)
+                            if appState.isManager || appState.isAdmin || appState.isSuperAdmin {
+                                NavigationButton(
+                                    title: "Closed Work Orders",
+                                    icon: "archivebox",
+                                    targetView: .closedWorkOrders,
+                                    currentView: appState.currentView,
+                                    onTap: { isSidebarVisible = false }
+                                )
+                            }
                             
                             NavigationButton(
                                 title: "New Work Order",
@@ -241,87 +256,83 @@ struct SimpleRouterView: View {
                 
                 // ───── Main Content ─────
                 VStack {
-                    switch appState.currentView {
-                        case .login:
-                            LoginView()
-                        case .activeWorkOrders:
-                            ActiveWorkOrdersView()
-                        case .newWorkOrder:
-                            NewWorkOrderView()
-                        case .myWorkOrderItems:
-                            MyWorkOrderItemsView()
-                                .environmentObject(appState)
-                        case .settings:
-                            SettingsView()
-                        case .userManager:
-                            UserManagerView()
-                                .environmentObject(appState)
-                        case .dropdownManager:
-                            DropdownManagerView()
-                                .environmentObject(appState)
-                        case .customers:
-                            CustomersView()
-                        case .myLoginInfo:
-                            MyLoginInfoView()
-                                .environmentObject(appState)
-                        case .workOrderDetail:
-                            if let workOrder = appState.selectedWorkOrder {
-                                WorkOrderDetailView(
-                                    workOrder: workOrder,
-                                    onDelete: { deletedWorkOrder in
-                                        // Handle work order deletion
-                                        print("🔍 DEBUG: Work order deleted: \(deletedWorkOrder.workOrderNumber)")
-                                        appState.navigateToView(.activeWorkOrders)
-                                    }
-                                )
-                                .onAppear { print("🔍 DEBUG: SimpleRouterView switching to WorkOrderDetailView for WO: \(workOrder.workOrderNumber)") }
-                            } else {
-                                Text("No work order selected")
-                                    .onAppear { print("🔍 DEBUG: SimpleRouterView switching to WorkOrderDetailView but no work order selected") }
-                            }
-                        case .workOrderItemDetail:
-                            if let workOrder = appState.selectedWorkOrder,
-                               let item = appState.selectedWorkOrderItem,
-                               let itemIndex = appState.selectedWorkOrderItemIndex {
-                                WorkOrderItemDetailView(
-                                    workOrder: workOrder,
-                                    item: item,
-                                    itemIndex: itemIndex
-                                )
-                                .onAppear { print("🔍 DEBUG: SimpleRouterView switching to WorkOrderItemDetailView for WO: \(workOrder.workOrderNumber), Item: \(item.type)") }
-                            } else {
-                                Text("No work order item selected")
-                                    .onAppear { print("🔍 DEBUG: SimpleRouterView switching to WorkOrderItemDetailView but no work order item selected") }
-                            }
-                        case .qrBatchGenerator:
-                            QRBatchGeneratorView()
-                                .environmentObject(appState)
-                                .onAppear { print("🔍 DEBUG: SimpleRouterView switching to QRBatchGeneratorView") }
-                        @unknown default:
-                            Text("⚠️ Unknown AppScreen state")
+                    // Authentication guard - only show content if user is logged in
+                    if appState.currentUser != nil {
+                        switch appState.currentView {
+                            case .login:
+                                LoginView()
+                            case .activeWorkOrders:
+                                ActiveWorkOrdersView()
+                            case .closedWorkOrders:
+                                ClosedWorkOrdersView()
+                            case .newWorkOrder:
+                                NewWorkOrderView()
+                            case .myWorkOrderItems:
+                                MyWorkOrderItemsView()
+                                    .environmentObject(appState)
+                            case .settings:
+                                SettingsView()
+                            case .userManager:
+                                UserManagerView()
+                                    .environmentObject(appState)
+                            case .dropdownManager:
+                                DropdownManagerView()
+                                    .environmentObject(appState)
+                            case .customers:
+                                CustomersView()
+                            case .myLoginInfo:
+                                MyLoginInfoView()
+                                    .environmentObject(appState)
+                            case .workOrderDetail:
+                                if let workOrder = appState.selectedWorkOrder {
+                                    WorkOrderDetailView(
+                                        workOrder: workOrder,
+                                        onDelete: { deletedWorkOrder in
+                                            // Handle work order deletion
+                                            print("🔍 DEBUG: Work order deleted: \(deletedWorkOrder.workOrderNumber)")
+                                            appState.navigateToView(.activeWorkOrders)
+                                        }
+                                    )
+                                    .onAppear { print("🔍 DEBUG: SimpleRouterView switching to WorkOrderDetailView for WO: \(workOrder.workOrderNumber)") }
+                                } else {
+                                    Text("No work order selected")
+                                        .onAppear { print("🔍 DEBUG: SimpleRouterView switching to WorkOrderDetailView but no work order selected") }
+                                }
+                            case .workOrderItemDetail:
+                                if let workOrder = appState.selectedWorkOrder,
+                                   let item = appState.selectedWorkOrderItem,
+                                   let itemIndex = appState.selectedWorkOrderItemIndex {
+                                    WorkOrderItemDetailView(
+                                        workOrder: workOrder,
+                                        item: item,
+                                        itemIndex: itemIndex
+                                    )
+                                    .onAppear { print("🔍 DEBUG: SimpleRouterView switching to WorkOrderItemDetailView for WO: \(workOrder.workOrderNumber), Item: \(item.type)") }
+                                } else {
+                                    Text("No work order item selected")
+                                        .onAppear { print("🔍 DEBUG: SimpleRouterView switching to WorkOrderItemDetailView but no work order item selected") }
+                                }
+                            case .qrBatchGenerator:
+                                QRBatchGeneratorView()
+                                    .environmentObject(appState)
+                                    .onAppear { print("🔍 DEBUG: SimpleRouterView switching to QRBatchGeneratorView") }
+                            @unknown default:
+                                Text("⚠️ Unknown AppScreen state")
+                        }
+                    } else {
+                        // Show login screen when not authenticated
+                        LoginView()
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
         .onAppear {
-            // If dev bypass is enabled, ensure we have dev user credentials
-            if DevSettingsManager.shared.skipLogin {
-                if appState.currentUser == nil {
-                    appState.currentUser = User(
-                        id: "dev-user-id",
-                        displayName: "Dev User",
-                        phoneE164: nil,
-                        role: .superadmin,
-                        isActive: true,
-                        pin: nil,
-                        createdAt: Date(),
-                        updatedAt: Date(),
-                        createdByUserId: nil,
-                        updatedByUserId: nil
-                    )
-                    appState.currentView = .activeWorkOrders
-                }
+            // Ensure user is authenticated before showing any content
+            guard appState.currentUser != nil else {
+                print("🔍 DEBUG: No authenticated user - redirecting to login")
+                appState.currentView = .login
+                return
             }
         }
         .sheet(isPresented: $showTagScanner) {

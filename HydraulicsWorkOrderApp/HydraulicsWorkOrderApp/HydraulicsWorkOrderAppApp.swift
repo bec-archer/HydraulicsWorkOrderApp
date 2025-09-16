@@ -30,15 +30,17 @@ struct HydraulicsWorkOrderAppApp: App {
 
     var body: some Scene {
         WindowGroup {
-            // ───── Dev Login Toggle Logic ─────
+            // ───── Authentication-First Logic ─────
             if DevSettingsManager.shared.skipLogin {
-                SimpleRouterView()
-                    .environmentObject(AppState.shared) // 👈 inject AppState
-                    .environment(\.defaultMinListRowHeight, CGFloat(6)) // tighter rows everywhere
+                // Dev bypass: Create dev user immediately and show main app
+                DevBypassView()
+                    .environmentObject(AppState.shared)
+                    .environment(\.defaultMinListRowHeight, 6.0)
             } else {
+                // Production: Show login screen
                 LoginView()
-                    .environmentObject(AppState.shared) // also inject here for consistency
-                    .environment(\.defaultMinListRowHeight, CGFloat(6)) // tighter rows everywhere
+                    .environmentObject(AppState.shared)
+                    .environment(\.defaultMinListRowHeight, 6.0)
             }
         }
         // END .body

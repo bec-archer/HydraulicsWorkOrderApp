@@ -279,6 +279,30 @@ extension WorkOrder {
         }
     }
     
+    var isClosed: Bool {
+        // Check work order status first
+        if status.lowercased() == "closed" {
+            print("🔍 DEBUG: WorkOrder \(workOrderNumber) is closed (main status: \(status))")
+            return true
+        }
+        
+        // Check if all items have "closed" status
+        guard !items.isEmpty else { 
+            print("🔍 DEBUG: WorkOrder \(workOrderNumber) has no items, not closed")
+            return false 
+        }
+        
+        let allItemsClosed = items.allSatisfy { item in
+            let currentStatus = item.statusHistory.last?.status ?? ""
+            let isItemClosed = currentStatus.lowercased() == "closed"
+            print("🔍 DEBUG: Item \(item.type) status: \(currentStatus), isClosed: \(isItemClosed)")
+            return isItemClosed
+        }
+        
+        print("🔍 DEBUG: WorkOrder \(workOrderNumber) all items closed: \(allItemsClosed)")
+        return allItemsClosed
+    }
+    
     var isInProgress: Bool {
         status == "In Progress" || status == "Working"
     }

@@ -36,6 +36,18 @@ struct SidebarMenuContent: View {
                         .padding(.vertical, 4)
                 }
 
+                // Closed WorkOrders (Admin/Manager/SuperAdmin only)
+                if appState.isManager || appState.isAdmin || appState.isSuperAdmin {
+                    Button {
+                        appState.navigateToView(.closedWorkOrders)
+                        dismissAction?()
+                    } label: {
+                        Label("Closed WorkOrders", systemImage: "archivebox")
+                            .font(.title3.weight(.semibold))
+                            .padding(.vertical, 4)
+                    }
+                }
+
                 // Customers
                 Button {
                     appState.navigateToView(.customers)

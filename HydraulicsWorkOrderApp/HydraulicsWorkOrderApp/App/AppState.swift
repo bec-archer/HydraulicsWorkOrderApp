@@ -12,6 +12,7 @@ import SwiftUI
 enum AppScreen {
     case login
     case activeWorkOrders
+    case closedWorkOrders  // NEW: Closed work orders view for Admin/Manager/SuperAdmin
     case newWorkOrder
     case myWorkOrderItems
     case customers
