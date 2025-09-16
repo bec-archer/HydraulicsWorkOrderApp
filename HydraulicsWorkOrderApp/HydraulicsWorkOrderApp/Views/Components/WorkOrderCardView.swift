@@ -332,6 +332,12 @@ struct WorkOrderCardThumbnailGrid: View {
     private let doubleHeight: CGFloat = 112      // +12pt for better 2-up presence
     private let gridCell: CGFloat = 100          // larger cells for better visual balance
     private let spacing: CGFloat = 6             // tighter gutters per Notes style
+    
+    // Helper function to determine if an individual item is complete
+    private func isItemComplete(_ item: WO_Item) -> Bool {
+        let resolvedStatus = StatusMapping.resolvedStatus(for: item)
+        return resolvedStatus.lowercased() == "complete" || resolvedStatus.lowercased() == "completed"
+    }
 
     var body: some View {
         let totalItems = workOrder.items.count
@@ -349,7 +355,7 @@ struct WorkOrderCardThumbnailGrid: View {
                         itemStatus: StatusMapping.ItemStatus(for: info.item),
                         typeQtyLabel: "\(info.item.type.isEmpty ? "Item" : info.item.type) × 1",
                         onLongPress: onImageLongPress,
-                        isWorkOrderComplete: workOrder.isComplete
+                        isItemComplete: isItemComplete(info.item)
                     )
                     .onAppear {
                         print("🔍 DEBUG: SquareThumb created - WO: \(workOrder.workOrderNumber), status: '\(workOrder.status)', isComplete: \(workOrder.isComplete)")
@@ -365,7 +371,7 @@ struct WorkOrderCardThumbnailGrid: View {
                             itemStatus: StatusMapping.ItemStatus(for: info.item),
                             typeQtyLabel: "\(info.item.type.isEmpty ? "Item" : info.item.type) × 1",
                             onLongPress: onImageLongPress,
-                            isWorkOrderComplete: workOrder.isComplete
+                            isItemComplete: isItemComplete(info.item)
                         )
                     }
                 }
@@ -383,7 +389,7 @@ struct WorkOrderCardThumbnailGrid: View {
                             showPlusBadge: (idx == 3 && totalItems > 4) ? (totalItems - 3) : nil,
                             typeQtyLabel: "\(info.item.type.isEmpty ? "Item" : info.item.type) × 1",
                             onLongPress: onImageLongPress,
-                            isWorkOrderComplete: workOrder.isComplete
+                            isItemComplete: isItemComplete(info.item)
                         )
                     }
                 }
@@ -419,7 +425,7 @@ private struct SquareThumb: View {
     let itemStatus: StatusMapping.ItemStatus
     var typeQtyLabel: String = ""
     let onLongPress: (URL) -> Void
-    let isWorkOrderComplete: Bool  // NEW: Add completion status
+    let isItemComplete: Bool  // NEW: Add individual item completion status
 
     var body: some View {
         GeometryReader { geo in
@@ -445,7 +451,7 @@ private struct SquareThumb: View {
                 .cornerRadius(ThemeManager.shared.cardCornerRadius - 2)
 
                 // Green "Complete" banner (diagonal across top-left corner)
-                if isWorkOrderComplete {
+                if isItemComplete {
                     VStack {
                         HStack {
                             Text("COMPLETE")
@@ -466,15 +472,15 @@ private struct SquareThumb: View {
                     }
                     .padding(8)
                     .onAppear {
-                        print("🟢 DEBUG: Green COMPLETE banner showing for work order")
+                        print("🟢 DEBUG: Green COMPLETE banner showing for individual item")
                     }
                 } else {
                     // Debug: Show when banner is NOT showing
                     Color.clear
                         .onAppear {
-                            print("🔍 DEBUG: Work order NOT complete - isWorkOrderComplete: \(isWorkOrderComplete)")
+                            print("🔍 DEBUG: Item NOT complete - isItemComplete: \(isItemComplete)")
                         }
-                }
+                    }
 
                 // Indicator dot (inside)
                 OverlayDot(color: itemStatus.color, size: 10)
@@ -516,7 +522,7 @@ private struct FullWidthThumb: View {
     let itemStatus: StatusMapping.ItemStatus
     var typeQtyLabel: String = ""
     let onLongPress: (URL) -> Void
-    let isWorkOrderComplete: Bool  // NEW: Add completion status
+    let isItemComplete: Bool  // NEW: Add individual item completion status
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
@@ -558,7 +564,7 @@ private struct FullWidthThumb: View {
             .cornerRadius(10)
 
             // Green "Complete" banner (diagonal across top-left corner)
-            if isWorkOrderComplete {
+            if isItemComplete {
                 VStack {
                     HStack {
                         Text("COMPLETE")
@@ -623,7 +629,7 @@ private struct GridThumb: View {
     let showPlusBadge: Int?
     var typeQtyLabel: String = ""
     let onLongPress: (URL) -> Void
-    let isWorkOrderComplete: Bool  // NEW: Add completion status
+    let isItemComplete: Bool  // NEW: Add individual item completion status
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
@@ -664,7 +670,7 @@ private struct GridThumb: View {
             .cornerRadius(10)
 
             // Green "Complete" banner (diagonal across top-left corner)
-            if isWorkOrderComplete {
+            if isItemComplete {
                 VStack {
                     HStack {
                         Text("COMPLETE")

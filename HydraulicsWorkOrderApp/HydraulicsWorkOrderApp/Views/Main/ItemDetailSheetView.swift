@@ -86,6 +86,65 @@ struct ItemDetailSheetView: View {
                 }
             }
             
+            // ───── Completion Details Section ─────
+            if getActualItemStatus(currentItem).lowercased() == "complete" &&
+               (!(currentItem.partsUsed?.isEmpty ?? true) || 
+                !(currentItem.hoursWorked?.isEmpty ?? true) || 
+                !(currentItem.finalCost?.isEmpty ?? true)) {
+                
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Completion Details")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .foregroundColor(Color.gray.opacity(0.7))
+                    
+                    VStack(alignment: .leading, spacing: 4) {
+                        if let partsUsed = currentItem.partsUsed, !partsUsed.isEmpty {
+                            HStack {
+                                Text("Parts Used:")
+                                    .font(.caption)
+                                    .foregroundColor(ThemeManager.shared.textSecondary)
+                                Text(partsUsed)
+                                    .font(.caption)
+                                    .fontWeight(.medium)
+                                    .foregroundColor(ThemeManager.shared.textPrimary)
+                                Spacer()
+                            }
+                        }
+                        
+                        if let hoursWorked = currentItem.hoursWorked, !hoursWorked.isEmpty {
+                            HStack {
+                                Text("Hours:")
+                                    .font(.caption)
+                                    .foregroundColor(ThemeManager.shared.textSecondary)
+                                Text(hoursWorked)
+                                    .font(.caption)
+                                    .fontWeight(.medium)
+                                    .foregroundColor(ThemeManager.shared.textPrimary)
+                                Spacer()
+                            }
+                        }
+                        
+                        if let finalCost = currentItem.finalCost, !finalCost.isEmpty {
+                            HStack {
+                                Text("Cost:")
+                                    .font(.caption)
+                                    .foregroundColor(ThemeManager.shared.textSecondary)
+                                Text(finalCost)
+                                    .font(.caption)
+                                    .fontWeight(.medium)
+                                    .foregroundColor(ThemeManager.shared.textPrimary)
+                                Spacer()
+                            }
+                        }
+                    }
+                    .padding(.vertical, 6)
+                    .padding(.horizontal, 8)
+                    .background(Color(.systemGray6).opacity(0.5))
+                    .cornerRadius(6)
+                }
+            }
+            
             // ───── Reasons for Service Section ─────
             VStack(alignment: .leading, spacing: 8) {
                 Text("Reasons for Service:")
@@ -543,12 +602,22 @@ struct ItemDetailSheetView: View {
             
             print("🔍 DEBUG: Critical state reset on appear")
         }
+        .onChange(of: selectedItemForCompletion) { oldValue, newValue in
+            print("🔍 DEBUG: selectedItemForCompletion changed from: \(oldValue?.id.uuidString ?? "nil") to: \(newValue?.id.uuidString ?? "nil")")
+        }
+        .onChange(of: selectedItemIndexForCompletion) { oldValue, newValue in
+            print("🔍 DEBUG: selectedItemIndexForCompletion changed from: \(oldValue ?? -1) to: \(newValue ?? -1)")
+        }
+        .onChange(of: showCompletionDetailsSheet) { oldValue, newValue in
+            print("🔍 DEBUG: showCompletionDetailsSheet changed from: \(oldValue) to: \(newValue)")
+        }
         .onDisappear {
             print("🔍 DEBUG: ItemDetailSheetView onDisappear")
             print("🔍 DEBUG: Closing work order: \(workOrder.workOrderNumber)")
             print("🔍 DEBUG: Closing item index: \(itemIndex)")
             
             // Reset all state to prevent accumulation across sheet instances
+            // BUT don't reset completion-related state as it's needed for the completion details sheet
             isUpdating = false
             hasAppeared = false
             lastButtonTapTime = Date.distantPast
@@ -557,11 +626,10 @@ struct ItemDetailSheetView: View {
             showGallery = false
             showStatusSelection = false
             showAddNotes = false
-            showCompletionDetailsSheet = false
-            selectedItemForCompletion = nil
-            selectedItemIndexForCompletion = nil
+            // Don't reset showCompletionDetailsSheet, selectedItemForCompletion, selectedItemIndexForCompletion
+            // as they're needed for the completion details sheet flow
             
-            print("🔍 DEBUG: All state reset on disappear")
+            print("🔍 DEBUG: State reset on disappear (excluding completion details state)")
         }
         .fullScreenCover(isPresented: $showGallery) {
             ImageGalleryView(images: currentItem.imageUrls, title: "\(workOrder.workOrderNumber)-\(String(format: "%03d", itemIndex + 1))")
@@ -575,9 +643,13 @@ struct ItemDetailSheetView: View {
                     // Check if status is "Complete" - show completion details sheet first
                     if newStatus.lowercased() == "complete" {
                         print("🔍 DEBUG: Complete status requested - showing completion details sheet")
+                        print("🔍 DEBUG: Setting selectedItemForCompletion to: \(currentItem.id.uuidString)")
+                        print("🔍 DEBUG: Setting selectedItemIndexForCompletion to: \(itemIndex)")
                         selectedItemForCompletion = currentItem
                         selectedItemIndexForCompletion = itemIndex
+                        print("🔍 DEBUG: About to set showCompletionDetailsSheet to true")
                         showCompletionDetailsSheet = true
+                        print("🔍 DEBUG: showCompletionDetailsSheet is now: \(showCompletionDetailsSheet)")
                         // Note: Status will only change to Complete AFTER completion details are saved
                     } else {
                         // For other statuses, update directly
@@ -605,6 +677,7 @@ struct ItemDetailSheetView: View {
             }
         }
         .sheet(isPresented: $showCompletionDetailsSheet) {
+            let _ = print("🔍 DEBUG: Sheet presenting - selectedItemForCompletion: \(selectedItemForCompletion?.id.uuidString ?? "nil"), selectedItemIndexForCompletion: \(selectedItemIndexForCompletion ?? -1)")
             if let item = selectedItemForCompletion, let itemIndex = selectedItemIndexForCompletion {
                 CompletionDetailsSheet(
                     workOrder: workOrder,
@@ -620,12 +693,39 @@ struct ItemDetailSheetView: View {
                                 cost: cost
                             )
                         }
+                        // Clean up state after successful save
+                        selectedItemForCompletion = nil
+                        selectedItemIndexForCompletion = nil
                     },
                     onCompletionCancelled: {
                         // If user cancels, don't change the status - it remains as it was
                         print("🔍 DEBUG: Completion details sheet cancelled - status unchanged")
+                        // Clean up state after cancellation
+                        selectedItemForCompletion = nil
+                        selectedItemIndexForCompletion = nil
                     }
                 )
+                .onAppear {
+                    print("🔍 DEBUG: Completion details sheet presenting - selectedItemForCompletion: \(selectedItemForCompletion?.id.uuidString ?? "nil"), selectedItemIndexForCompletion: \(selectedItemIndexForCompletion ?? -1)")
+                }
+            } else {
+                // Fallback view if data is missing
+                VStack {
+                    Text("Error: Missing item data")
+                        .font(.headline)
+                        .foregroundColor(.red)
+                    Button("Close") {
+                        showCompletionDetailsSheet = false
+                        selectedItemForCompletion = nil
+                        selectedItemIndexForCompletion = nil
+                        print("🔍 DEBUG: Error fallback view - cleaning up state")
+                    }
+                    .padding()
+                    .background(Color.blue)
+                    .foregroundColor(.white)
+                    .cornerRadius(8)
+                }
+                .padding()
             }
         }
         .fullScreenCover(isPresented: $showImageViewer) {
@@ -720,25 +820,21 @@ struct ItemDetailSheetView: View {
             }
             
             do {
-                // Get fresh data from database
+                // Use the same approach as MyWorkOrderItemCard
                 let workOrdersDB = WorkOrdersDatabase.shared
                 var updatedWorkOrder = workOrder
-                var updatedItem = currentItem
                 
-                // Toggle the reason
-                if updatedItem.completedReasons.contains(reason) {
-                    updatedItem.completedReasons.removeAll { $0 == reason }
+                // Toggle the reason using the current item data
+                if updatedWorkOrder.items[itemIndex].completedReasons.contains(reason) {
+                    updatedWorkOrder.items[itemIndex].completedReasons.removeAll { $0 == reason }
                     print("🔍 DEBUG: Removed reason: \(reason)")
                 } else {
-                    updatedItem.completedReasons.append(reason)
+                    updatedWorkOrder.items[itemIndex].completedReasons.append(reason)
                     print("🔍 DEBUG: Added reason: \(reason)")
                 }
                 
-                updatedItem.lastModified = Date()
-                updatedItem.lastModifiedBy = appState.currentUserName
-                
-                // Update work order
-                updatedWorkOrder.items[itemIndex] = updatedItem
+                updatedWorkOrder.items[itemIndex].lastModified = Date()
+                updatedWorkOrder.items[itemIndex].lastModifiedBy = appState.currentUserName
                 updatedWorkOrder.lastModified = Date()
                 updatedWorkOrder.lastModifiedBy = appState.currentUserName
                 
@@ -981,18 +1077,77 @@ struct ItemDetailSheetView: View {
         for status in currentItem.statusHistory {
             // Skip "Service Performed" entries since they're already tracked in notes
             if !status.status.hasPrefix("Service Performed") {
-                timelineItems.append(TimelineItem(
-                    id: status.id,
-                    timestamp: status.timestamp,
-                    user: status.user,
-                    content: AnyView(
-                        Text(status.status)
-                            .font(.system(size: 12 * 1.2))
-                            .fontWeight(.bold)
-                            .foregroundColor(getStatusColor(status.status))
-                    ),
-                    type: .status
-                ))
+                // Check if this is a "Complete" status and show completion details
+                if status.status.lowercased() == "complete" && 
+                   (!(currentItem.partsUsed?.isEmpty ?? true) || 
+                    !(currentItem.hoursWorked?.isEmpty ?? true) || 
+                    !(currentItem.finalCost?.isEmpty ?? true)) {
+                    
+                    timelineItems.append(TimelineItem(
+                        id: status.id,
+                        timestamp: status.timestamp,
+                        user: status.user,
+                        content: AnyView(
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(status.status)
+                                    .font(.system(size: 12 * 1.2))
+                                    .fontWeight(.bold)
+                                    .foregroundColor(getStatusColor(status.status))
+                                
+                                // Show completion details if available
+                                VStack(alignment: .leading, spacing: 2) {
+                                    if let partsUsed = currentItem.partsUsed, !partsUsed.isEmpty {
+                                        HStack {
+                                            Text("Parts:")
+                                                .font(.system(size: 10 * 1.2))
+                                                .foregroundColor(ThemeManager.shared.textSecondary)
+                                            Text(partsUsed)
+                                                .font(.system(size: 10 * 1.2))
+                                                .foregroundColor(ThemeManager.shared.textPrimary)
+                                        }
+                                    }
+                                    
+                                    if let hoursWorked = currentItem.hoursWorked, !hoursWorked.isEmpty {
+                                        HStack {
+                                            Text("Hours:")
+                                                .font(.system(size: 10 * 1.2))
+                                                .foregroundColor(ThemeManager.shared.textSecondary)
+                                            Text(hoursWorked)
+                                                .font(.system(size: 10 * 1.2))
+                                                .foregroundColor(ThemeManager.shared.textPrimary)
+                                        }
+                                    }
+                                    
+                                    if let finalCost = currentItem.finalCost, !finalCost.isEmpty {
+                                        HStack {
+                                            Text("Cost:")
+                                                .font(.system(size: 10 * 1.2))
+                                                .foregroundColor(ThemeManager.shared.textSecondary)
+                                            Text(finalCost)
+                                                .font(.system(size: 10 * 1.2))
+                                                .foregroundColor(ThemeManager.shared.textPrimary)
+                                        }
+                                    }
+                                }
+                                .padding(.leading, 8)
+                            }
+                        ),
+                        type: .status
+                    ))
+                } else {
+                    timelineItems.append(TimelineItem(
+                        id: status.id,
+                        timestamp: status.timestamp,
+                        user: status.user,
+                        content: AnyView(
+                            Text(status.status)
+                                .font(.system(size: 12 * 1.2))
+                                .fontWeight(.bold)
+                                .foregroundColor(getStatusColor(status.status))
+                        ),
+                        type: .status
+                    ))
+                }
             }
         }
         

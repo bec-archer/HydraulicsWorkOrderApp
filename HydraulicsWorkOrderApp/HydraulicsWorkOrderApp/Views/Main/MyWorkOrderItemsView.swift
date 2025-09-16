@@ -56,6 +56,10 @@ struct MyWorkOrderItemsView: View {
                                 selectedItemForSheet = latestItem
                                 
                                 print("🔍 DEBUG: selectedItemForSheet is now: \(selectedItemForSheet?.workOrder.workOrderNumber ?? "nil")")
+                            },
+                            onDataChanged: {
+                                print("🔍 DEBUG: Data changed callback triggered - refreshing specific item")
+                                refreshSpecificItem(workOrderId: latestItem.workOrder.id, itemId: latestItem.item.id)
                             }
                         )
                     }
@@ -176,14 +180,86 @@ struct MyWorkOrderItemsView: View {
         
         return latestDate
     }
+    
+    // MARK: - Specific Item Refresh
+    private func refreshSpecificItem(workOrderId: String, itemId: UUID) {
+        print("🔍 DEBUG: refreshSpecificItem called for workOrderId: \(workOrderId), itemId: \(itemId)")
+        
+        Task {
+            do {
+                // Get fresh data from database
+                let allWorkOrders = try await workOrdersDB.getAllWorkOrders()
+                
+                // Find the updated work order
+                if let updatedWorkOrder = allWorkOrders.first(where: { $0.id == workOrderId }) {
+                    // Find the updated item
+                    if let updatedItemIndex = updatedWorkOrder.items.firstIndex(where: { $0.id == itemId }) {
+                        let updatedItem = updatedWorkOrder.items[updatedItemIndex]
+                        
+                        // Check if this item should be in our filtered list
+                        let userStatusUpdates = updatedItem.statusHistory.filter { status in
+                            status.user == appState.currentUserName && 
+                            status.status.lowercased() != "checked in"
+                        }
+                        
+                        let userNotes = updatedItem.notes.filter { note in
+                            note.user == appState.currentUserName
+                        }
+                        
+                        let hasCompletedReasons = !updatedItem.completedReasons.isEmpty
+                        
+                        let shouldInclude = !userStatusUpdates.isEmpty || !userNotes.isEmpty || hasCompletedReasons
+                        
+                        await MainActor.run {
+                            if shouldInclude {
+                                // Update the existing item in filteredItemData
+                                if let existingIndex = filteredItemData.firstIndex(where: { $0.item.id == itemId }) {
+                                    filteredItemData[existingIndex] = WorkOrderItemData(
+                                        item: updatedItem,
+                                        workOrder: updatedWorkOrder,
+                                        itemIndex: updatedItemIndex
+                                    )
+                                    print("🔍 DEBUG: Updated existing item in filteredItemData")
+                                } else {
+                                    // Add new item if it wasn't there before
+                                    filteredItemData.append(WorkOrderItemData(
+                                        item: updatedItem,
+                                        workOrder: updatedWorkOrder,
+                                        itemIndex: updatedItemIndex
+                                    ))
+                                    print("🔍 DEBUG: Added new item to filteredItemData")
+                                }
+                            } else {
+                                // Remove item if it no longer qualifies
+                                filteredItemData.removeAll { $0.item.id == itemId }
+                                print("🔍 DEBUG: Removed item from filteredItemData")
+                            }
+                        }
+                    }
+                }
+            } catch {
+                print("❌ Error refreshing specific item: \(error)")
+                // Fallback to full refresh
+                loadFilteredItems()
+            }
+        }
+    }
+    
 }
 
 // MARK: - Data Structure
 struct WorkOrderItemData: Identifiable {
-    let id = UUID()
+    let id: UUID
     let item: WO_Item
     let workOrder: WorkOrder
     let itemIndex: Int
+    
+    init(item: WO_Item, workOrder: WorkOrder, itemIndex: Int) {
+        self.id = item.id // Use the item's ID as the identifier to prevent view recreation
+        self.item = item
+        self.workOrder = workOrder
+        self.itemIndex = itemIndex
+    }
 }
 
 // MARK: - Custom Item Card for My Work Orders
@@ -192,8 +268,11 @@ struct MyWorkOrderItemCard: View {
     let workOrder: WorkOrder
     let itemIndex: Int
     let onTap: () -> Void
+    let onDataChanged: (() -> Void)?
     
     @State private var partsUsedText: String = ""
+    @State private var hoursWorkedText: String = ""
+    @State private var costText: String = ""
     @State private var isEditingParts: Bool = false
     @State private var isSavingParts: Bool = false
     @StateObject private var workOrdersDB = WorkOrdersDatabase.shared
@@ -209,49 +288,64 @@ struct MyWorkOrderItemCard: View {
     }
     
     var body: some View {
-        Button(action: onTap) {
-            HStack(alignment: .top, spacing: 16) {
-                // ───── Left: Primary Image ─────
-                VStack {
-                    if let firstImageURL = item.imageUrls.first {
-                        AsyncImage(url: URL(string: firstImageURL)) { image in
-                            image
-                                .resizable()
-                                .scaledToFill()
-                                .frame(width: 300, height: 300)
-                                .clipped()
-                                .cornerRadius(12)
-                        } placeholder: {
-                            Rectangle()
-                                .fill(Color(.systemGray5))
-                                .frame(width: 300, height: 300)
-                                .cornerRadius(12)
-                        }
-                    } else {
+        HStack(alignment: .top, spacing: 16) {
+            // ───── Left: Primary Image ─────
+            VStack {
+                if let firstImageURL = item.imageUrls.first {
+                    AsyncImage(url: URL(string: firstImageURL)) { image in
+                        image
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: 300, height: 300)
+                            .clipped()
+                            .cornerRadius(12)
+                    } placeholder: {
                         Rectangle()
                             .fill(Color(.systemGray5))
                             .frame(width: 300, height: 300)
                             .cornerRadius(12)
                     }
+                } else {
+                    Rectangle()
+                        .fill(Color(.systemGray5))
+                        .frame(width: 300, height: 300)
+                        .cornerRadius(12)
+                }
+            }
+            
+            // ───── Right: Content ─────
+            VStack(alignment: .leading, spacing: 8) {
+                // ───── Header Row ─────
+                HStack {
+                    // Work Order Number
+                    Text("\(workOrder.workOrderNumber)-\(String(format: "%03d", itemIndex + 1))")
+                        .font(.headline)
+                        .foregroundColor(.primary)
+                    
+                    Spacer()
+                    
+                    // Status Badge
+                    StatusBadge(status: currentStatus)
                 }
                 
-                // ───── Right: Content ─────
-                VStack(alignment: .leading, spacing: 12) {
-                    // ───── Header Row ─────
-                    HStack {
-                        // Work Order Number
-                        Text("\(workOrder.workOrderNumber)-\(String(format: "%03d", itemIndex + 1))")
-                            .font(.headline)
-                            .foregroundColor(.primary)
-                        
-                        Spacer()
-                        
-                        // Status Badge
-                        StatusBadge(status: currentStatus)
+                // ───── View Details Button ─────
+                HStack {
+                    Spacer()
+                    Button(action: onTap) {
+                        Text("View Details")
+                            .font(.subheadline)
+                            .fontWeight(.bold)
+                            .foregroundColor(.black)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 8)
+                            .background(Color(red: 1.0, green: 0.77, blue: 0.0)) // #FFC500
+                            .cornerRadius(8)
                     }
-                    
-                    // ───── Item Type and Details ─────
-                    VStack(alignment: .leading, spacing: 6) {
+                    .buttonStyle(.plain)
+                }
+                
+                // ───── Item Type and Details ─────
+                VStack(alignment: .leading, spacing: 6) {
                         Text(item.type)
                             .font(.title3)
                             .fontWeight(.medium)
@@ -318,12 +412,26 @@ struct MyWorkOrderItemCard: View {
                                 .font(.caption)
                                 .fontWeight(.medium)
                                 .foregroundColor(.secondary)
+                                .onAppear {
+                                    print("🔍 DEBUG: Reasons for Service section rendered")
+                                    print("🔍 DEBUG: Number of reasons: \(item.reasonsForService.count)")
+                                }
                             
                             ForEach(item.reasonsForService, id: \.self) { reason in
                                 HStack(spacing: 8) {
-                                    Image(systemName: item.completedReasons.contains(reason) ? "checkmark.square.fill" : "square")
-                                        .foregroundColor(item.completedReasons.contains(reason) ? .green : .secondary)
-                                        .font(.caption)
+                                    Button(action: {
+                                        print("🔍 DEBUG: Toggle button tapped for reason: '\(reason)'")
+                                        print("🔍 DEBUG: Current completedReasons: \(item.completedReasons)")
+                                        print("🔍 DEBUG: Item ID: \(item.id)")
+                                        print("🔍 DEBUG: Work Order ID: \(workOrder.id)")
+                                        print("🔍 DEBUG: Item Index: \(itemIndex)")
+                                        toggleReasonCompletion(reason)
+                                    }) {
+                                        Image(systemName: item.completedReasons.contains(reason) ? "checkmark.square.fill" : "square")
+                                            .foregroundColor(item.completedReasons.contains(reason) ? .green : .secondary)
+                                            .font(.caption)
+                                    }
+                                    .buttonStyle(.plain)
                                     
                                     // ───── Display reason with note for "Other" ─────
                                     if reason.lowercased().contains("other") && !(item.reasonNotes?.isEmpty ?? true) {
@@ -364,19 +472,29 @@ struct MyWorkOrderItemCard: View {
                             .padding(.top, 4)
                     }
                     
-                    // ───── Parts Used Section ─────
-                    partsUsedSection
-                }
+                // ───── Parts Used Section ─────
+                partsUsedSection
             }
-            .padding(16)
-            .background(Color(.systemBackground))
-            .cornerRadius(12)
-            .shadow(color: Color.black.opacity(0.1), radius: 2, x: 0, y: 1)
         }
-        .buttonStyle(.plain)
+        .padding(16)
+        .background(Color(.systemBackground))
+        .cornerRadius(12)
+        .shadow(color: Color.black.opacity(0.1), radius: 2, x: 0, y: 1)
         .onAppear {
-            // Initialize parts used text from item
+            // Initialize completion details from item
             partsUsedText = item.partsUsed ?? ""
+            hoursWorkedText = item.hoursWorked ?? ""
+            costText = item.finalCost ?? ""
+            
+            // Debug: Log item data
+            print("🔍 DEBUG: MyWorkOrderItemCard onAppear")
+            print("🔍 DEBUG: Item ID: \(item.id)")
+            print("🔍 DEBUG: Item Type: \(item.type)")
+            print("🔍 DEBUG: Reasons for Service: \(item.reasonsForService)")
+            print("🔍 DEBUG: Completed Reasons: \(item.completedReasons)")
+            print("🔍 DEBUG: Work Order ID: \(workOrder.id)")
+            print("🔍 DEBUG: Work Order Number: \(workOrder.workOrderNumber)")
+            print("🔍 DEBUG: Item Index: \(itemIndex)")
         }
     }
     
@@ -385,7 +503,7 @@ struct MyWorkOrderItemCard: View {
     private var partsUsedSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("Parts Used")
+                Text("Completion Details")
                     .font(.caption)
                     .fontWeight(.medium)
                     .foregroundColor(.secondary)
@@ -394,8 +512,10 @@ struct MyWorkOrderItemCard: View {
                 
                 if isEditingParts {
                     Button("Cancel") {
-                        // Reset to original value and stop editing
+                        // Reset to original values and stop editing
                         partsUsedText = item.partsUsed ?? ""
+                        hoursWorkedText = item.hoursWorked ?? ""
+                        costText = item.finalCost ?? ""
                         isEditingParts = false
                     }
                     .font(.caption)
@@ -411,18 +531,52 @@ struct MyWorkOrderItemCard: View {
             
             if isEditingParts {
                 VStack(spacing: 8) {
-                    TextField("Enter parts used...", text: $partsUsedText, axis: .vertical)
-                        .textFieldStyle(RoundedBorderTextFieldStyle())
-                        .lineLimit(2...4)
-                        .font(.caption)
+                    // Parts Used Field
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Parts Used")
+                            .font(.caption2)
+                            .fontWeight(.medium)
+                            .foregroundColor(.secondary)
+                        
+                        TextField("Enter parts used...", text: $partsUsedText, axis: .vertical)
+                            .textFieldStyle(RoundedBorderTextFieldStyle())
+                            .lineLimit(2...3)
+                            .font(.caption)
+                    }
+                    
+                    // Hours Field
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Hours")
+                            .font(.caption2)
+                            .fontWeight(.medium)
+                            .foregroundColor(.secondary)
+                        
+                        TextField("Enter hours...", text: $hoursWorkedText)
+                            .textFieldStyle(RoundedBorderTextFieldStyle())
+                            .keyboardType(.decimalPad)
+                            .font(.caption)
+                    }
+                    
+                    // Cost Field
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Cost")
+                            .font(.caption2)
+                            .fontWeight(.medium)
+                            .foregroundColor(.secondary)
+                        
+                        TextField("Enter cost...", text: $costText)
+                            .textFieldStyle(RoundedBorderTextFieldStyle())
+                            .keyboardType(.decimalPad)
+                            .font(.caption)
+                    }
                     
                     HStack {
                         Button("Save") {
-                            savePartsUsed()
+                            saveCompletionDetails()
                         }
                         .font(.caption)
                         .foregroundColor(.blue)
-                        .disabled(isSavingParts || partsUsedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        .disabled(isSavingParts)
                         
                         if isSavingParts {
                             ProgressView()
@@ -433,16 +587,43 @@ struct MyWorkOrderItemCard: View {
                     }
                 }
             } else {
-                if partsUsedText.isEmpty {
-                    Text("No parts recorded yet")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .italic()
-                } else {
-                    Text(partsUsedText)
-                        .font(.caption)
-                        .foregroundColor(.primary)
-                        .lineLimit(2)
+                VStack(alignment: .leading, spacing: 4) {
+                    // Display Parts Used
+                    if partsUsedText.isEmpty {
+                        Text("No parts recorded yet")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .italic()
+                    } else {
+                        Text(partsUsedText)
+                            .font(.caption)
+                            .foregroundColor(.primary)
+                            .lineLimit(2)
+                    }
+                    
+                    // Display Hours
+                    if hoursWorkedText.isEmpty {
+                        Text("No hours recorded yet")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                            .italic()
+                    } else {
+                        Text("Hours: \(hoursWorkedText)")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
+                    
+                    // Display Cost
+                    if costText.isEmpty {
+                        Text("No cost recorded yet")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                            .italic()
+                    } else {
+                        Text("Cost: $\(costText)")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
                 }
             }
         }
@@ -453,17 +634,20 @@ struct MyWorkOrderItemCard: View {
         .cornerRadius(8)
     }
     
-    // MARK: - Save Parts Used
-    private func savePartsUsed() {
-        guard !partsUsedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-        
+    // MARK: - Save Completion Details
+    private func saveCompletionDetails() {
         isSavingParts = true
         
         Task {
             do {
-                // Create a copy of the work order with updated parts used
+                // Create a copy of the work order with updated completion details
                 var updatedWorkOrder = workOrder
-                updatedWorkOrder.items[itemIndex].partsUsed = partsUsedText.trimmingCharacters(in: .whitespacesAndNewlines)
+                
+                // Update all three fields
+                updatedWorkOrder.items[itemIndex].partsUsed = partsUsedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : partsUsedText.trimmingCharacters(in: .whitespacesAndNewlines)
+                updatedWorkOrder.items[itemIndex].hoursWorked = hoursWorkedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : hoursWorkedText.trimmingCharacters(in: .whitespacesAndNewlines)
+                updatedWorkOrder.items[itemIndex].finalCost = costText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : costText.trimmingCharacters(in: .whitespacesAndNewlines)
+                
                 updatedWorkOrder.items[itemIndex].lastModified = Date()
                 updatedWorkOrder.items[itemIndex].lastModifiedBy = AppState.shared.currentUserName
                 updatedWorkOrder.lastModified = Date()
@@ -478,9 +662,73 @@ struct MyWorkOrderItemCard: View {
                 }
                 
             } catch {
-                print("❌ Error saving parts used: \(error)")
+                print("❌ Error saving completion details: \(error)")
                 await MainActor.run {
                     isSavingParts = false
+                }
+            }
+        }
+    }
+    
+    // MARK: - Toggle Reason Completion
+    private func toggleReasonCompletion(_ reason: String) {
+        print("🔍 DEBUG: toggleReasonCompletion called with reason: '\(reason)'")
+        print("🔍 DEBUG: Starting toggle process...")
+        
+        // No optimistic update - let database update complete first
+        print("🔍 DEBUG: Starting database update...")
+        
+        Task {
+            do {
+                print("🔍 DEBUG: Creating updated work order copy...")
+                var updatedWorkOrder = workOrder
+                
+                print("🔍 DEBUG: Current completedReasons before toggle: \(updatedWorkOrder.items[itemIndex].completedReasons)")
+                print("🔍 DEBUG: Checking if reason '\(reason)' is already completed...")
+                
+                if updatedWorkOrder.items[itemIndex].completedReasons.contains(reason) {
+                    print("🔍 DEBUG: Reason is already completed, removing it...")
+                    updatedWorkOrder.items[itemIndex].completedReasons.removeAll { $0 == reason }
+                } else {
+                    print("🔍 DEBUG: Reason is not completed, adding it...")
+                    updatedWorkOrder.items[itemIndex].completedReasons.append(reason)
+                }
+                
+                print("🔍 DEBUG: CompletedReasons after toggle: \(updatedWorkOrder.items[itemIndex].completedReasons)")
+                
+                print("🔍 DEBUG: Updating timestamps and user tracking...")
+                updatedWorkOrder.items[itemIndex].lastModified = Date()
+                updatedWorkOrder.items[itemIndex].lastModifiedBy = AppState.shared.currentUserName
+                updatedWorkOrder.lastModified = Date()
+                updatedWorkOrder.lastModifiedBy = AppState.shared.currentUserName
+                
+                print("🔍 DEBUG: Calling workOrdersDB.updateWorkOrder...")
+                print("🔍 DEBUG: Work Order ID: \(updatedWorkOrder.id)")
+                print("🔍 DEBUG: Work Order Number: \(updatedWorkOrder.workOrderNumber)")
+                
+                try await workOrdersDB.updateWorkOrder(updatedWorkOrder)
+                
+                print("✅ DEBUG: Successfully updated work order in database")
+                
+                // Refresh the data after successful database update
+                await MainActor.run {
+                    print("🔍 DEBUG: Refreshing data after successful toggle...")
+                    onDataChanged?()
+                }
+                
+            } catch {
+                print("❌ DEBUG: Error toggling reason completion: \(error)")
+                print("❌ DEBUG: Error details: \(error.localizedDescription)")
+                if let nsError = error as NSError? {
+                    print("❌ DEBUG: NSError domain: \(nsError.domain)")
+                    print("❌ DEBUG: NSError code: \(nsError.code)")
+                    print("❌ DEBUG: NSError userInfo: \(nsError.userInfo)")
+                }
+                
+                // If database update fails, refresh to get correct state
+                await MainActor.run {
+                    print("🔍 DEBUG: Database update failed, refreshing to correct state...")
+                    onDataChanged?()
                 }
             }
         }
