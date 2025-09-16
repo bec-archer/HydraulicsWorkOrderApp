@@ -30,8 +30,8 @@ import CoreImage.CIFilterBuiltins
 struct QRBatchLayout {
     var pageSize: CGSize = CGSize(width: 612, height: 792) // 8.5x11 @ 72 dpi PDF points
     var margins: EdgeInsets = EdgeInsets(top: 36, leading: 36, bottom: 36, trailing: 36)
-    var columns: Int = 3
-    var rows: Int = 4
+    var columns: Int = 6
+    var rows: Int = 8
     var qrSidePoints: CGFloat = 72 // 1 inches @ 72 dpi
     var labelFontSize: CGFloat = 12
     var labelHeight: CGFloat = 16
@@ -44,12 +44,15 @@ struct QRBatchLayout {
 struct QRBatchGeneratorView: View {
     // Inject your real role from app state / environment
     @State private var currentRole: UserRole = .admin
+    @EnvironmentObject private var appState: AppState
+    @StateObject private var numberTracker = QRNumberTrackerManager.shared
     
     // Batch parameters
-    @State private var prefix: String = "TAG"
+    @State private var prefix: String = "HYDSR80"
     @State private var startNumber: Int = 1
-    @State private var count: Int = 12
-    
+    @State private var startNumberText: String = "1"
+    @State private var count: Int = 48
+     
     // Layout parameters (tunable)
     @State private var layout = QRBatchLayout()
     
@@ -57,6 +60,10 @@ struct QRBatchGeneratorView: View {
     @State private var generatedPDFURL: URL?
     @State private var isExporting: Bool = false
     @State private var errorMessage: String?
+    
+    // Number tracking
+    @State private var currentTracker: QRNumberTracker?
+    @State private var isLoadingTracker: Bool = false
     
     // CI Context
     private let ciContext = CIContext()
@@ -80,21 +87,74 @@ struct QRBatchGeneratorView: View {
                     Text("Generates an 8.5×11 PDF sheet of scannable QR tags for equipment labeling.")
                         .foregroundColor(.secondary)
                     
+                    // Current Status Display
+                    if let tracker = currentTracker {
+                        HStack {
+                            Text("Last Generated: \(tracker.prefix)-\(String(format: "%06d", tracker.lastGeneratedNumber))")
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                            
+                            Spacer()
+                            
+                            Text("Next: \(tracker.prefix)-\(String(format: "%06d", tracker.lastGeneratedNumber + 1))")
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                                .foregroundColor(.blue)
+                        }
+                        .padding(.vertical, 8)
+                        .padding(.horizontal, 12)
+                        .background(Color.blue.opacity(0.1))
+                        .cornerRadius(8)
+                    } else if isLoadingTracker {
+                        HStack {
+                            ProgressView()
+                                .scaleEffect(0.8)
+                            Text("Loading number tracker...")
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    
                     // Batch ID controls
                     HStack(spacing: 12) {
-                        TextField("Prefix (e.g., TAG)", text: $prefix)
+                        TextField("Prefix", text: $prefix)
                             .textFieldStyle(.roundedBorder)
                             .frame(maxWidth: 180)
+                            .disabled(true) // Fixed to HYDSR80
                         
-                        Stepper("Start #: \(startNumber)", value: $startNumber, in: 1...999_999)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Start #")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                            TextField("Start Number", text: $startNumberText)
+                                .textFieldStyle(.roundedBorder)
+                                .frame(maxWidth: 120)
+                                .keyboardType(.numberPad)
+                                .onChange(of: startNumberText) { newValue in
+                                    if let number = Int(newValue), number > 0 {
+                                        startNumber = number
+                                    }
+                                }
+                        }
+                        
                         Stepper("Count: \(count)", value: $count, in: 1...999)
+                        
+                        Button("Reset to Next") {
+                            if let tracker = currentTracker {
+                                let nextNumber = tracker.lastGeneratedNumber + 1
+                                startNumber = nextNumber
+                                startNumberText = String(nextNumber)
+                            }
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(currentTracker == nil)
                     }
                     
                     // Layout controls (basic)
                     HStack(spacing: 12) {
                         Stepper("Columns: \(layout.columns)", value: $layout.columns, in: 1...6)
                         Stepper("Rows: \(layout.rows)", value: $layout.rows, in: 1...12)
-                        Stepper("QR side (pts): \(Int(layout.qrSidePoints))", value: $layout.qrSidePoints, in: 96...216, step: 6)
+                        Stepper("QR size (pts): \(Int(layout.qrSidePoints))", value: $layout.qrSidePoints, in: 96...216, step: 6)
                     }
                     
                     HStack(spacing: 12) {
@@ -108,7 +168,9 @@ struct QRBatchGeneratorView: View {
                 // ───── ACTIONS ─────
                 HStack {
                     Button {
-                        generatePDF()
+                        Task {
+                            await generatePDF()
+                        }
                     } label: {
                         Label("Generate PDF", systemImage: "qrcode")
                     }
@@ -141,6 +203,9 @@ struct QRBatchGeneratorView: View {
             }
         }
         .padding(20)
+        .task {
+            await loadCurrentTrackerStatus()
+        }
         // END .body
     }
     
@@ -155,8 +220,27 @@ struct QRBatchGeneratorView: View {
     }
     // END permissions
     
+    // ───── TRACKER MANAGEMENT ───────────────────────────────────────────────────
+    
+    private func loadCurrentTrackerStatus() async {
+        isLoadingTracker = true
+        do {
+            currentTracker = try await numberTracker.getCurrentStatus()
+            // Auto-fill the start number with the next available number
+            if let tracker = currentTracker {
+                let nextNumber = tracker.lastGeneratedNumber + 1
+                startNumber = nextNumber
+                startNumberText = String(nextNumber)
+            }
+        } catch {
+            errorMessage = "Failed to load number tracker: \(error.localizedDescription)"
+        }
+        isLoadingTracker = false
+    }
+    // END tracker management
+    
     // ───── CORE: PDF GENERATION ────────────────────────────────────────────────
-    private func generatePDF() {
+    private func generatePDF() async {
         errorMessage = nil
         generatedPDFURL = nil
         
@@ -249,6 +333,13 @@ struct QRBatchGeneratorView: View {
         do {
             try pdfData.write(to: tmp, options: .atomic)
             generatedPDFURL = tmp
+            
+            // Update the number tracker after successful PDF generation
+            if let currentUser = appState.currentUser {
+                let lastNumberInBatch = startNumber + count - 1
+                try await numberTracker.resetCounter(to: lastNumberInBatch, for: currentUser)
+                await loadCurrentTrackerStatus() // Refresh the display
+            }
         } catch {
             errorMessage = "Failed to write PDF: \(error.localizedDescription)"
         }

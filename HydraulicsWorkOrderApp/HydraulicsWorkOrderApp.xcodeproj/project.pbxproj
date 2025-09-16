@@ -55,6 +55,7 @@
 				Managers/Data/DropdownVersionService.swift,
 				Managers/Data/ImageManagementService.swift,
 				Managers/Data/InactivityManager.swift,
+				Managers/Data/QRNumberTracker.swift,
 				Managers/Data/StateManagementService.swift,
 				Managers/Data/StorageManager.swift,
 				Managers/Data/UsersDatabase.swift,
