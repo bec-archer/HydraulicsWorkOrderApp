@@ -161,9 +161,8 @@ struct WorkOrderCardView: View {
     }
 
     var body: some View {
-        Button(action: {
-            onTap?()
-        }) {
+        ZStack {
+            // Card content
             VStack(spacing: 0) {
                 // Thumbnail Grid (computed directly from WO_Items)
                 WorkOrderCardThumbnailGrid(
@@ -177,14 +176,22 @@ struct WorkOrderCardView: View {
                         print("🔍 DEBUG: isFullScreenImagePresented set to: \(isFullScreenImagePresented)")
                         print("🔍 DEBUG: Full-screen viewer should now be presented")
                     },
-                    onImageTap: nil // Remove individual image tap since button handles it
+                    onImageTap: nil
                 )
                 
                 // Main content
-                WorkOrderCardContent(workOrder: workOrder, customerTag: customerTag, onTap: nil) // Remove individual content tap since button handles it
+                WorkOrderCardContent(workOrder: workOrder, customerTag: customerTag, onTap: nil)
+            }
+            
+            // Precise tap overlay - only covers the exact card content
+            if onTap != nil {
+                Color.clear
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        onTap?()
+                    }
             }
         }
-        .buttonStyle(PlainButtonStyle()) // Remove default button styling
         .background(ThemeManager.shared.cardBackground)
         .cornerRadius(ThemeManager.shared.cardCornerRadius)
         .shadow(
