@@ -304,7 +304,8 @@ struct ActiveWorkOrdersView: View {
             filterSheet
         }
         .onAppear {
-            viewModel.loadWorkOrders()
+            // ViewModel already loads work orders in init(), no need to call again
+            print("🔍 DEBUG: ActiveWorkOrdersView appeared")
         }
     }
     

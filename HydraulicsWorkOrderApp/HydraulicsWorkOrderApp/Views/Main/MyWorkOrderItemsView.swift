@@ -505,15 +505,15 @@ struct MyWorkOrderItemCard: View {
             print("🔍 DEBUG: Item Index: \(itemIndex)")
             print("🔍 DEBUG: Completion details - Parts: '\(item.partsUsed ?? "nil")', Hours: '\(item.hoursWorked ?? "nil")', Cost: '\(item.finalCost ?? "nil")'")
         }
-        .onChange(of: item.partsUsed) { newValue in
+        .onChange(of: item.partsUsed) { _, newValue in
             partsUsedText = newValue ?? ""
             print("🔍 DEBUG: Parts used changed to: '\(newValue ?? "nil")'")
         }
-        .onChange(of: item.hoursWorked) { newValue in
+        .onChange(of: item.hoursWorked) { _, newValue in
             hoursWorkedText = newValue ?? ""
             print("🔍 DEBUG: Hours worked changed to: '\(newValue ?? "nil")'")
         }
-        .onChange(of: item.finalCost) { newValue in
+        .onChange(of: item.finalCost) { _, newValue in
             costText = newValue ?? ""
             print("🔍 DEBUG: Final cost changed to: '\(newValue ?? "nil")'")
         }

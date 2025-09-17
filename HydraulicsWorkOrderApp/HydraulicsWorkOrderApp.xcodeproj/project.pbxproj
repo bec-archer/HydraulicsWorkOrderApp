@@ -114,6 +114,7 @@
 				Views/Components/NotesTimelineView.swift,
 				Views/Components/PhotoCaptureView.swift,
 				Views/Components/QRScannerView.swift,
+				Views/Components/ScanTagSheet.swift,
 				Views/Components/SimpleAddNotesView.swift,
 				Views/Components/StatusBadge.swift,
 				Views/Components/TagScanningView.swift,

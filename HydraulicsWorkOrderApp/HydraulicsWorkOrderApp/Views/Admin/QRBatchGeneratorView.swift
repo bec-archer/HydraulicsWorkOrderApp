@@ -130,7 +130,7 @@ struct QRBatchGeneratorView: View {
                                 .textFieldStyle(.roundedBorder)
                                 .frame(maxWidth: 120)
                                 .keyboardType(.numberPad)
-                                .onChange(of: startNumberText) { newValue in
+                                .onChange(of: startNumberText) { _, newValue in
                                     if let number = Int(newValue), number > 0 {
                                         startNumber = number
                                     }

@@ -17,11 +17,7 @@ class OfflineStorage {
     
     lazy var persistentContainer: NSPersistentContainer = {
         let container = NSPersistentContainer(name: "OfflineWorkOrders")
-        return container
-    }()
-    
-    private func loadPersistentStore() {
-        persistentContainer.loadPersistentStores { description, error in
+        container.loadPersistentStores { description, error in
             if let error = error {
                 #if DEBUG
                 print("❌ CoreData: Failed to load persistent store: \(error.localizedDescription)")
@@ -32,6 +28,12 @@ class OfflineStorage {
                 #endif
             }
         }
+        return container
+    }()
+    
+    private func loadPersistentStore() {
+        // Persistent store is now loaded in the lazy container initialization
+        // This method is kept for compatibility but does nothing
     }
     
     func saveContext() {

@@ -25,6 +25,10 @@ class InactivityManager: ObservableObject {
     private var warningTimer: Timer?
     private var cancellables = Set<AnyCancellable>()
     
+    // Performance optimization - throttle excessive calls
+    private var lastInteractionTime: Date = Date()
+    private let interactionThrottleInterval: TimeInterval = 1.0 // Only process interactions every 1 second
+    
     // Configuration
     private let warningTime: TimeInterval = 10.0 // Show warning 10 seconds before logout
     
@@ -78,6 +82,13 @@ class InactivityManager: ObservableObject {
     
     /// Handle user activity (call when user interacts with the app)
     func recordActivity() {
+        // Throttle excessive calls to prevent performance issues
+        let now = Date()
+        guard now.timeIntervalSince(lastInteractionTime) >= interactionThrottleInterval else {
+            return // Skip this call if it's too soon
+        }
+        
+        lastInteractionTime = now
         print("🔍 DEBUG: InactivityManager.recordActivity called - resetting timer")
         resetInactivityTimer()
     }
@@ -126,6 +137,13 @@ class InactivityManager: ObservableObject {
     }
     
     @objc private func handleUserInteraction() {
+        // Throttle excessive calls to prevent performance issues
+        let now = Date()
+        guard now.timeIntervalSince(lastInteractionTime) >= interactionThrottleInterval else {
+            return // Skip this call if it's too soon
+        }
+        
+        lastInteractionTime = now
         print("🔍 DEBUG: InactivityManager.handleUserInteraction called")
         recordActivity()
     }
@@ -193,12 +211,13 @@ struct UserInteractionTracking: ViewModifier {
             .onLongPressGesture {
                 InactivityManager.trackUserInteraction()
             }
-            .gesture(
-                DragGesture()
-                    .onChanged { _ in
-                        InactivityManager.trackUserInteraction()
-                    }
-            )
+            // Remove drag gesture tracking to reduce excessive calls
+            // .gesture(
+            //     DragGesture()
+            //         .onChanged { _ in
+            //             InactivityManager.trackUserInteraction()
+            //         }
+            // )
     }
 }
 

@@ -31,6 +31,12 @@ struct QRScannerView: View {
                     }
                 )
                 .ignoresSafeArea()
+                .onAppear {            // ← ADD
+                    isScanning = true   // ← ADD
+                }                       // ← ADD
+                .onDisappear {          // ← ADD
+                    isScanning = false  // ← ADD
+                }
                 
                 // Overlay with scanning frame
                 VStack {
@@ -86,11 +92,13 @@ struct QRScannerViewController: UIViewControllerRepresentable {
         return controller
     }
     
+
     func updateUIViewController(_ uiViewController: QRScannerVC, context: Context) {
         if isScanning {
             uiViewController.startScanning()
         } else {
-            uiViewController.stopScanning()
+            // Do NOT force-stop here; stopping is handled by viewWillDisappear to
+            // avoid a race that produces a blank preview.
         }
     }
 }
@@ -115,6 +123,7 @@ class QRScannerVC: UIViewController {
         super.viewWillDisappear(animated)
         stopScanning()
     }
+    
     
     private func setupCamera() {
         // ───── Check Camera Permission First ─────
@@ -141,9 +150,9 @@ class QRScannerVC: UIViewController {
     private func setupCameraSession() {
         captureSession = AVCaptureSession()
         
-        guard let videoCaptureDevice = AVCaptureDevice.default(for: .video) else { 
+        guard let videoCaptureDevice = AVCaptureDevice.default(for: .video) else {
             print("❌ No video capture device available")
-            return 
+            return
         }
         
         let videoInput: AVCaptureDeviceInput
