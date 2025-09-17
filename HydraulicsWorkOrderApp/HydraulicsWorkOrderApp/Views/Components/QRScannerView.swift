@@ -117,20 +117,48 @@ class QRScannerVC: UIViewController {
     }
     
     private func setupCamera() {
+        // ───── Check Camera Permission First ─────
+        switch AVCaptureDevice.authorizationStatus(for: .video) {
+        case .authorized:
+            setupCameraSession()
+        case .notDetermined:
+            AVCaptureDevice.requestAccess(for: .video) { granted in
+                DispatchQueue.main.async {
+                    if granted {
+                        self.setupCameraSession()
+                    } else {
+                        print("❌ Camera access denied by user")
+                    }
+                }
+            }
+        case .denied, .restricted:
+            print("❌ Camera access denied or restricted")
+        @unknown default:
+            print("❌ Unknown camera authorization status")
+        }
+    }
+    
+    private func setupCameraSession() {
         captureSession = AVCaptureSession()
         
-        guard let videoCaptureDevice = AVCaptureDevice.default(for: .video) else { return }
+        guard let videoCaptureDevice = AVCaptureDevice.default(for: .video) else { 
+            print("❌ No video capture device available")
+            return 
+        }
+        
         let videoInput: AVCaptureDeviceInput
         
         do {
             videoInput = try AVCaptureDeviceInput(device: videoCaptureDevice)
         } catch {
+            print("❌ Failed to create video input: \(error)")
             return
         }
         
         if captureSession.canAddInput(videoInput) {
             captureSession.addInput(videoInput)
         } else {
+            print("❌ Cannot add video input to capture session")
             return
         }
         
@@ -142,6 +170,7 @@ class QRScannerVC: UIViewController {
             metadataOutput.setMetadataObjectsDelegate(self, queue: DispatchQueue.main)
             metadataOutput.metadataObjectTypes = [.qr, .ean8, .ean13, .pdf417]
         } else {
+            print("❌ Cannot add metadata output to capture session")
             return
         }
         
@@ -149,9 +178,16 @@ class QRScannerVC: UIViewController {
         previewLayer.frame = view.layer.bounds
         previewLayer.videoGravity = .resizeAspectFill
         view.layer.addSublayer(previewLayer)
+        
+        print("✅ Camera session setup completed successfully")
     }
     
     func startScanning() {
+        guard let captureSession = captureSession else {
+            print("❌ Cannot start scanning - capture session not initialized")
+            return
+        }
+        
         if !captureSession.isRunning {
             DispatchQueue.global(qos: .background).async {
                 self.captureSession.startRunning()
@@ -160,6 +196,8 @@ class QRScannerVC: UIViewController {
     }
     
     func stopScanning() {
+        guard let captureSession = captureSession else { return }
+        
         if captureSession.isRunning {
             captureSession.stopRunning()
         }
