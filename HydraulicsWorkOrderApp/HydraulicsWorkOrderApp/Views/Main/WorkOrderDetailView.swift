@@ -1,5 +1,5 @@
 //
-//  WorkOrderDetailView_Refactored.swift
+//  WorkOrderDetailView.swift
 //  HydraulicsWorkOrderApp
 //
 //  Created by Bec Archer on 8/8/25.
@@ -136,6 +136,7 @@ struct WorkOrderDetailView: View {
     @State private var showDeleteConfirm = false
     @State private var showImageViewer = false
     @State private var selectedImageURL: URL? = nil
+    @State private var selectedItemId: UUID? = nil
     @State private var showingPhoneActions = false
     @State private var showAllThumbs = false
     @State private var showTagReplacement = false
@@ -176,144 +177,186 @@ struct WorkOrderDetailView: View {
 #endif
     }
     
+    // MARK: - Toolbar Buttons
+    @ViewBuilder
+    private var deleteWorkOrderButton: some View {
+        if canDelete {
+            Button("Delete Work Order", role: .destructive) {
+                showDeleteConfirm = true
+            }
+        }
+    }
+    
+    @ViewBuilder
+    private var toggleFlagButton: some View {
+        Button("Toggle Flag") {
+            Task {
+                await viewModel.toggleFlagged()
+            }
+        }
+    }
+    
+    @ViewBuilder
+    private var markCompletedButton: some View {
+        Button("Mark Completed") {
+            Task {
+                await viewModel.markCompleted()
+            }
+        }
+    }
+    
+    @ViewBuilder
+    private var markClosedButton: some View {
+        Button("Mark Closed") {
+            Task {
+                await viewModel.markClosed()
+            }
+        }
+    }
+    
+    @ViewBuilder
+    private var replaceTagButton: some View {
+        if appState.isManager || appState.isAdmin || appState.isSuperAdmin {
+            Button("Replace Tag") {
+                // For now, use the first item with a tag
+                if let itemWithTag = viewModel.workOrder.items.first(where: { $0.assetTagId != nil }) {
+                    selectedItemForTagReplacement = itemWithTag
+                    showTagReplacement = true
+                }
+            }
+        }
+    }
+    
+    // MARK: - Main Content
+    private var mainContent: some View {
+        ScrollView {
+            VStack(spacing: 20) {
+                // Version Mismatch Banner
+                VersionMismatchBanner(items: viewModel.workOrder.items)
+                    .padding(.horizontal)
+                
+                // New Work Order Header Banner
+                workOrderHeaderBanner
+                
+                // Items Section
+                itemsSection
+            }
+            .padding()
+        }
+    }
+    
+    // MARK: - Loading Overlay
+    @ViewBuilder
+    private var loadingOverlay: some View {
+        if viewModel.isLoading {
+            Color.black.opacity(0.3)
+                .ignoresSafeArea()
+            
+            ProgressView("Loading...")
+                .padding()
+                .background(Color(.systemBackground))
+                .cornerRadius(10)
+        }
+    }
+    
+    // MARK: - Toolbar
+    private var toolbarContent: some ToolbarContent {
+        ToolbarItem(placement: .navigationBarTrailing) {
+            Menu {
+                deleteWorkOrderButton
+                toggleFlagButton
+                markCompletedButton
+                markClosedButton
+                replaceTagButton
+            } label: {
+                Image(systemName: "ellipsis.circle")
+            }
+        }
+    }
+    
     // MARK: - Body
     var body: some View {
-        ZStack {
-            // Main content
-            ScrollView {
-                VStack(spacing: 20) {
-                    // Version Mismatch Banner
-                    VersionMismatchBanner(items: viewModel.workOrder.items)
-                        .padding(.horizontal)
-                    
-                    // New Work Order Header Banner
-                    workOrderHeaderBanner
-                    
-                    // Items Section
-                    itemsSection
-                }
-                .padding()
-            }
-            
-            // Loading overlay
-            if viewModel.isLoading {
-                Color.black.opacity(0.3)
-                    .ignoresSafeArea()
-                
-                ProgressView("Loading...")
-                    .padding()
-                    .background(Color(.systemBackground))
-                    .cornerRadius(10)
-            }
+        let baseView = ZStack {
+            mainContent
+            loadingOverlay
         }
-        .navigationTitle("Work Order Details")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .navigationBarTrailing) {
-                Menu {
-            if canDelete {
-                        Button("Delete Work Order", role: .destructive) {
-                        showDeleteConfirm = true
-                        }
+        
+        let navigationView = baseView
+            .navigationTitle("Work Order Details")
+            .navigationBarTitleDisplayMode(.inline)
+        
+        let toolbarView = navigationView
+            .toolbar {
+                toolbarContent
+            }
+        
+        let alertView = toolbarView
+            .alert("Delete Work Order", isPresented: $showDeleteConfirm) {
+                Button("Delete", role: .destructive) {
+                    Task {
+                        await viewModel.deleteWorkOrder()
+                        onDelete?(viewModel.workOrder)
+                        dismiss()
                     }
-                    
-                    Button("Toggle Flag") {
+                }
+                Button("Cancel", role: .cancel) { }
+            } message: {
+                Text("Are you sure you want to delete this work order? This action cannot be undone.")
+            }
+            .alert("Error", isPresented: $viewModel.showError) {
+                Button("OK") { }
+            } message: {
+                Text(viewModel.errorMessage ?? "An unknown error occurred")
+            }
+        
+        let sheetView = alertView
+            .sheet(isPresented: $viewModel.showAddNoteSheet) {
+                AddNoteSheet(
+                    workOrder: viewModel.workOrder,
+                    onAddNote: { note in
                         Task {
-                            await viewModel.toggleFlagged()
+                            await viewModel.addItemNote(note, to: viewModel.selectedItemIndex ?? 0)
                         }
                     }
-                    
-                    Button("Mark Completed") {
-                        Task {
-                            await viewModel.markCompleted()
-                        }
-                    }
-                    
-                    Button("Mark Closed") {
-                        Task {
-                            await viewModel.markClosed()
-                        }
-                    }
-                    
-                    // Tag replacement (Manager/Admin only)
-                    if appState.isManager || appState.isAdmin || appState.isSuperAdmin {
-                        Button("Replace Tag") {
-                            // For now, use the first item with a tag
-                            if let itemWithTag = viewModel.workOrder.items.first(where: { $0.assetTagId != nil }) {
-                                selectedItemForTagReplacement = itemWithTag
-                                showTagReplacement = true
+                )
+            }
+            .sheet(isPresented: $viewModel.showStatusPickerSheet) {
+                    StatusPickerSheet(
+                        currentStatus: viewModel.currentStatus,
+                        onStatusSelected: { status in
+                            Task {
+                                await viewModel.updateItemStatus(status, for: viewModel.selectedItemIndex ?? 0)
                             }
                         }
-                    }
-                } label: {
-                    Image(systemName: "ellipsis.circle")
-                }
+                    )
             }
-        }
-        .alert("Delete Work Order", isPresented: $showDeleteConfirm) {
-            Button("Delete", role: .destructive) {
-                Task {
-                    await viewModel.deleteWorkOrder()
-                    onDelete?(viewModel.workOrder)
-                    dismiss()
-                }
-            }
-            Button("Cancel", role: .cancel) { }
-        } message: {
-            Text("Are you sure you want to delete this work order? This action cannot be undone.")
-        }
-        .alert("Error", isPresented: $viewModel.showError) {
-            Button("OK") { }
-        } message: {
-            Text(viewModel.errorMessage ?? "An unknown error occurred")
-        }
-        .sheet(isPresented: $viewModel.showAddNoteSheet) {
-            AddNoteSheet(
-                workOrder: viewModel.workOrder,
-                onAddNote: { note in
-                    Task {
-                        await viewModel.addItemNote(note, to: viewModel.selectedItemIndex ?? 0)
-                    }
-                }
-            )
-        }
-        .sheet(isPresented: $viewModel.showStatusPickerSheet) {
-                StatusPickerSheet(
-                    currentStatus: viewModel.currentStatus,
-                    onStatusSelected: { status in
-                        Task {
-                            await viewModel.updateItemStatus(status, for: viewModel.selectedItemIndex ?? 0)
+            .sheet(isPresented: $showTagReplacement) {
+                if let item = selectedItemForTagReplacement {
+                    TagReplacementView(
+                        workOrderItem: item,
+                        onTagReplaced: { replacement in
+                            Task {
+                                await viewModel.replaceTag(replacement, for: item)
+                            }
                         }
-                    }
-                )
-        }
-        .sheet(isPresented: $showTagReplacement) {
-            if let item = selectedItemForTagReplacement {
-                TagReplacementView(
-                    workOrderItem: item,
-                    onTagReplaced: { replacement in
-                        Task {
-                            await viewModel.replaceTag(replacement, for: item)
-                        }
-                    }
-                )
+                    )
+                }
             }
-        }
-        .sheet(isPresented: $showCompletionDetailsSheet) {
-            if let item = selectedItemForCompletion, let itemIndex = selectedItemIndexForCompletion {
-                CompletionDetailsSheet(
-                    workOrder: viewModel.workOrder,
-                    item: item,
-                    itemIndex: itemIndex,
-                    onCompletionDetailsSaved: { partsUsed, hoursWorked, cost in
-                        Task {
-                            // Only change status to Complete after completion details are saved
-                            await viewModel.updateItemStatusWithCompletion(
-                                "Complete",
-                                for: itemIndex,
-                                partsUsed: partsUsed,
-                                hoursWorked: hoursWorked,
-                                cost: cost
+            .sheet(isPresented: $showCompletionDetailsSheet) {
+                if let item = selectedItemForCompletion, let itemIndex = selectedItemIndexForCompletion {
+                    CompletionDetailsSheet(
+                        workOrder: viewModel.workOrder,
+                        item: item,
+                        itemIndex: itemIndex,
+                        onCompletionDetailsSaved: { partsUsed, hoursWorked, cost in
+                            Task {
+                                // Only change status to Complete after completion details are saved
+                                await viewModel.updateItemStatusWithCompletion(
+                                    "Complete",
+                                    for: itemIndex,
+                                    partsUsed: partsUsed,
+                                    hoursWorked: hoursWorked,
+                                    cost: cost
                             )
                         }
                     },
@@ -324,37 +367,54 @@ struct WorkOrderDetailView: View {
                 )
             }
         }
-        .fullScreenCover(isPresented: $showImageViewer) {
-            if let imageURL = selectedImageURL {
-                FullScreenImageViewer(imageURL: imageURL, isPresented: $showImageViewer)
+        
+        let fullScreenView = sheetView
+            .fullScreenCover(isPresented: $showImageViewer) {
+                if let imageURL = selectedImageURL {
+                    FullScreenImageViewer(
+                        imageURL: imageURL, 
+                        isPresented: $showImageViewer,
+                        workOrderId: viewModel.workOrder.id,
+                        itemId: selectedItemId,
+                        onImageEdited: {
+                            print("🧩 Image was edited - refreshing work order data")
+                            Task {
+                                await viewModel.refreshWorkOrder()
+                            }
+                        }
+                    )
                     .onAppear {
                         print("🔍 DEBUG: WorkOrderDetailView FullScreenCover presenting with URL: \(imageURL.absoluteString)")
+                        print("🔍 DEBUG: WorkOrderDetailView FullScreenCover workOrderId: \(viewModel.workOrder.id)")
+                        print("🔍 DEBUG: WorkOrderDetailView FullScreenCover itemId: \(selectedItemId?.uuidString ?? "nil")")
                     }
-            } else {
-                Text("No image selected")
-                    .foregroundColor(.white)
-                    .background(Color.black)
-                    .onAppear {
-                        print("🔍 DEBUG: WorkOrderDetailView FullScreenCover triggered but no selectedImageURL")
-                        print("🔍 DEBUG: showImageViewer: \(showImageViewer), selectedImageURL: \(selectedImageURL?.absoluteString ?? "nil")")
-                    }
+                } else {
+                    Text("No image selected")
+                        .foregroundColor(.white)
+                        .background(Color.black)
+                        .onAppear {
+                            print("🔍 DEBUG: WorkOrderDetailView FullScreenCover triggered but no selectedImageURL")
+                            print("🔍 DEBUG: showImageViewer: \(showImageViewer), selectedImageURL: \(selectedImageURL?.absoluteString ?? "nil")")
+                        }
+                }
             }
-        }
-        .onChange(of: showImageViewer) { oldValue, newValue in
-            print("🔍 DEBUG: WorkOrderDetailView showImageViewer changed from: \(oldValue) to: \(newValue)")
-        }
-        .onChange(of: selectedImageURL) { oldValue, newValue in
-            print("🔍 DEBUG: WorkOrderDetailView selectedImageURL changed from: \(oldValue?.absoluteString ?? "nil") to: \(newValue?.absoluteString ?? "nil")")
-        }
-        .sheet(isPresented: $showingPhoneActions) {
-            PhoneActionSheet(phoneNumber: viewModel.workOrder.customerPhone, customerName: viewModel.workOrder.customerName)
-        }
-        .onAppear {
-            print("🔍 DEBUG: WorkOrderDetailView onAppear - refreshing work order data from Firebase")
-            Task {
-                await refreshWorkOrderFromFirebase()
+            .onChange(of: showImageViewer) { oldValue, newValue in
+                print("🔍 DEBUG: WorkOrderDetailView showImageViewer changed from: \(oldValue) to: \(newValue)")
             }
-        }
+            .onChange(of: selectedImageURL) { oldValue, newValue in
+                print("🔍 DEBUG: WorkOrderDetailView selectedImageURL changed from: \(oldValue?.absoluteString ?? "nil") to: \(newValue?.absoluteString ?? "nil")")
+            }
+            .sheet(isPresented: $showingPhoneActions) {
+                PhoneActionSheet(phoneNumber: viewModel.workOrder.customerPhone, customerName: viewModel.workOrder.customerName)
+            }
+        
+        return fullScreenView
+            .onAppear {
+                print("🔍 DEBUG: WorkOrderDetailView onAppear - refreshing work order data from Firebase")
+                Task {
+                    await viewModel.refreshWorkOrder()
+                }
+            }
     }
     
     // MARK: - Data Refresh
@@ -630,6 +690,7 @@ struct WorkOrderDetailView: View {
                         onImageTap: { imageURL in
                             if let url = URL(string: imageURL) {
                                 selectedImageURL = url
+                                selectedItemId = item.id
                                 showImageViewer = true
                             }
                         },
@@ -1420,8 +1481,7 @@ struct AddNoteSheet: View {
     
     @State private var noteText = ""
     @State private var selectedImages: [UIImage] = []
-    @State private var showingCameraPicker = false
-    @State private var showingLibraryPicker = false
+    @State private var showingImagePicker = false
     @Environment(\.dismiss) private var dismiss
     
     var body: some View {
@@ -1459,30 +1519,10 @@ struct AddNoteSheet: View {
                     }
                 }
                 
-                HStack(spacing: 12) {
-                    Button(action: {
-                        showingCameraPicker = true
-                    }) {
-                        HStack {
-                            Image(systemName: "camera.fill")
-                            Text("Take Photo")
-                        }
-                        .frame(maxWidth: .infinity)
+                Button("Add Images") {
+                    showingImagePicker = true
                     }
                     .buttonStyle(.bordered)
-                    .disabled(!UIImagePickerController.isSourceTypeAvailable(.camera))
-                    
-                    Button(action: {
-                        showingLibraryPicker = true
-                    }) {
-                        HStack {
-                            Image(systemName: "photo.on.rectangle")
-                            Text("Choose from Library")
-                        }
-                        .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.bordered)
-                }
                     
                 Spacer()
                 }
@@ -1512,11 +1552,8 @@ struct AddNoteSheet: View {
                 }
             }
         }
-        .sheet(isPresented: $showingCameraPicker) {
-            ImagePicker(selectedImages: $selectedImages, sourceType: .camera)
-        }
-        .sheet(isPresented: $showingLibraryPicker) {
-            ImagePicker(selectedImages: $selectedImages, sourceType: .photoLibrary)
+        .sheet(isPresented: $showingImagePicker) {
+            ImagePicker(selectedImages: $selectedImages)
         }
         .presentationDragIndicator(.visible)
     }
@@ -1525,13 +1562,12 @@ struct AddNoteSheet: View {
 // MARK: - ImagePicker
 struct ImagePicker: UIViewControllerRepresentable {
     @Binding var selectedImages: [UIImage]
-    let sourceType: UIImagePickerController.SourceType
     @Environment(\.dismiss) private var dismiss
     
     func makeUIViewController(context: Context) -> UIImagePickerController {
         let picker = UIImagePickerController()
         picker.delegate = context.coordinator
-        picker.sourceType = sourceType
+        picker.sourceType = .photoLibrary
         picker.allowsEditing = false
         return picker
     }
@@ -1763,8 +1799,7 @@ struct AddNotesView: View {
     
     @State private var noteText = ""
     @State private var selectedImages: [UIImage] = []
-    @State private var showingCameraPicker = false
-    @State private var showingLibraryPicker = false
+    @State private var showingImagePicker = false
     @State private var isSaving = false
     
     var body: some View {
@@ -1813,29 +1848,15 @@ struct AddNotesView: View {
                                 
                                 Spacer()
                                 
-                                HStack(spacing: 8) {
-                                    Button(action: {
-                                        showingCameraPicker = true
-                                    }) {
-                                        HStack(spacing: 4) {
-                                            Image(systemName: "camera.fill")
-                                            Text("Take Photo")
-                                        }
-                                        .font(.subheadline)
-                                        .foregroundColor(ThemeManager.shared.linkColor)
+                                Button(action: {
+                                    showingImagePicker = true
+                                }) {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "camera.fill")
+                                        Text("Add Photos")
                                     }
-                                    .disabled(!UIImagePickerController.isSourceTypeAvailable(.camera))
-                                    
-                                    Button(action: {
-                                        showingLibraryPicker = true
-                                    }) {
-                                        HStack(spacing: 4) {
-                                            Image(systemName: "photo.on.rectangle")
-                                            Text("Choose from Library")
-                                        }
-                                        .font(.subheadline)
-                                        .foregroundColor(ThemeManager.shared.linkColor)
-                                    }
+                                    .font(.subheadline)
+                                    .foregroundColor(ThemeManager.shared.linkColor)
                                 }
                             }
                             
@@ -1896,11 +1917,8 @@ struct AddNotesView: View {
                 }
             }
         }
-        .sheet(isPresented: $showingCameraPicker) {
-            ImagePicker(selectedImages: $selectedImages, sourceType: .camera)
-        }
-        .sheet(isPresented: $showingLibraryPicker) {
-            ImagePicker(selectedImages: $selectedImages, sourceType: .photoLibrary)
+        .sheet(isPresented: $showingImagePicker) {
+            ImagePicker(selectedImages: $selectedImages)
         }
     }
     

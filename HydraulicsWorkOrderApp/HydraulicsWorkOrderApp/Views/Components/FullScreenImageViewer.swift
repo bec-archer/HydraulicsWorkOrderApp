@@ -10,6 +10,23 @@ import ImageIO
 struct FullScreenImageViewer: View {
     let imageURL: URL
     @Binding var isPresented: Bool
+    
+    // Optional parameters for edit/revert functionality
+    var workOrderId: String? = nil
+    var itemId: UUID? = nil
+    
+    // Callback to notify parent when image is edited
+    var onImageEdited: (() -> Void)? = nil
+    
+    // Initialize currentImageURL with the original imageURL
+    init(imageURL: URL, isPresented: Binding<Bool>, workOrderId: String? = nil, itemId: UUID? = nil, onImageEdited: (() -> Void)? = nil) {
+        self.imageURL = imageURL
+        self._isPresented = isPresented
+        self.workOrderId = workOrderId
+        self.itemId = itemId
+        self.onImageEdited = onImageEdited
+        self._currentImageURL = State(initialValue: imageURL)
+    }
 
     @State private var scale: CGFloat = 1.0
     @State private var opacity: Double = 0.0
@@ -18,6 +35,18 @@ struct FullScreenImageViewer: View {
     @GestureState private var pinchScale: CGFloat = 1.0
     @State private var loadedUIImage: UIImage? = nil // ✅ Manually loaded image
     @State private var loadFailed = false
+    
+    // ───── SECTION: State ─────
+    @State private var showMarkup = false
+    @State private var baseUIImage: UIImage? = nil
+    @State private var isBusy = false
+
+    @State private var lastOldURLForRevert: String? = nil
+    @State private var lastNewURLForRevert: String? = nil
+    @State private var lastEditedStoragePath: String? = nil
+    
+    // Track the current image URL (may change after editing)
+    @State private var currentImageURL: URL
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
@@ -82,16 +111,51 @@ struct FullScreenImageViewer: View {
             }
 
             // ✖️ Close Button (top-right)
-            Button {
-                closeViewer()
-            } label: {
-                Image(systemName: "xmark.circle.fill")
-                    .font(.system(size: 30, weight: .bold))
-                    .foregroundColor(.white)
-                    .shadow(radius: 5)
-                    .padding(16)
+            VStack {
+                HStack {
+                    Spacer()
+                    Button {
+                        closeViewer()
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 30, weight: .bold))
+                            .foregroundColor(.white)
+                            .shadow(radius: 5)
+                            .padding(16)
+                    }
+                    .accessibilityLabel("Close Image Viewer")
+                }
+                
+                Spacer()
+                
+                // Edit and Revert buttons (bottom overlay)
+                HStack(spacing: 20) {
+                    Button {
+                        print("🧩 Edit button tapped - workOrderId: \(workOrderId ?? "nil"), itemId: \(itemId?.uuidString ?? "nil")")
+                        showMarkup = true
+                    } label: {
+                        Image(systemName: "pencil.tip.crop.circle")
+                            .font(.title)
+                            .foregroundColor(baseUIImage == nil ? .white.opacity(0.35) : .white)
+                            .padding()
+                    }
+                    .disabled(baseUIImage == nil)
+
+                    if lastOldURLForRevert != nil && lastNewURLForRevert != nil {
+                        Button {
+                            print("🧩 Revert button tapped")
+                            Task { await revertToOriginalTapped() }
+                        } label: {
+                            Image(systemName: "arrow.uturn.backward.circle")
+                                .font(.title)
+                                .foregroundColor(.white)
+                                .padding()
+                        }
+                        .disabled(isBusy)
+                    }
+                }
+                .padding(.bottom, 50)
             }
-            .accessibilityLabel("Close Image Viewer")
             .zIndex(2)
         }
         .zIndex(9999)
@@ -99,19 +163,49 @@ struct FullScreenImageViewer: View {
             insertion: .opacity.combined(with: .scale(scale: 0.8)).animation(.easeOut(duration: 0.3)),
             removal: .opacity.combined(with: .scale(scale: 1.1)).animation(.easeIn(duration: 0.2))
         ))
+        .sheet(isPresented: $showMarkup) {
+            if let ui = baseUIImage {
+                ImageMarkupView(
+                    baseImage: ui,
+                    onCancel: { 
+                        print("🧩 ImageMarkupView onCancel called")
+                        showMarkup = false 
+                    },
+                    onSave: { merged, overlayPNG, drawingData in
+                        print("🧩 ImageMarkupView onSave called")
+                        showMarkup = false
+                        Task { await replaceWithEdited(merged: merged, overlayPNG: overlayPNG, drawingData: drawingData) }
+                    }
+                )
+                .onAppear {
+                    print("🧩 ImageMarkupView sheet presenting with baseImage")
+                }
+            } else {
+                Text("No base image available")
+                    .foregroundColor(.white)
+                    .background(Color.black)
+                    .onAppear {
+                        print("🧩 ImageMarkupView sheet triggered but baseUIImage is nil")
+                    }
+            }
+        }
         .onAppear {
             print("🧩 FullScreenImageViewer launched with imageURL: \(imageURL.absoluteString)")
             print("🧩 FullScreenImageViewer isPresented: \(isPresented)")
+            print("🧩 FullScreenImageViewer workOrderId: \(workOrderId ?? "nil")")
+            print("🧩 FullScreenImageViewer itemId: \(itemId?.uuidString ?? "nil")")
+            
+            // Only load from URL if we don't already have an image loaded
+            if loadedUIImage == nil {
+                captureUIImageIfNeeded(from: currentImageURL)
 
 #if DEBUG
-            // Show a quick placeholder, but still fetch the real image
-            if loadedUIImage == nil {
+                // Show a quick placeholder, but still fetch the real image
                 self.loadedUIImage = UIImage(systemName: "photo")
-            }
 #endif
 
-            var request = URLRequest(url: imageURL)
-            request.setValue("image/jpeg", forHTTPHeaderField: "Accept")
+                var request = URLRequest(url: currentImageURL)
+                request.setValue("image/jpeg", forHTTPHeaderField: "Accept")
 
             URLSession.shared.dataTask(with: request) { data, response, error in
                 if let error = error {
@@ -151,19 +245,26 @@ struct FullScreenImageViewer: View {
                 if let uiImage = UIImage(data: data) {
                     DispatchQueue.main.async {
                         self.loadedUIImage = uiImage
+                        self.baseUIImage = uiImage
                         print("✅ Image successfully loaded via UIImage(data:)")
+                        print("🧩 baseUIImage set to: \(self.baseUIImage != nil ? "valid" : "nil")")
                     }
                 } else if let cgImageSource = CGImageSourceCreateWithData(data as CFData, nil),
                           let cgImage = CGImageSourceCreateImageAtIndex(cgImageSource, 0, nil) {
                     let fallbackImage = UIImage(cgImage: cgImage)
                     DispatchQueue.main.async {
                         self.loadedUIImage = fallbackImage
+                        self.baseUIImage = fallbackImage
                         print("✅ Image successfully loaded via CGImage fallback")
+                        print("🧩 baseUIImage set to: \(self.baseUIImage != nil ? "valid" : "nil")")
                     }
                 } else {
                     print("❌ Image decoding failed — neither UIImage nor CGImage succeeded")
                 }
             }.resume()
+            } else {
+                print("🧩 Image already loaded, skipping URL fetch")
+            }
         }
     }
 
@@ -174,6 +275,113 @@ struct FullScreenImageViewer: View {
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
             isPresented = false
+        }
+    }
+    
+    private func captureUIImageIfNeeded(from url: URL) {
+        guard baseUIImage == nil else { return }
+        Task { @MainActor in
+            do {
+                let (data, _) = try await URLSession.shared.data(from: url)
+                if let ui = UIImage(data: data) {
+                    baseUIImage = ui
+                }
+            } catch {
+                print("⚠️ captureUIImageIfNeeded error:", error)
+            }
+        }
+    }
+    
+    @MainActor
+    private func replaceWithEdited(merged: UIImage, overlayPNG: Data, drawingData: Data) async {
+        guard !isBusy else { return }
+        guard let workOrderId = workOrderId, let itemId = itemId else { return }
+        isBusy = true
+        defer { isBusy = false }
+
+        do {
+            let payload = try await StorageManager.shared.uploadEditedImageAdjacent(
+                originalURL: imageURL,
+                mergedUIImage: merged
+            )
+
+            try await WorkOrdersDatabase.shared.replaceItemImageURL(
+                workOrderId: workOrderId,
+                itemId: itemId,
+                oldURL: imageURL.absoluteString,
+                newURL: payload.uploadedURL.absoluteString
+            )
+
+            await StorageManager.shared.uploadMarkupArtifacts(
+                originalURL: imageURL,
+                overlayPNG: overlayPNG.isEmpty ? nil : overlayPNG,
+                drawingData: drawingData.isEmpty ? nil : drawingData
+            )
+
+            let oldPathForDeletion = try StorageManager.shared.storageFolderForSibling(of: imageURL) + "/" + imageURL.lastPathComponent
+            await StorageManager.shared.deleteStorageObject(at: oldPathForDeletion)
+
+            lastOldURLForRevert = imageURL.absoluteString
+            lastNewURLForRevert = payload.uploadedURL.absoluteString
+            lastEditedStoragePath = payload.storagePath
+
+            // Update the displayed image immediately
+            loadedUIImage = merged
+            baseUIImage = merged
+            
+            // Update the currentImageURL to point to the new edited image
+            // This ensures the viewer shows the edited version
+            currentImageURL = payload.uploadedURL
+            
+            print("🧩 Image replaced successfully - showing merged image")
+            print("🧩 New image URL: \(payload.uploadedURL.absoluteString)")
+            
+            // Notify parent that image was edited
+            onImageEdited?()
+
+        } catch {
+            print("⚠️ replaceWithEdited error:", error)
+        }
+    }
+
+    @MainActor
+    private func revertToOriginalTapped() async {
+        guard !isBusy else { return }
+        guard let oldURL = lastOldURLForRevert, let newURL = lastNewURLForRevert else { return }
+        guard let workOrderId = workOrderId, let itemId = itemId else { return }
+        isBusy = true
+        defer { isBusy = false }
+
+        do {
+            try await WorkOrdersDatabase.shared.replaceItemImageURL(
+                workOrderId: workOrderId,
+                itemId: itemId,
+                oldURL: newURL,
+                newURL: oldURL
+            )
+
+            if let editedPath = lastEditedStoragePath {
+                await StorageManager.shared.deleteStorageObject(at: editedPath)
+            }
+
+            // Reset to original image
+            if let originalURL = URL(string: oldURL) {
+                // Update currentImageURL to point back to original
+                currentImageURL = originalURL
+                
+                // Reload the original image
+                if let data = try? Data(contentsOf: originalURL), let ui = UIImage(data: data) {
+                    loadedUIImage = ui
+                    baseUIImage = ui
+                }
+            }
+            
+            lastOldURLForRevert = nil
+            lastNewURLForRevert = nil
+            lastEditedStoragePath = nil
+
+        } catch {
+            print("⚠️ revertToOriginalTapped error:", error)
         }
     }
 } // END

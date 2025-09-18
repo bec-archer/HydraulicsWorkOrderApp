@@ -228,6 +228,78 @@ struct StorageManager {
     // END
 }
 
+// ───── MARK: Image Replacement Helpers (Add-Only) ─────
+
+struct EditedImagePayload {
+    let uploadedURL: URL
+    let storagePath: String
+}
+
+extension StorageManager {
+
+    func uploadEditedImageAdjacent(
+        originalURL: URL,
+        mergedUIImage: UIImage,
+        jpegQuality: CGFloat = 0.88
+    ) async throws -> EditedImagePayload {
+        let folderPath = try storageFolderForSibling(of: originalURL)
+        let filename = "edited_\(Int(Date().timeIntervalSince1970)).jpg"
+        let newPath = folderPath + "/" + filename
+
+        guard let data = mergedUIImage.jpegData(compressionQuality: jpegQuality) else {
+            throw NSError(domain: "StorageManager", code: -1, userInfo: [NSLocalizedDescriptionKey: "JPEG encode failed"])
+        }
+
+        let newDownloadURL = try await uploadData(data, to: newPath, contentType: "image/jpeg")
+        return EditedImagePayload(uploadedURL: newDownloadURL, storagePath: newPath)
+    }
+
+    func deleteStorageObject(at storagePath: String) async {
+        do { try await deleteObject(storagePath) } catch { print("⚠️ deleteStorageObject:", error) }
+    }
+
+    func uploadMarkupArtifacts(
+        originalURL: URL,
+        overlayPNG: Data?,
+        drawingData: Data?
+    ) async {
+        do {
+            let baseFolder = try storageFolderForSibling(of: originalURL)
+            let markupFolder = baseFolder + "/markup"
+            if let overlayPNG {
+                _ = try await uploadData(overlayPNG, to: markupFolder + "/overlay.png", contentType: "image/png")
+            }
+            if let drawingData {
+                _ = try await uploadData(drawingData, to: markupFolder + "/drawing.pkdraw", contentType: "application/octet-stream")
+            }
+        } catch { print("⚠️ uploadMarkupArtifacts:", error) }
+    }
+
+    func storageFolderForSibling(of originalURL: URL) throws -> String {
+        var comps = originalURL.pathComponents
+        guard comps.count > 1 else {
+            throw NSError(domain: "StorageManager", code: -2, userInfo: [NSLocalizedDescriptionKey: "Invalid original URL"])
+        }
+        comps.removeLast()
+        return comps.joined(separator: "/")
+    }
+
+    private func uploadData(_ data: Data, to storagePath: String, contentType: String) async throws -> URL {
+        let ref = root.child(storagePath)
+        let metadata = StorageMetadata()
+        metadata.contentType = contentType
+        metadata.cacheControl = "public, max-age=86400"
+        
+        _ = try await ref.putDataAsync(data, metadata: metadata)
+        return try await ref.downloadURL()
+    }
+
+    private func deleteObject(_ storagePath: String) async throws {
+        let ref = root.child(storagePath)
+        try await ref.delete()
+    }
+}
+
 
 // ───── Preview Template ─────
 // (No UI to preview; keep file consistent)

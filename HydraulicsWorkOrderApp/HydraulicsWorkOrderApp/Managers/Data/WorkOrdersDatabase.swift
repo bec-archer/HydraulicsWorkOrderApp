@@ -575,4 +575,34 @@ final class WorkOrdersDatabase: ObservableObject {
         // Fallback: return the full URL if we can't extract timestamp
         return url
     }
+    
+    // ───── MARK: Atomic Image URL Swap (Add-Only) ─────
+    
+    func replaceItemImageURL(
+        workOrderId: String,
+        itemId: UUID,
+        oldURL: String,
+        newURL: String
+    ) async throws {
+        var order = try await fetchWorkOrder(by: workOrderId)
+        guard let i = order.items.firstIndex(where: { $0.id == itemId }) else {
+            throw NSError(domain: "WorkOrdersDatabase", code: 404, userInfo: [NSLocalizedDescriptionKey: "Item not found"])
+        }
+        var item = order.items[i]
+        guard let u = item.imageUrls.firstIndex(of: oldURL) else {
+            throw NSError(domain: "WorkOrdersDatabase", code: 404, userInfo: [NSLocalizedDescriptionKey: "Old URL not found"])
+        }
+
+        item.imageUrls[u] = newURL
+        order.items[i] = item
+        try await updateWorkOrder(order)
+    }
+    
+    private func fetchWorkOrder(by workOrderId: String) async throws -> WorkOrder {
+        if let workOrder = workOrders.first(where: { $0.id == workOrderId }) {
+            return workOrder
+        } else {
+            throw NSError(domain: "WorkOrdersDatabase", code: 404, userInfo: [NSLocalizedDescriptionKey: "Work order not found"])
+        }
+    }
 }
