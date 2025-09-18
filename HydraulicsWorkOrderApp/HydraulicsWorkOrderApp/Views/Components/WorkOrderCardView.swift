@@ -147,9 +147,13 @@ struct WorkOrderCardView: View {
     let onTap: (() -> Void)?
     let imageAreaSize: CGFloat
     
-    @State private var isFullScreenImagePresented = false
     @State private var selectedImageURL: URL?
-    @State private var imageViewerURL: URL?
+    
+    // Wrapper to make URL identifiable for fullScreenCover
+    private struct IdentifiableURL: Identifiable {
+        let id = UUID()
+        let url: URL
+    }
     
     init(workOrder: WorkOrder, imageAreaSize: CGFloat, customerTag: String? = nil, onTap: (() -> Void)? = nil) {
         self.workOrder = workOrder
@@ -171,15 +175,12 @@ struct WorkOrderCardView: View {
                 imageAreaSize: imageAreaSize,
                 onImageLongPress: { imageURL in
                     print("🔍 DEBUG: Long-press detected on image: \(imageURL.absoluteString)")
-                    print("🔍 DEBUG: Setting imageViewerURL to: \(imageURL.absoluteString)")
+                    print("🔍 DEBUG: Setting selectedImageURL to: \(imageURL.absoluteString)")
                     
-                    // Set the viewer URL and present immediately
-                    imageViewerURL = imageURL
-                    isFullScreenImagePresented = true
-                    
-                    print("🔍 DEBUG: imageViewerURL is now: \(imageViewerURL?.absoluteString ?? "nil")")
-                    print("🔍 DEBUG: isFullScreenImagePresented set to: \(isFullScreenImagePresented)")
-                    print("🔍 DEBUG: Sheet should now be presented")
+                    // Set the selected image URL - this will trigger the fullScreenCover
+                    selectedImageURL = imageURL
+                    print("🔍 DEBUG: selectedImageURL is now: \(selectedImageURL?.absoluteString ?? "nil")")
+                    print("🔍 DEBUG: FullScreenCover should now be presented")
                 },
                 onImageTap: onTap
             )
@@ -199,37 +200,75 @@ struct WorkOrderCardView: View {
         .id(stableId)
         // Removed debug prints to improve performance
         // Removed debug prints to improve performance
-        .sheet(isPresented: $isFullScreenImagePresented) {
-            if let imageURL = imageViewerURL {
-                FullScreenImageViewer(
-                    imageURL: imageURL,
-                    isPresented: $isFullScreenImagePresented
+        .fullScreenCover(item: Binding<IdentifiableURL?>(
+            get: { 
+                if let url = selectedImageURL {
+                    return IdentifiableURL(url: url)
+                }
+                return nil
+            },
+            set: { _ in selectedImageURL = nil }
+        )) { identifiableURL in
+            FullScreenImageViewer(
+                imageURL: identifiableURL.url,
+                isPresented: Binding(
+                    get: { selectedImageURL != nil },
+                    set: { _ in selectedImageURL = nil }
                 )
-                .onAppear {
-                    print("🔍 DEBUG: Sheet presenting with URL: \(imageURL.absoluteString)")
-                    print("🔍 DEBUG: imageViewerURL: \(imageViewerURL?.absoluteString ?? "nil")")
-                }
-            } else {
-                VStack(spacing: 20) {
-                    Text("No image selected")
-                        .foregroundColor(.white)
-                        .font(.title2)
-                    
-                    Button("Close") {
-                        isFullScreenImagePresented = false
-                        imageViewerURL = nil
-                    }
+            )
+            .onAppear {
+                print("🔍 DEBUG: FullScreenCover presenting with URL: \(identifiableURL.url.absoluteString)")
+            }
+        }
+    }
+}
+
+// MARK: - ImageViewerSheet
+struct ImageViewerSheet: View {
+    let imageURL: URL?
+    @Binding var isPresented: Bool
+    @State private var retryCount = 0
+    
+    var body: some View {
+        if let imageURL = imageURL {
+            FullScreenImageViewer(
+                imageURL: imageURL,
+                isPresented: $isPresented
+            )
+            .onAppear {
+                print("🔍 DEBUG: ImageViewerSheet presenting with URL: \(imageURL.absoluteString)")
+            }
+        } else {
+            VStack(spacing: 20) {
+                Text("Loading image...")
                     .foregroundColor(.white)
-                    .padding()
-                    .background(Color.blue)
-                    .cornerRadius(10)
+                    .font(.title2)
+                
+                ProgressView()
+                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                    .scaleEffect(1.5)
+                
+                Button("Close") {
+                    isPresented = false
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Color.black)
-                .onAppear {
-                    print("🔍 DEBUG: Sheet triggered but no imageViewerURL")
-                    print("🔍 DEBUG: imageViewerURL at sheet: \(imageViewerURL?.absoluteString ?? "nil")")
-                    print("🔍 DEBUG: isFullScreenImagePresented at sheet: \(isFullScreenImagePresented)")
+                .foregroundColor(.white)
+                .padding()
+                .background(Color.blue)
+                .cornerRadius(10)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color.black)
+            .onAppear {
+                print("🔍 DEBUG: ImageViewerSheet triggered but no imageURL")
+                print("🔍 DEBUG: imageURL at sheet: \(imageURL?.absoluteString ?? "nil")")
+                print("🔍 DEBUG: retryCount: \(retryCount)")
+                
+                // Retry after a brief delay if URL is not available
+                if retryCount < 3 {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        retryCount += 1
+                        print("🔍 DEBUG: Retrying... attempt \(retryCount)")
+                    }
                 }
             }
         }
