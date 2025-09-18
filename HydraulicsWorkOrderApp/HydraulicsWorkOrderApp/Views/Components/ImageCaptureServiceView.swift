@@ -207,6 +207,9 @@ struct ImageCaptureServiceView: View {
             print("🔍 DEBUG: Image[\(index)] - Size: \(image.size), Scale: \(image.scale)")
         }
         
+        // Start critical operation to prevent inactivity timeout during upload
+        InactivityManager.startCriticalOperation()
+        
         isUploading = true
         uploadProgress = 0.0
         
@@ -259,6 +262,9 @@ struct ImageCaptureServiceView: View {
             print("❌ Failed to upload images: \(error.localizedDescription)")
             print("❌ Error details: \(error)")
         }
+        
+        // End critical operation
+        InactivityManager.endCriticalOperation()
         
         isUploading = false
         selectedImages = []

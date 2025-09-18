@@ -175,7 +175,7 @@ struct ClosedWorkOrdersView: View {
                                             GridItem(.flexible(), spacing: 16)
                                         ], spacing: 16) {
                                             ForEach(flaggedClosedWorkOrders, id: \.workOrderNumber) { workOrder in
-                                                WorkOrderCardView(workOrder: workOrder)
+                                                WorkOrderCardView(workOrder: workOrder, imageAreaSize: 200)
                                                     .onTapGesture {
                                                         appState.navigateToWorkOrderDetail(workOrder)
                                                     }
@@ -215,7 +215,7 @@ struct ClosedWorkOrdersView: View {
                                             GridItem(.flexible(), spacing: 16)
                                         ], spacing: 16) {
                                             ForEach(unflaggedClosedWorkOrders, id: \.workOrderNumber) { workOrder in
-                                                WorkOrderCardView(workOrder: workOrder)
+                                                WorkOrderCardView(workOrder: workOrder, imageAreaSize: 200)
                                                     .onTapGesture {
                                                         appState.navigateToWorkOrderDetail(workOrder)
                                                     }

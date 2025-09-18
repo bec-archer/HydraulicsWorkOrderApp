@@ -124,6 +124,19 @@ class QRScannerVC: UIViewController {
         stopScanning()
     }
     
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        updatePreviewLayerFrame()
+    }
+    
+    override func viewWillTransition(to size: CGSize, with coordinator: UIViewControllerTransitionCoordinator) {
+        super.viewWillTransition(to: size, with: coordinator)
+        
+        coordinator.animate(alongsideTransition: { _ in
+            self.updatePreviewLayerFrame()
+        }, completion: nil)
+    }
+    
     
     private func setupCamera() {
         // ───── Check Camera Permission First ─────
@@ -186,7 +199,12 @@ class QRScannerVC: UIViewController {
         previewLayer = AVCaptureVideoPreviewLayer(session: captureSession)
         previewLayer.frame = view.layer.bounds
         previewLayer.videoGravity = .resizeAspectFill
+        // ───── Mirror the preview to match user expectation ─────
+        previewLayer.transform = CATransform3DMakeScale(-1.0, 1.0, 1.0)
         view.layer.addSublayer(previewLayer)
+        
+        // ───── Set initial orientation ─────
+        updatePreviewLayerFrame()
         
         print("✅ Camera session setup completed successfully")
     }
@@ -209,6 +227,76 @@ class QRScannerVC: UIViewController {
         
         if captureSession.isRunning {
             captureSession.stopRunning()
+        }
+    }
+    
+    // ───── Update Preview Layer Frame and Orientation ─────
+    private func updatePreviewLayerFrame() {
+        guard let previewLayer = previewLayer else { return }
+        
+        // Update frame to match current view bounds
+        previewLayer.frame = view.layer.bounds
+        
+        // Update connection orientation based on device orientation
+        if let connection = previewLayer.connection {
+            let orientation = UIDevice.current.orientation
+            if #available(iOS 17.0, *) {
+                // Use the new videoRotationAngle property for iOS 17+
+                switch orientation {
+                case .portrait:
+                    connection.videoRotationAngle = 0
+                case .portraitUpsideDown:
+                    connection.videoRotationAngle = 180
+                case .landscapeLeft:
+                    connection.videoRotationAngle = 90
+                case .landscapeRight:
+                    connection.videoRotationAngle = 270
+                default:
+                    // Use current interface orientation as fallback
+                    if let windowScene = view.window?.windowScene {
+                        switch windowScene.interfaceOrientation {
+                        case .portrait:
+                            connection.videoRotationAngle = 0
+                        case .portraitUpsideDown:
+                            connection.videoRotationAngle = 180
+                        case .landscapeLeft:
+                            connection.videoRotationAngle = 270
+                        case .landscapeRight:
+                            connection.videoRotationAngle = 90
+                        default:
+                            connection.videoRotationAngle = 0
+                        }
+                    }
+                }
+            } else {
+                // Use the deprecated videoOrientation property for iOS 16 and earlier
+                switch orientation {
+                case .portrait:
+                    connection.videoOrientation = .portrait
+                case .portraitUpsideDown:
+                    connection.videoOrientation = .portraitUpsideDown
+                case .landscapeLeft:
+                    connection.videoOrientation = .landscapeRight
+                case .landscapeRight:
+                    connection.videoOrientation = .landscapeLeft
+                default:
+                    // Use current interface orientation as fallback
+                    if let windowScene = view.window?.windowScene {
+                        switch windowScene.interfaceOrientation {
+                        case .portrait:
+                            connection.videoOrientation = .portrait
+                        case .portraitUpsideDown:
+                            connection.videoOrientation = .portraitUpsideDown
+                        case .landscapeLeft:
+                            connection.videoOrientation = .landscapeLeft
+                        case .landscapeRight:
+                            connection.videoOrientation = .landscapeRight
+                        default:
+                            connection.videoOrientation = .portrait
+                        }
+                    }
+                }
+            }
         }
     }
 }

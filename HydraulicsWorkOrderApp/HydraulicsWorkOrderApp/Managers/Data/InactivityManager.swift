@@ -27,7 +27,8 @@ class InactivityManager: ObservableObject {
     
     // Performance optimization - throttle excessive calls
     private var lastInteractionTime: Date = Date()
-    private let interactionThrottleInterval: TimeInterval = 1.0 // Only process interactions every 1 second
+    private let interactionThrottleInterval: TimeInterval = 5.0 // Only process interactions every 5 seconds
+    private var isInCriticalOperation = false // Flag to disable timeout during critical operations
     
     // Configuration
     private let warningTime: TimeInterval = 10.0 // Show warning 10 seconds before logout
@@ -82,6 +83,11 @@ class InactivityManager: ObservableObject {
     
     /// Handle user activity (call when user interacts with the app)
     func recordActivity() {
+        // Skip all activity tracking during critical operations
+        guard !isInCriticalOperation else {
+            return
+        }
+        
         // Throttle excessive calls to prevent performance issues
         let now = Date()
         guard now.timeIntervalSince(lastInteractionTime) >= interactionThrottleInterval else {
@@ -102,6 +108,20 @@ class InactivityManager: ObservableObject {
     func forceLogout() {
         invalidateTimers()
         performLogout()
+    }
+    
+    /// Start critical operation (disables inactivity timeout)
+    func startCriticalOperation() {
+        isInCriticalOperation = true
+        print("🔍 DEBUG: InactivityManager.startCriticalOperation - disabling timeout")
+    }
+    
+    /// End critical operation (re-enables inactivity timeout)
+    func endCriticalOperation() {
+        isInCriticalOperation = false
+        print("🔍 DEBUG: InactivityManager.endCriticalOperation - re-enabling timeout")
+        // Reset the timer when ending critical operation
+        resetInactivityTimer()
     }
     
     // MARK: - Private Methods
@@ -137,6 +157,11 @@ class InactivityManager: ObservableObject {
     }
     
     @objc private func handleUserInteraction() {
+        // Skip all activity tracking during critical operations
+        guard !isInCriticalOperation else {
+            return
+        }
+        
         // Throttle excessive calls to prevent performance issues
         let now = Date()
         guard now.timeIntervalSince(lastInteractionTime) >= interactionThrottleInterval else {
@@ -168,6 +193,12 @@ class InactivityManager: ObservableObject {
     }
     
     private func handleInactivityTimeout() {
+        // Don't timeout during critical operations
+        guard !isInCriticalOperation else {
+            print("🔍 DEBUG: InactivityManager.handleInactivityTimeout - skipping logout during critical operation")
+            return
+        }
+        
         print("🔍 DEBUG: InactivityManager.handleInactivityTimeout called - performing logout")
         isActive = false
         showInactivityWarning = false
@@ -198,6 +229,16 @@ extension InactivityManager {
     /// Track user interaction (call from views when user interacts)
     static func trackUserInteraction() {
         NotificationCenter.default.post(name: .userInteraction, object: nil)
+    }
+    
+    /// Start critical operation (disables inactivity timeout)
+    static func startCriticalOperation() {
+        shared.startCriticalOperation()
+    }
+    
+    /// End critical operation (re-enables inactivity timeout)
+    static func endCriticalOperation() {
+        shared.endCriticalOperation()
     }
 }
 

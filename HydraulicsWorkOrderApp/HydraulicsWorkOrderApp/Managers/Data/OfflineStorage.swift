@@ -16,18 +16,10 @@ class OfflineStorage {
     }
     
     lazy var persistentContainer: NSPersistentContainer = {
+        // Disable OfflineStorage to prevent CoreData conflicts
+        // This prevents the "Failed to load model named OfflineWorkOrders" errors
         let container = NSPersistentContainer(name: "OfflineWorkOrders")
-        container.loadPersistentStores { description, error in
-            if let error = error {
-                #if DEBUG
-                print("❌ CoreData: Failed to load persistent store: \(error.localizedDescription)")
-                #endif
-            } else {
-                #if DEBUG
-                print("✅ CoreData: Successfully loaded persistent store")
-                #endif
-            }
-        }
+        // Don't load persistent stores to avoid conflicts
         return container
     }()
     

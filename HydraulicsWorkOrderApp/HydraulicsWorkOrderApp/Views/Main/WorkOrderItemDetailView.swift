@@ -23,6 +23,9 @@ struct WorkOrderItemDetailView: View {
     @EnvironmentObject private var appState: AppState
     @Environment(\.dismiss) private var dismiss
     
+    // MARK: - ViewModel
+    @StateObject private var viewModel: WorkOrderDetailViewModel
+    
     // MARK: - State
     @State private var showImageViewer = false
     @State private var selectedImageURL: URL?
@@ -30,59 +33,80 @@ struct WorkOrderItemDetailView: View {
     @State private var showAddNotes = false
     @State private var showGallery = false
     
+    // MARK: - Initialization
+    init(workOrder: WorkOrder, item: WO_Item, itemIndex: Int) {
+        self.workOrder = workOrder
+        self.item = item
+        self.itemIndex = itemIndex
+        self._viewModel = StateObject(wrappedValue: WorkOrderDetailViewModel(workOrder: workOrder))
+    }
+    
     // MARK: - Computed Properties
     private var itemDisplayName: String {
         "\(workOrder.workOrderNumber)-\(String(format: "%03d", itemIndex + 1))"
     }
     
     private var currentStatus: String {
-        item.statusHistory.last?.status ?? "Checked In"
+        if itemIndex < viewModel.workOrder.items.count {
+            return viewModel.workOrder.items[itemIndex].statusHistory.last?.status ?? "Checked In"
+        } else {
+            return item.statusHistory.last?.status ?? "Checked In"
+        }
+    }
+    
+    private var currentItem: WO_Item {
+        // Safety check to ensure we have the right item
+        if itemIndex < viewModel.workOrder.items.count {
+            return viewModel.workOrder.items[itemIndex]
+        } else {
+            // Fallback to the original item if index is out of bounds
+            print("⚠️ DEBUG: Item index \(itemIndex) out of bounds, using original item")
+            return item
+        }
     }
     
     // MARK: - Body
     var body: some View {
-        NavigationView {
-            ScrollView {
-                VStack(spacing: 20) {
-                    // ───── Item Header Card ─────
-                    itemHeaderCard
-                    
-                    // ───── Item Images Section ─────
-                    itemImagesSection
-                    
-                    // ───── Item Details Section ─────
-                    itemDetailsSection
-                    
-                    // ───── Status & Notes Section ─────
-                    statusAndNotesSection
-                }
-                .padding()
-            }
-            .navigationTitle("Item Details")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Back") {
-                        appState.navigateToView(.activeWorkOrders)
-                    }
-                }
+        ScrollView {
+            VStack(spacing: 20) {
+                // ───── Item Header Card ─────
+                itemHeaderCard
                 
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Menu {
-                        Button("Change Status") {
-                            showStatusSelection = true
-                        }
-                        
-                        Button("Add Notes") {
-                            showAddNotes = true
-                        }
-                        
-                        Button("View Work Order") {
-                            appState.navigateToWorkOrderDetail(workOrder)
-                        }
-                    } label: {
-                        Image(systemName: "ellipsis.circle")
+                // ───── Item Images Section ─────
+                itemImagesSection
+                
+                // ───── Item Details Section ─────
+                itemDetailsSection
+                
+                // ───── Status & Notes Section ─────
+                statusAndNotesSection
+            }
+            .padding()
+        }
+        .navigationTitle("Item Details")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarLeading) {
+                Button("Back") {
+                    appState.navigateToView(.activeWorkOrders)
+                }
+            }
+            
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Menu {
+                    Button("Change Status") {
+                        showStatusSelection = true
                     }
+                    
+                    Button("Add Notes") {
+                        showAddNotes = true
+                    }
+                    
+                    Button("View Work Order") {
+                        appState.navigateToWorkOrderDetail(workOrder)
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
                 }
             }
         }
@@ -90,30 +114,42 @@ struct WorkOrderItemDetailView: View {
             StatusSelectionView(
                 currentStatus: currentStatus,
                 onStatusSelected: { newStatus in
-                    // TODO: Update item status
-                    print("🔍 DEBUG: Status changed to: \(newStatus)")
-                    showStatusSelection = false
+                    Task {
+                        await viewModel.updateItemStatus(newStatus, for: itemIndex)
+                        showStatusSelection = false
+                    }
                 }
             )
         }
         .sheet(isPresented: $showAddNotes) {
             AddNotesView(
                 workOrder: workOrder,
-                item: item,
+                item: currentItem,
                 itemIndex: itemIndex,
                 onNotesAdded: { noteText, images in
-                    // TODO: Add notes to item
-                    print("🔍 DEBUG: Notes added: \(noteText) with \(images.count) images")
-                    showAddNotes = false
+                    Task {
+                        await viewModel.addItemNoteWithImages(noteText, images: images, to: itemIndex)
+                        showAddNotes = false
+                    }
                 }
             )
         }
         .sheet(isPresented: $showGallery) {
-            ImageGalleryView(images: item.imageUrls, title: itemDisplayName)
+            ImageGalleryView(images: currentItem.imageUrls, title: itemDisplayName)
         }
         .fullScreenCover(isPresented: $showImageViewer) {
             if let imageURL = selectedImageURL {
                 FullScreenImageViewer(imageURL: imageURL, isPresented: $showImageViewer)
+            }
+        }
+        .onAppear {
+            print("🔍 DEBUG: WorkOrderItemDetailView appeared for item index: \(itemIndex)")
+            print("🔍 DEBUG: Work order: \(workOrder.workOrderNumber)")
+            print("🔍 DEBUG: Item type: \(item.type)")
+            print("🔍 DEBUG: Total items in work order: \(workOrder.items.count)")
+            // Ensure we have the latest work order data
+            Task {
+                await viewModel.refreshWorkOrder()
             }
         }
     }
@@ -128,7 +164,7 @@ struct WorkOrderItemDetailView: View {
                         .fontWeight(.bold)
                         .foregroundColor(ThemeManager.shared.textPrimary)
                     
-                    Text(item.type.isEmpty ? "Item" : item.type)
+                    Text(currentItem.type.isEmpty ? "Item" : currentItem.type)
                         .font(.subheadline)
                         .foregroundColor(ThemeManager.shared.textSecondary)
                 }
@@ -145,7 +181,7 @@ struct WorkOrderItemDetailView: View {
             }
             
             // Asset Tag ID
-            if let tagId = item.assetTagId {
+            if let tagId = currentItem.assetTagId {
                 HStack {
                     Text("Asset Tag:")
                         .font(.subheadline)
@@ -193,7 +229,7 @@ struct WorkOrderItemDetailView: View {
                 
                 Spacer()
                 
-                if item.imageUrls.count > 1 {
+                if currentItem.imageUrls.count > 1 {
                     Button("View All") {
                         showGallery = true
                     }
@@ -202,7 +238,7 @@ struct WorkOrderItemDetailView: View {
                 }
             }
             
-            if item.imageUrls.isEmpty {
+            if currentItem.imageUrls.isEmpty {
                 Text("No images available")
                     .font(.subheadline)
                     .foregroundColor(ThemeManager.shared.textSecondary)
@@ -211,7 +247,7 @@ struct WorkOrderItemDetailView: View {
                     .padding(.vertical, 40)
             } else {
                 // Primary image
-                if let firstImageURL = item.imageUrls.first {
+                if let firstImageURL = currentItem.imageUrls.first {
                     AsyncImage(url: URL(string: firstImageURL)) { image in
                         image
                             .resizable()
@@ -233,8 +269,8 @@ struct WorkOrderItemDetailView: View {
                 }
                 
                 // Thumbnail grid for additional images
-                if item.imageUrls.count > 1 {
-                    let thumbnails = Array(item.imageUrls.dropFirst())
+                if currentItem.imageUrls.count > 1 {
+                    let thumbnails = Array(currentItem.imageUrls.dropFirst())
                     LazyVGrid(columns: [
                         GridItem(.adaptive(minimum: 80), spacing: 8)
                     ], spacing: 8) {
@@ -259,7 +295,7 @@ struct WorkOrderItemDetailView: View {
                         }
                         
                         // Show "+X more" if there are more than 7 total images
-                        if item.imageUrls.count > 7 {
+                        if currentItem.imageUrls.count > 7 {
                             Button(action: {
                                 showGallery = true
                             }) {
@@ -269,7 +305,7 @@ struct WorkOrderItemDetailView: View {
                                         .frame(width: 80, height: 80)
                                         .cornerRadius(8)
                                     
-                                    Text("+\(item.imageUrls.count - 7)")
+                                    Text("+\(currentItem.imageUrls.count - 7)")
                                         .font(.headline)
                                         .foregroundColor(ThemeManager.shared.textPrimary)
                                 }
@@ -300,14 +336,14 @@ struct WorkOrderItemDetailView: View {
             
             VStack(alignment: .leading, spacing: 8) {
                 // Reasons for Service
-                if !item.reasonsForService.isEmpty {
+                if !currentItem.reasonsForService.isEmpty {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Reasons for Service:")
                             .font(.subheadline)
                             .fontWeight(.semibold)
                             .foregroundColor(ThemeManager.shared.textPrimary)
                         
-                        ForEach(item.reasonsForService, id: \.self) { reason in
+                        ForEach(currentItem.reasonsForService, id: \.self) { reason in
                             HStack {
                                 Image(systemName: isReasonPerformed(reason) ? "checkmark.square.fill" : "square")
                                     .foregroundColor(isReasonPerformed(reason) ? .green : ThemeManager.shared.textSecondary)
@@ -321,15 +357,15 @@ struct WorkOrderItemDetailView: View {
                 }
                 
                 // Dropdown details
-                if !item.dropdowns.isEmpty {
+                if !currentItem.dropdowns.isEmpty {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Details:")
                             .font(.subheadline)
                             .fontWeight(.semibold)
                             .foregroundColor(ThemeManager.shared.textPrimary)
                         
-                        ForEach(Array(item.dropdowns.keys.sorted()), id: \.self) { key in
-                            if let value = item.dropdowns[key], !value.isEmpty {
+                        ForEach(Array(currentItem.dropdowns.keys.sorted()), id: \.self) { key in
+                            if let value = currentItem.dropdowns[key], !value.isEmpty {
                                 HStack {
                                     Text("\(key.capitalized):")
                                         .font(.subheadline)
@@ -370,7 +406,7 @@ struct WorkOrderItemDetailView: View {
                     .fontWeight(.semibold)
                     .foregroundColor(ThemeManager.shared.textPrimary)
                 
-                if item.statusHistory.isEmpty {
+                if currentItem.statusHistory.isEmpty {
                     HStack {
                         Text("•")
                             .foregroundColor(ThemeManager.shared.textSecondary)
@@ -383,7 +419,7 @@ struct WorkOrderItemDetailView: View {
                             .foregroundColor(ThemeManager.shared.textSecondary)
                     }
                 } else {
-                    ForEach(item.statusHistory.sorted(by: { $0.timestamp < $1.timestamp }), id: \.id) { status in
+                    ForEach(currentItem.statusHistory.sorted(by: { $0.timestamp < $1.timestamp }), id: \.id) { status in
                         HStack {
                             Text("•")
                                 .foregroundColor(ThemeManager.shared.textSecondary)
@@ -400,14 +436,14 @@ struct WorkOrderItemDetailView: View {
             }
             
             // Notes
-            if !item.notes.isEmpty {
+            if !currentItem.notes.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Notes:")
                         .font(.subheadline)
                         .fontWeight(.semibold)
                         .foregroundColor(ThemeManager.shared.textPrimary)
                     
-                    ForEach(item.notes.sorted(by: { $0.timestamp < $1.timestamp }), id: \.id) { note in
+                    ForEach(currentItem.notes.sorted(by: { $0.timestamp < $1.timestamp }), id: \.id) { note in
                         VStack(alignment: .leading, spacing: 4) {
                             if !note.text.isEmpty {
                                 reasonServiceNoteText(note.text)
@@ -444,7 +480,7 @@ struct WorkOrderItemDetailView: View {
     // MARK: - Helper Methods
     private func isReasonPerformed(_ reason: String) -> Bool {
         let expectedStatus = "Service Performed — \(reason)"
-        return item.statusHistory.contains { status in
+        return currentItem.statusHistory.contains { status in
             status.status == expectedStatus
         }
     }

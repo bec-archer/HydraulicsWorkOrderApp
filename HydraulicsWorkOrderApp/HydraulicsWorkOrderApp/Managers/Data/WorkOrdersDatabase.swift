@@ -234,7 +234,7 @@ final class WorkOrdersDatabase: ObservableObject {
         
         do {
             // Load from Firebase Firestore
-            print("🔍 DEBUG: Loading work orders from Firebase Firestore...")
+            // Removed debug print to improve performance
             let snapshot = try await db.collection(collectionName).getDocuments()
             
             var firebaseWorkOrders: [WorkOrder] = []
@@ -251,11 +251,6 @@ final class WorkOrdersDatabase: ObservableObject {
             
             // Update local array
             workOrders = firebaseWorkOrders
-            
-            // Debug each work order
-            for (index, workOrder) in workOrders.enumerated() {
-                print("🔍 DEBUG: WorkOrder[\(index)]: \(workOrder.workOrderNumber) - \(workOrder.customerName) - \(workOrder.status)")
-            }
             
             return workOrders
             
@@ -525,8 +520,7 @@ final class WorkOrdersDatabase: ObservableObject {
         let assignedTo = data["assignedTo"] as? String ?? ""
         let isFlagged = data["isFlagged"] as? Bool ?? false
         
-        print("🔍 DEBUG: Decoding WO_Item completion details from Firebase:")
-        print("🔍 DEBUG: Parts Used: '\(partsUsed ?? "nil")', Hours: '\(hoursWorked ?? "nil")', Cost: '\(finalCost ?? "nil")'")
+        // Removed debug prints to improve performance
         
         return WO_Item(
             id: id,

@@ -1420,7 +1420,8 @@ struct AddNoteSheet: View {
     
     @State private var noteText = ""
     @State private var selectedImages: [UIImage] = []
-    @State private var showingImagePicker = false
+    @State private var showingCameraPicker = false
+    @State private var showingLibraryPicker = false
     @Environment(\.dismiss) private var dismiss
     
     var body: some View {
@@ -1458,10 +1459,30 @@ struct AddNoteSheet: View {
                     }
                 }
                 
-                Button("Add Images") {
-                    showingImagePicker = true
+                HStack(spacing: 12) {
+                    Button(action: {
+                        showingCameraPicker = true
+                    }) {
+                        HStack {
+                            Image(systemName: "camera.fill")
+                            Text("Take Photo")
+                        }
+                        .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.bordered)
+                    .disabled(!UIImagePickerController.isSourceTypeAvailable(.camera))
+                    
+                    Button(action: {
+                        showingLibraryPicker = true
+                    }) {
+                        HStack {
+                            Image(systemName: "photo.on.rectangle")
+                            Text("Choose from Library")
+                        }
+                        .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                }
                     
                 Spacer()
                 }
@@ -1491,8 +1512,11 @@ struct AddNoteSheet: View {
                 }
             }
         }
-        .sheet(isPresented: $showingImagePicker) {
-            ImagePicker(selectedImages: $selectedImages)
+        .sheet(isPresented: $showingCameraPicker) {
+            ImagePicker(selectedImages: $selectedImages, sourceType: .camera)
+        }
+        .sheet(isPresented: $showingLibraryPicker) {
+            ImagePicker(selectedImages: $selectedImages, sourceType: .photoLibrary)
         }
         .presentationDragIndicator(.visible)
     }
@@ -1501,12 +1525,13 @@ struct AddNoteSheet: View {
 // MARK: - ImagePicker
 struct ImagePicker: UIViewControllerRepresentable {
     @Binding var selectedImages: [UIImage]
+    let sourceType: UIImagePickerController.SourceType
     @Environment(\.dismiss) private var dismiss
     
     func makeUIViewController(context: Context) -> UIImagePickerController {
         let picker = UIImagePickerController()
         picker.delegate = context.coordinator
-        picker.sourceType = .photoLibrary
+        picker.sourceType = sourceType
         picker.allowsEditing = false
         return picker
     }
@@ -1738,7 +1763,8 @@ struct AddNotesView: View {
     
     @State private var noteText = ""
     @State private var selectedImages: [UIImage] = []
-    @State private var showingImagePicker = false
+    @State private var showingCameraPicker = false
+    @State private var showingLibraryPicker = false
     @State private var isSaving = false
     
     var body: some View {
@@ -1787,15 +1813,29 @@ struct AddNotesView: View {
                                 
                                 Spacer()
                                 
-                                Button(action: {
-                                    showingImagePicker = true
-                                }) {
-                                    HStack(spacing: 4) {
-                                        Image(systemName: "camera.fill")
-                                        Text("Add Photos")
+                                HStack(spacing: 8) {
+                                    Button(action: {
+                                        showingCameraPicker = true
+                                    }) {
+                                        HStack(spacing: 4) {
+                                            Image(systemName: "camera.fill")
+                                            Text("Take Photo")
+                                        }
+                                        .font(.subheadline)
+                                        .foregroundColor(ThemeManager.shared.linkColor)
                                     }
-                                    .font(.subheadline)
-                                    .foregroundColor(ThemeManager.shared.linkColor)
+                                    .disabled(!UIImagePickerController.isSourceTypeAvailable(.camera))
+                                    
+                                    Button(action: {
+                                        showingLibraryPicker = true
+                                    }) {
+                                        HStack(spacing: 4) {
+                                            Image(systemName: "photo.on.rectangle")
+                                            Text("Choose from Library")
+                                        }
+                                        .font(.subheadline)
+                                        .foregroundColor(ThemeManager.shared.linkColor)
+                                    }
                                 }
                             }
                             
@@ -1856,8 +1896,11 @@ struct AddNotesView: View {
                 }
             }
         }
-        .sheet(isPresented: $showingImagePicker) {
-            ImagePicker(selectedImages: $selectedImages)
+        .sheet(isPresented: $showingCameraPicker) {
+            ImagePicker(selectedImages: $selectedImages, sourceType: .camera)
+        }
+        .sheet(isPresented: $showingLibraryPicker) {
+            ImagePicker(selectedImages: $selectedImages, sourceType: .photoLibrary)
         }
     }
     

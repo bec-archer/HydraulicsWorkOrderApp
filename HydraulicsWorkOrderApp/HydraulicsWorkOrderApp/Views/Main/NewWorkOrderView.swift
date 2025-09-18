@@ -109,9 +109,8 @@ struct NewWorkOrderView: View {
             
             // Lifecycle
             .onAppear {
-                print("🔍 DEBUG: NewWorkOrderView appeared")
-                print("🔍 DEBUG: ViewModel items count: \(viewModel.items.count)")
-                print("🔍 DEBUG: ViewModel selectedCustomer: \(viewModel.selectedCustomer?.name ?? "nil")")
+                // Removed debug print to improve performance
+                // Removed debug prints to improve performance
                 setupInitialState()
             }
             .onChange(of: viewModel.selectedCustomer?.id) { _, _ in

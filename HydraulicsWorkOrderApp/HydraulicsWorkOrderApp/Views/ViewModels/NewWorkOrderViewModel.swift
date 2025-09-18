@@ -27,10 +27,10 @@ class NewWorkOrderViewModel: ObservableObject {
     // MARK: - Initialization
     
     init() {
-        print("🔍 DEBUG: NewWorkOrderViewModel initializing")
+        // Removed debug print to improve performance
         setupBindings()
         addInitialItem()
-        print("🔍 DEBUG: NewWorkOrderViewModel initialized with \(items.count) items")
+        // Removed debug print to improve performance
     }
     
     // MARK: - Computed Properties
@@ -108,13 +108,10 @@ class NewWorkOrderViewModel: ObservableObject {
     
     /// Add initial blank item when view model is created
     private func addInitialItem() {
-        print("🔍 DEBUG: addInitialItem called, items.count = \(items.count)")
         if items.isEmpty {
-            print("🔍 DEBUG: Adding initial item")
+            // Removed debug prints to improve performance
             addItem()
-            print("🔍 DEBUG: After adding initial item, items.count = \(items.count)")
-        } else {
-            print("🔍 DEBUG: Items already exist, skipping initial item")
+            // Removed debug prints to improve performance
         }
     }
     
@@ -194,10 +191,14 @@ class NewWorkOrderViewModel: ObservableObject {
     func saveWorkOrder() async {
         print("🔍 DEBUG: saveWorkOrder() called")
         
+        // Start critical operation to prevent inactivity timeout during save
+        InactivityManager.startCriticalOperation()
+        
         // ───── Required Field Validation ─────
         guard let customer = selectedCustomer else {
             print("❌ DEBUG: No customer selected")
             setError("Please select or add a Customer before saving this WorkOrder.")
+            InactivityManager.endCriticalOperation()
             return
         }
         
@@ -232,6 +233,7 @@ class NewWorkOrderViewModel: ObservableObject {
         if !customerValidation.isValid {
             print("❌ DEBUG: Customer validation errors: \(customerValidation.errors)")
             setError("Customer validation failed: \(customerValidation.errors.joined(separator: ", "))")
+            InactivityManager.endCriticalOperation()
             return
         }
         
@@ -242,12 +244,14 @@ class NewWorkOrderViewModel: ObservableObject {
         if !itemsValidation.isValid {
             print("❌ DEBUG: Items validation errors: \(itemsValidation.errors)")
             setError("Item validation failed: \(itemsValidation.errors.joined(separator: ", "))")
+            InactivityManager.endCriticalOperation()
             return
         }
         
         // Must have at least one complete item to proceed
         guard !nonBlankItems.isEmpty else {
             setError("Add at least one WO_Item with a Type and Photo before checking in.")
+            InactivityManager.endCriticalOperation()
             return
         }
         
@@ -362,6 +366,9 @@ class NewWorkOrderViewModel: ObservableObject {
             print("❌ DEBUG: Error localized description: \(error.localizedDescription)")
             setError("Failed to save work order: \(error.localizedDescription)")
         }
+        
+        // End critical operation
+        InactivityManager.endCriticalOperation()
         
         isLoading = false
     }

@@ -25,11 +25,25 @@ struct CompletionDetailsSheet: View {
     @State private var cost: String = ""
     @State private var isSaving = false
     
-    // Validation
+    // ───── VALIDATION ─────
+    private var validationRequirements: CompletionValidationRequirements {
+        CompletionRequirementsManager.shared.currentValidationRequirements
+    }
+    
     private var isFormValid: Bool {
-        !partsUsed.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
-        !hoursWorked.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
-        !cost.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        validationRequirements.isValid(
+            parts: partsUsed,
+            time: hoursWorked,
+            cost: cost
+        )
+    }
+    
+    private var validationErrors: [String] {
+        validationRequirements.getValidationErrors(
+            parts: partsUsed,
+            time: hoursWorked,
+            cost: cost
+        )
     }
     
     var body: some View {
@@ -46,7 +60,7 @@ struct CompletionDetailsSheet: View {
                         .font(.caption)
                         .foregroundColor(ThemeManager.shared.textSecondary)
                     
-                    Text("Required fields for completion")
+                    Text("Fields marked with * are required")
                         .font(.caption2)
                         .foregroundColor(ThemeManager.shared.textSecondary)
                         .italic()
@@ -64,9 +78,15 @@ struct CompletionDetailsSheet: View {
                                     .font(.headline)
                                     .foregroundColor(ThemeManager.shared.textPrimary)
                                 
-                                Text("*")
-                                    .foregroundColor(.red)
-                                    .font(.headline)
+                                if validationRequirements.partsRequired {
+                                    Text("*")
+                                        .foregroundColor(.red)
+                                        .font(.headline)
+                                } else {
+                                    Text("(Optional)")
+                                        .font(.caption)
+                                        .foregroundColor(ThemeManager.shared.textSecondary)
+                                }
                             }
                             
                             TextField("Enter parts used...", text: $partsUsed, axis: .vertical)
@@ -83,9 +103,15 @@ struct CompletionDetailsSheet: View {
                                     .font(.headline)
                                     .foregroundColor(ThemeManager.shared.textPrimary)
                                 
-                                Text("*")
-                                    .foregroundColor(.red)
-                                    .font(.headline)
+                                if validationRequirements.timeRequired {
+                                    Text("*")
+                                        .foregroundColor(.red)
+                                        .font(.headline)
+                                } else {
+                                    Text("(Optional)")
+                                        .font(.caption)
+                                        .foregroundColor(ThemeManager.shared.textSecondary)
+                                }
                             }
                             
                             TextField("Enter hours worked...", text: $hoursWorked)
@@ -102,9 +128,15 @@ struct CompletionDetailsSheet: View {
                                     .font(.headline)
                                     .foregroundColor(ThemeManager.shared.textPrimary)
                                 
-                                Text("*")
-                                    .foregroundColor(.red)
-                                    .font(.headline)
+                                if validationRequirements.costRequired {
+                                    Text("*")
+                                        .foregroundColor(.red)
+                                        .font(.headline)
+                                } else {
+                                    Text("(Optional)")
+                                        .font(.caption)
+                                        .foregroundColor(ThemeManager.shared.textSecondary)
+                                }
                             }
                             
                             TextField("Enter cost...", text: $cost)
@@ -112,6 +144,28 @@ struct CompletionDetailsSheet: View {
                                 .keyboardType(.decimalPad)
                                 .background(ThemeManager.shared.cardBackground)
                                 .cornerRadius(8)
+                        }
+                        
+                        // Validation Errors Section
+                        if !validationErrors.isEmpty {
+                            VStack(alignment: .leading, spacing: 4) {
+                                HStack {
+                                    Image(systemName: "exclamationmark.triangle")
+                                        .foregroundColor(.red)
+                                    Text("Please complete required fields:")
+                                        .font(.caption)
+                                        .fontWeight(.semibold)
+                                        .foregroundColor(.red)
+                                }
+                                
+                                ForEach(validationErrors, id: \.self) { error in
+                                    Text("• \(error)")
+                                        .font(.caption2)
+                                        .foregroundColor(.red)
+                                        .padding(.leading, 16)
+                                }
+                            }
+                            .padding(.top, 8)
                         }
                         
                         // Info Section

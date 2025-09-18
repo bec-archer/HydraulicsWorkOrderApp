@@ -22,6 +22,7 @@ enum AppScreen {
     case dropdownManager
     case workOrderDetail
     case workOrderItemDetail  // NEW: Individual work order item detail view
+    case filteredWorkOrderDetail  // NEW: Work order detail filtered to show scanned item prominently
     case qrBatchGenerator   // NEW: Admin/Manager-only QR sheet generator
     // Add more cases as needed (e.g., completedWorkOrders, etc.)
 }
@@ -130,6 +131,22 @@ class AppState: ObservableObject {
         selectedWorkOrderItemIndex = itemIndex
         print("🔍 DEBUG: Setting currentView to: .workOrderItemDetail")
         currentView = .workOrderItemDetail
+        print("🔍 DEBUG: Current currentView is now: \(currentView)")
+        splitVisibility = .detailOnly
+        print("🔍 DEBUG: Navigation complete")
+    }
+    
+    // Navigate to filtered work order detail (for tag scanning)
+    func navigateToFilteredWorkOrderDetail(_ workOrder: WorkOrder, scannedItem: WO_Item, scannedItemIndex: Int) {
+        print("🔍 DEBUG: AppState.navigateToFilteredWorkOrderDetail called with WO: \(workOrder.workOrderNumber), Scanned Item: \(scannedItem.type)")
+        print("🔍 DEBUG: Setting selectedWorkOrder to: \(workOrder.workOrderNumber)")
+        selectedWorkOrder = workOrder
+        print("🔍 DEBUG: Setting selectedWorkOrderItem to: \(scannedItem.type)")
+        selectedWorkOrderItem = scannedItem
+        print("🔍 DEBUG: Setting selectedWorkOrderItemIndex to: \(scannedItemIndex)")
+        selectedWorkOrderItemIndex = scannedItemIndex
+        print("🔍 DEBUG: Setting currentView to: .filteredWorkOrderDetail")
+        currentView = .filteredWorkOrderDetail
         print("🔍 DEBUG: Current currentView is now: \(currentView)")
         splitVisibility = .detailOnly
         print("🔍 DEBUG: Navigation complete")

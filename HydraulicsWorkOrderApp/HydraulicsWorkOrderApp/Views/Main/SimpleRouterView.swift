@@ -43,6 +43,8 @@ struct SimpleRouterView: View {
             return "Work Order Detail"
         case .workOrderItemDetail:
             return "Item Details"
+        case .filteredWorkOrderDetail:
+            return "Scanned Item Details"
         case .qrBatchGenerator:
             return "QR Batch Generator"
         }
@@ -313,6 +315,20 @@ struct SimpleRouterView: View {
                                 } else {
                                     Text("No work order item selected")
                                         .onAppear { print("🔍 DEBUG: SimpleRouterView switching to WorkOrderItemDetailView but no work order item selected") }
+                                }
+                            case .filteredWorkOrderDetail:
+                                if let workOrder = appState.selectedWorkOrder,
+                                   let scannedItem = appState.selectedWorkOrderItem,
+                                   let scannedItemIndex = appState.selectedWorkOrderItemIndex {
+                                    FilteredWorkOrderDetailView(
+                                        workOrder: workOrder,
+                                        scannedItem: scannedItem,
+                                        scannedItemIndex: scannedItemIndex
+                                    )
+                                    .onAppear { print("🔍 DEBUG: SimpleRouterView switching to FilteredWorkOrderDetailView for WO: \(workOrder.workOrderNumber), Scanned Item: \(scannedItem.type)") }
+                                } else {
+                                    Text("No scanned item selected")
+                                        .onAppear { print("🔍 DEBUG: SimpleRouterView switching to FilteredWorkOrderDetailView but no scanned item selected") }
                                 }
                             case .qrBatchGenerator:
                                 QRBatchGeneratorView()

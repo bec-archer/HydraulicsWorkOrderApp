@@ -37,24 +37,16 @@ class ActiveWorkOrdersViewModel: ObservableObject {
         var uniqueWorkOrders: [String: WorkOrder] = [:]
         var duplicatesFound: [String: Int] = [:]
         
-        #if DEBUG
-        print("🔍 DEBUG: Processing \(workOrders.count) work orders for deduplication")
-        #endif
+        // Removed debug print to improve performance
         
         for workOrder in workOrders {
-            #if DEBUG
-            print("🔍 DEBUG: Processing WO: \(workOrder.workOrderNumber) (ID: \(workOrder.id), Status: \(workOrder.status), Deleted: \(workOrder.isDeleted))")
-            #endif
+            // Removed debug print to improve performance
             
             if !workOrder.isDeleted && !workOrder.isClosed {
                 // If we already have this WO_Number, keep the one with the most recent lastModified
                 if let existing = uniqueWorkOrders[workOrder.workOrderNumber] {
                     duplicatesFound[workOrder.workOrderNumber, default: 1] += 1
-                    #if DEBUG
-                    print("⚠️ DEBUG: Duplicate WO_Number found: \(workOrder.workOrderNumber)")
-                    print("  - Existing: ID=\(existing.id), LastModified=\(existing.lastModified)")
-                    print("  - Current: ID=\(workOrder.id), LastModified=\(workOrder.lastModified)")
-                    #endif
+                    // Removed debug prints to improve performance
                     
                     // Prefer work orders with non-empty IDs, then most recent
                     let existingHasId = !existing.id.isEmpty
@@ -63,47 +55,20 @@ class ActiveWorkOrdersViewModel: ObservableObject {
                     if currentHasId && !existingHasId {
                         // Current has ID, existing doesn't - prefer current
                         uniqueWorkOrders[workOrder.workOrderNumber] = workOrder
-                        #if DEBUG
-                        print("  - Keeping current (has ID)")
-                        #endif
                     } else if !currentHasId && existingHasId {
                         // Existing has ID, current doesn't - keep existing
-                        #if DEBUG
-                        print("  - Keeping existing (has ID)")
-                        #endif
                         // Do nothing
                     } else if workOrder.lastModified > existing.lastModified {
                         // Both have same ID status, prefer most recent
                         uniqueWorkOrders[workOrder.workOrderNumber] = workOrder
-                        #if DEBUG
-                        print("  - Keeping current (more recent)")
-                        #endif
-                    } else {
-                        #if DEBUG
-                        print("  - Keeping existing (more recent)")
-                        #endif
                     }
                 } else {
                     uniqueWorkOrders[workOrder.workOrderNumber] = workOrder
-                    #if DEBUG
-                    print("  - Adding new WO_Number")
-                    #endif
                 }
-            } else {
-                #if DEBUG
-                print("  - Skipping (deleted or closed)")
-                #endif
             }
         }
         
-        #if DEBUG
-        if !duplicatesFound.isEmpty {
-            print("⚠️ DEBUG: Found duplicate work order numbers:")
-            for (woNumber, count) in duplicatesFound {
-                print("  - \(woNumber): \(count) duplicates")
-            }
-        }
-        #endif
+        // Removed debug prints to improve performance
         
         let active = Array(uniqueWorkOrders.values)
             .sorted {
@@ -111,9 +76,7 @@ class ActiveWorkOrdersViewModel: ObservableObject {
                 return $0.timestamp < $1.timestamp
             }
         
-        #if DEBUG
-        print("📋 ACTIVE: \(active.count) active work orders (total: \(workOrders.count))")
-        #endif
+        // Removed debug print to improve performance
         
         // Cache the result
         cachedActiveWorkOrders = active
@@ -168,37 +131,18 @@ class ActiveWorkOrdersViewModel: ObservableObject {
             // Check if task was cancelled
             guard !Task.isCancelled else { return }
             
-            #if DEBUG
-            print("🔍 DEBUG: ActiveWorkOrdersViewModel.loadWorkOrders() called")
-            #endif
+            // Removed debug print to improve performance
             
             await MainActor.run {
                 isLoading = true
-                #if DEBUG
-                print("🔍 DEBUG: Set isLoading = true")
-                #endif
             }
             
             do {
-                #if DEBUG
-                print("🔍 DEBUG: Calling workOrdersDB.getAllWorkOrders()")
-                #endif
                 let workOrders = try await workOrdersDB.getAllWorkOrders()
-                #if DEBUG
-                print("🔍 DEBUG: Got \(workOrders.count) work orders from database")
-                #endif
                 
                 await MainActor.run {
                     self.workOrders = workOrders
                     self.isLoading = false
-                    #if DEBUG
-                    print("📋 DEBUG: Loaded \(workOrders.count) work orders into viewModel")
-                    
-                    // Debug each work order
-                    for (index, workOrder) in workOrders.enumerated() {
-                        print("🔍 DEBUG: WorkOrder[\(index)]: \(workOrder.workOrderNumber) - \(workOrder.customerName) - \(workOrder.status)")
-                    }
-                    #endif
                 }
             } catch {
                 #if DEBUG

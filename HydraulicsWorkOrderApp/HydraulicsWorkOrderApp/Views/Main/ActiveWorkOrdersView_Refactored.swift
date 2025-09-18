@@ -201,17 +201,35 @@ struct ActiveWorkOrdersView_Refactored: View {
                         .frame(maxWidth: .infinity, minHeight: 240)
                         .padding(.top, 32)
                     } else {
-                        // Work Order Grid
+                        // Work Order Grid - Calculate dimensions based on screen size and orientation
                         GeometryReader { geometry in
-                            let spacing: CGFloat = 16
-                            let availableWidth = geometry.size.width - 32 // Account for horizontal padding
-                            let cardWidth = (availableWidth - spacing * 2) / 3 // 3 cards with 2 spaces between
+                            let screenWidth = geometry.size.width
+                            let horizontalPadding: CGFloat = 16
+                            let cardSpacing: CGFloat = 16
                             
-                            LazyVGrid(columns: [
-                                GridItem(.fixed(cardWidth), spacing: spacing),
-                                GridItem(.fixed(cardWidth), spacing: spacing),
-                                GridItem(.fixed(cardWidth), spacing: spacing)
-                            ], spacing: spacing) {
+                            // Simple approach: determine cards based on screen width thresholds
+                            let cardsPerRow: Int
+                            if screenWidth > 1000 {
+                                cardsPerRow = 4  // Landscape mode - 4 cards
+                            } else {
+                                cardsPerRow = 3  // Portrait mode - 3 cards
+                            }
+                            
+                            let availableWidth = screenWidth - (horizontalPadding * 2)
+                            let finalCardWidth = (availableWidth - (cardSpacing * CGFloat(cardsPerRow - 1))) / CGFloat(cardsPerRow)
+                            
+                            // Debug: Print the calculation results
+                            print("🖥️ Screen width: \(screenWidth)")
+                            print("📐 Available width: \(availableWidth)")
+                            print("📊 Cards per row: \(cardsPerRow)")
+                            print("📏 Final card width: \(finalCardWidth)")
+                            
+                            // Calculate image area size - scale with card width for better space utilization
+                            let imageAreaWidth = finalCardWidth - 32 // Full width minus padding
+                            let imageAreaHeight = min(imageAreaWidth, 200) // Cap height at 200pt to prevent cards from being too tall
+                            let imageAreaSize = min(imageAreaWidth, imageAreaHeight) // Use the smaller dimension for square images
+                            
+                            LazyVGrid(columns: Array(repeating: GridItem(.fixed(finalCardWidth), spacing: cardSpacing), count: cardsPerRow), spacing: cardSpacing) {
                                 ForEach(viewModel.activeWorkOrders, id: \.workOrderNumber) { workOrder in
                                     NavigationLink(destination: WorkOrderDetailView(
                                         workOrder: workOrder,
@@ -219,13 +237,13 @@ struct ActiveWorkOrdersView_Refactored: View {
                                             viewModel.deleteWorkOrder(deletedWorkOrder)
                                         }
                                     )) {
-                                        WorkOrderCardView(workOrder: workOrder)
+                                        WorkOrderCardView(workOrder: workOrder, imageAreaSize: imageAreaSize)
                                             .id(workOrder.workOrderNumber) // Add stable ID to prevent recreation
                                     }
                                     .buttonStyle(PlainButtonStyle())
                                 }
                             }
-                            .padding(.horizontal, 16)
+                            .padding(.horizontal, horizontalPadding)
                         }
                     }
                 }

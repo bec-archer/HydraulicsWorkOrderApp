@@ -143,7 +143,7 @@ struct ActiveWorkOrdersView: View {
     
     // MARK: - Body
     var body: some View {
-        let _ = print("🔍 DEBUG: ActiveWorkOrdersView body being recreated")
+        // Removed debug print to prevent excessive view recreation
         ScrollView {
             VStack(spacing: 20) {
                 // Search and Filter Section
@@ -202,22 +202,42 @@ struct ActiveWorkOrdersView: View {
                                     }
                                     .padding(.horizontal)
                                     
-                                    LazyVGrid(columns: [
-                                        GridItem(.flexible(), spacing: 16),
-                                        GridItem(.flexible(), spacing: 16),
-                                        GridItem(.flexible(), spacing: 16)
-                                    ], spacing: 16) {
-                                        ForEach(flaggedWorkOrders, id: \.workOrderNumber) { workOrder in
-                                            WorkOrderCardView(
-                                                workOrder: workOrder,
-                                                onTap: {
-                                                    print("🔍 DEBUG: WorkOrderCardView tapped for WO: \(workOrder.workOrderNumber)")
-                                                    appState.navigateToWorkOrderDetail(workOrder)
-                                                }
-                                            )
+                                    GeometryReader { geometry in
+                                        let screenWidth = geometry.size.width
+                                        let horizontalPadding: CGFloat = 16
+                                        let cardSpacing: CGFloat = 16
+                                        
+                                        // Simple approach: determine cards based on screen width thresholds
+                                        let cardsPerRow = screenWidth > 1000 ? 4 : 3
+                                        
+                                        let availableWidth = screenWidth - (horizontalPadding * 2)
+                                        let finalCardWidth = (availableWidth - (cardSpacing * CGFloat(cardsPerRow - 1))) / CGFloat(cardsPerRow)
+                                        
+                                        // Debug: Print the calculation results
+                                        // print("🖥️ Screen width: \(screenWidth)")
+                                        // print("📐 Available width: \(availableWidth)")
+                                        // print("📊 Cards per row: \(cardsPerRow)")
+                                        // print("📏 Final card width: \(finalCardWidth)")
+                                        
+                                        // Calculate image area size
+                                        let imageAreaWidth = finalCardWidth - 32
+                                        let imageAreaHeight = min(imageAreaWidth, 200)
+                                        let imageAreaSize = min(imageAreaWidth, imageAreaHeight)
+                                        
+                                        LazyVGrid(columns: Array(repeating: GridItem(.fixed(finalCardWidth), spacing: cardSpacing), count: cardsPerRow), spacing: cardSpacing) {
+                                            ForEach(flaggedWorkOrders, id: \.workOrderNumber) { workOrder in
+                                                WorkOrderCardView(
+                                                    workOrder: workOrder,
+                                                    imageAreaSize: imageAreaSize,
+                                                    onTap: {
+                                                        print("🔍 DEBUG: WorkOrderCardView tapped for WO: \(workOrder.workOrderNumber)")
+                                                        appState.navigateToWorkOrderDetail(workOrder)
+                                                    }
+                                                )
+                                            }
                                         }
+                                        .padding(.horizontal)
                                     }
-                                    .padding(.horizontal)
                                 }
                             }
                             
@@ -245,22 +265,36 @@ struct ActiveWorkOrdersView: View {
                                     }
                                     .padding(.horizontal)
                                     
-                                    LazyVGrid(columns: [
-                                        GridItem(.flexible(), spacing: 16),
-                                        GridItem(.flexible(), spacing: 16),
-                                        GridItem(.flexible(), spacing: 16)
-                                    ], spacing: 16) {
-                                        ForEach(unflaggedWorkOrders, id: \.workOrderNumber) { workOrder in
-                                            WorkOrderCardView(
-                                                workOrder: workOrder,
-                                                onTap: {
-                                                    print("🔍 DEBUG: WorkOrderCardView tapped for WO: \(workOrder.workOrderNumber)")
-                                                    appState.navigateToWorkOrderDetail(workOrder)
-                                                }
-                                            )
+                                    GeometryReader { geometry in
+                                        let screenWidth = geometry.size.width
+                                        let horizontalPadding: CGFloat = 16
+                                        let cardSpacing: CGFloat = 16
+                                        
+                                        // Simple approach: determine cards based on screen width thresholds
+                                        let cardsPerRow = screenWidth > 1000 ? 4 : 3
+                                        
+                                        let availableWidth = screenWidth - (horizontalPadding * 2)
+                                        let finalCardWidth = (availableWidth - (cardSpacing * CGFloat(cardsPerRow - 1))) / CGFloat(cardsPerRow)
+                                        
+                                        // Calculate image area size
+                                        let imageAreaWidth = finalCardWidth - 32
+                                        let imageAreaHeight = min(imageAreaWidth, 200)
+                                        let imageAreaSize = min(imageAreaWidth, imageAreaHeight)
+                                        
+                                        LazyVGrid(columns: Array(repeating: GridItem(.fixed(finalCardWidth), spacing: cardSpacing), count: cardsPerRow), spacing: cardSpacing) {
+                                            ForEach(unflaggedWorkOrders, id: \.workOrderNumber) { workOrder in
+                                                WorkOrderCardView(
+                                                    workOrder: workOrder,
+                                                    imageAreaSize: imageAreaSize,
+                                                    onTap: {
+                                                        print("🔍 DEBUG: WorkOrderCardView tapped for WO: \(workOrder.workOrderNumber)")
+                                                        appState.navigateToWorkOrderDetail(workOrder)
+                                                    }
+                                                )
+                                            }
                                         }
+                                        .padding(.horizontal)
                                     }
-                                    .padding(.horizontal)
                                 }
                             }
                         }

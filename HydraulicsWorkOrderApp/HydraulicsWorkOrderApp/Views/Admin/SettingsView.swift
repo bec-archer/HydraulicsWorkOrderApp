@@ -26,6 +26,9 @@ struct SettingsView: View {
 
                     NavigationLink("Sync Status", destination: SyncStatusView()
                         .environmentObject(appState))
+                    
+                    NavigationLink("Completion Requirements", destination: CompletionRequirementsSettingsView()
+                        .environmentObject(appState))
                 }
 
                 // SuperAdmin-only dev toggles

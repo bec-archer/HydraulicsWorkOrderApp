@@ -145,12 +145,15 @@ struct WorkOrderCardView: View {
     let workOrder: WorkOrder
     let customerTag: String?
     let onTap: (() -> Void)?
+    let imageAreaSize: CGFloat
     
     @State private var isFullScreenImagePresented = false
     @State private var selectedImageURL: URL?
+    @State private var imageViewerURL: URL?
     
-    init(workOrder: WorkOrder, customerTag: String? = nil, onTap: (() -> Void)? = nil) {
+    init(workOrder: WorkOrder, imageAreaSize: CGFloat, customerTag: String? = nil, onTap: (() -> Void)? = nil) {
         self.workOrder = workOrder
+        self.imageAreaSize = imageAreaSize
         self.customerTag = customerTag
         self.onTap = onTap
     }
@@ -161,37 +164,30 @@ struct WorkOrderCardView: View {
     }
 
     var body: some View {
-        ZStack {
-            // Card content
-            VStack(spacing: 0) {
-                // Thumbnail Grid (computed directly from WO_Items)
-                WorkOrderCardThumbnailGrid(
-                    workOrder: workOrder,
-                    onImageLongPress: { imageURL in
-                        print("🔍 DEBUG: Long-press detected on image: \(imageURL.absoluteString)")
-                        print("🔍 DEBUG: Setting selectedImageURL to: \(imageURL.absoluteString)")
-                        selectedImageURL = imageURL
-                        print("🔍 DEBUG: selectedImageURL is now: \(selectedImageURL?.absoluteString ?? "nil")")
-                        isFullScreenImagePresented = true
-                        print("🔍 DEBUG: isFullScreenImagePresented set to: \(isFullScreenImagePresented)")
-                        print("🔍 DEBUG: Full-screen viewer should now be presented")
-                    },
-                    onImageTap: nil
-                )
-                
-                // Main content
-                WorkOrderCardContent(workOrder: workOrder, customerTag: customerTag, onTap: nil)
-            }
+        VStack(spacing: 0) {
+            // Thumbnail Grid (computed directly from WO_Items)
+            WorkOrderCardThumbnailGrid(
+                workOrder: workOrder,
+                imageAreaSize: imageAreaSize,
+                onImageLongPress: { imageURL in
+                    print("🔍 DEBUG: Long-press detected on image: \(imageURL.absoluteString)")
+                    print("🔍 DEBUG: Setting imageViewerURL to: \(imageURL.absoluteString)")
+                    
+                    // Set the viewer URL and present immediately
+                    imageViewerURL = imageURL
+                    isFullScreenImagePresented = true
+                    
+                    print("🔍 DEBUG: imageViewerURL is now: \(imageViewerURL?.absoluteString ?? "nil")")
+                    print("🔍 DEBUG: isFullScreenImagePresented set to: \(isFullScreenImagePresented)")
+                    print("🔍 DEBUG: Sheet should now be presented")
+                },
+                onImageTap: onTap
+            )
             
-            // Precise tap overlay - only covers the exact card content
-            if onTap != nil {
-                Color.clear
-                    .contentShape(Rectangle())
-                    .onTapGesture {
-                        onTap?()
-                    }
-            }
+            // Main content
+            WorkOrderCardContent(workOrder: workOrder, customerTag: customerTag, onTap: onTap)
         }
+        .frame(minHeight: 400) // Increased card height to accommodate images and text
         .background(ThemeManager.shared.cardBackground)
         .cornerRadius(ThemeManager.shared.cardCornerRadius)
         .shadow(
@@ -201,37 +197,40 @@ struct WorkOrderCardView: View {
             y: 6
         )
         .id(stableId)
-        .onAppear {
-            print("🔍 DEBUG: WorkOrderCardView appeared for WO: \(workOrder.workOrderNumber)")
-            print("🔍 DEBUG: WorkOrder items count: \(workOrder.items.count)")
-            for (index, item) in workOrder.items.enumerated() {
-                print("🔍 DEBUG: Item \(index): \(item.type) - imageUrls: \(item.imageUrls.count), thumbUrls: \(item.thumbUrls.count)")
-            }
-        }
-        .onChange(of: selectedImageURL) { oldValue, newValue in
-            print("🔍 DEBUG: selectedImageURL changed from: \(oldValue?.absoluteString ?? "nil") to: \(newValue?.absoluteString ?? "nil")")
-        }
-        .onChange(of: isFullScreenImagePresented) { oldValue, newValue in
-            print("🔍 DEBUG: isFullScreenImagePresented changed from: \(oldValue) to: \(newValue)")
-        }
-        .fullScreenCover(isPresented: $isFullScreenImagePresented) {
-            if let imageURL = selectedImageURL {
+        // Removed debug prints to improve performance
+        // Removed debug prints to improve performance
+        .sheet(isPresented: $isFullScreenImagePresented) {
+            if let imageURL = imageViewerURL {
                 FullScreenImageViewer(
                     imageURL: imageURL,
                     isPresented: $isFullScreenImagePresented
                 )
                 .onAppear {
-                    print("🔍 DEBUG: FullScreenCover presenting with URL: \(imageURL.absoluteString)")
+                    print("🔍 DEBUG: Sheet presenting with URL: \(imageURL.absoluteString)")
+                    print("🔍 DEBUG: imageViewerURL: \(imageViewerURL?.absoluteString ?? "nil")")
                 }
             } else {
-                Text("No image selected")
-                    .foregroundColor(.white)
-                    .background(Color.black)
-                    .onAppear {
-                        print("🔍 DEBUG: FullScreenCover triggered but no selectedImageURL")
-                        print("🔍 DEBUG: selectedImageURL at fullScreenCover: \(selectedImageURL?.absoluteString ?? "nil")")
-                        print("🔍 DEBUG: isFullScreenImagePresented at fullScreenCover: \(isFullScreenImagePresented)")
+                VStack(spacing: 20) {
+                    Text("No image selected")
+                        .foregroundColor(.white)
+                        .font(.title2)
+                    
+                    Button("Close") {
+                        isFullScreenImagePresented = false
+                        imageViewerURL = nil
                     }
+                    .foregroundColor(.white)
+                    .padding()
+                    .background(Color.blue)
+                    .cornerRadius(10)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color.black)
+                .onAppear {
+                    print("🔍 DEBUG: Sheet triggered but no imageViewerURL")
+                    print("🔍 DEBUG: imageViewerURL at sheet: \(imageViewerURL?.absoluteString ?? "nil")")
+                    print("🔍 DEBUG: isFullScreenImagePresented at sheet: \(isFullScreenImagePresented)")
+                }
             }
         }
     }
@@ -241,6 +240,8 @@ struct WorkOrderCardContent: View {
     let workOrder: WorkOrder
     let customerTag: String?
     let onTap: (() -> Void)?
+    
+    @State private var showingPhoneActions = false
     
     private var itemSummaryLine: String {
         // First 3–4 items, "Type × Qty", joined with " • "
@@ -294,16 +295,12 @@ struct WorkOrderCardContent: View {
                 }
             }
             
-            // Phone number (tappable)
-            Button(action: { callCustomer() }) {
-                Text(workOrder.customerPhone.formattedPhoneNumber)
-                    .font(ThemeManager.shared.labelFont)       // same size as customer name
-                    .fontWeight(.bold)                         // bold
-                    .underline()                               // underlined
-                    .foregroundColor(ThemeManager.shared.linkColor)
-                    .lineLimit(1)
-            }
-            .buttonStyle(PlainButtonStyle())
+            // Phone number (tappable with long-press for actions)
+            PhoneNumberView(
+                phoneNumber: workOrder.customerPhone,
+                onTap: callCustomer,
+                onLongPress: { showingPhoneActions = true }
+            )
 
             // Timestamp (own line, small, secondary)
             Text(timeAgoString)
@@ -322,6 +319,13 @@ struct WorkOrderCardContent: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)   // slightly denser body
+        .contentShape(Rectangle())
+        .onTapGesture {
+            onTap?()
+        }
+        .sheet(isPresented: $showingPhoneActions) {
+            PhoneActionSheet(phoneNumber: workOrder.customerPhone, customerName: workOrder.customerName)
+        }
     }
     
     private var timeAgoString: String {
@@ -339,15 +343,45 @@ struct WorkOrderCardContent: View {
     }
 }
 
+// MARK: - PhoneNumberView
+struct PhoneNumberView: View {
+    let phoneNumber: String
+    let onTap: () -> Void
+    let onLongPress: () -> Void
+    
+    @State private var isLongPressing = false
+    @State private var longPressTimer: Timer?
+    
+    var body: some View {
+        Text(phoneNumber.formattedPhoneNumber)
+            .font(ThemeManager.shared.labelFont)
+            .fontWeight(.bold)
+            .underline()
+            .foregroundColor(ThemeManager.shared.linkColor)
+            .lineLimit(1)
+            .onTapGesture {
+                if !isLongPressing {
+                    onTap()
+                }
+            }
+            .onLongPressGesture(minimumDuration: 0.5) {
+                isLongPressing = true
+                onLongPress()
+            } onPressingChanged: { pressing in
+                if pressing {
+                    isLongPressing = false
+                }
+            }
+    }
+}
+
 struct WorkOrderCardThumbnailGrid: View {
     let workOrder: WorkOrder
+    let imageAreaSize: CGFloat
     let onImageLongPress: (URL) -> Void
     let onImageTap: (() -> Void)?
 
     // Layout dimensions
-    private let singleHeight: CGFloat = 140      // unchanged (square path uses SquareThumb)
-    private let doubleHeight: CGFloat = 112      // +12pt for better 2-up presence
-    private let gridCell: CGFloat = 100          // larger cells for better visual balance
     private let spacing: CGFloat = 6             // tighter gutters per Notes style
     
     // Helper function to determine if an individual item is complete
@@ -363,9 +397,10 @@ struct WorkOrderCardThumbnailGrid: View {
             (firstImageURL(for: item), item)
         }
 
+        // Consistent image area size for all card types
         VStack(spacing: spacing) {
             if displayCount == 1 {
-                // 1 item: ONE perfect square image
+                // 1 item: ONE perfect square image - fills the entire image area
                 if let info = imageInfos.first {
                     SquareThumb(
                         url: info.url,
@@ -375,17 +410,17 @@ struct WorkOrderCardThumbnailGrid: View {
                         onTap: onImageTap,
                         isItemComplete: isItemComplete(info.item)
                     )
-                    .onAppear {
-                        print("🔍 DEBUG: SquareThumb created - WO: \(workOrder.workOrderNumber), status: '\(workOrder.status)', isComplete: \(workOrder.isComplete)")
-                    }
+                    .frame(width: imageAreaSize, height: imageAreaSize) // Use consistent size
                 }
             } else if displayCount == 2 {
                 // 2 items: TWO full-width rectangular images stacked vertically
+                // Each image gets half the image area height minus spacing
+                let imageHeight = (imageAreaSize - spacing) / 2
                 VStack(spacing: spacing) {
                     ForEach(Array(imageInfos.enumerated()), id: \.offset) { _, info in
                         FullWidthThumb(
                             url: info.url,
-                            height: doubleHeight,
+                            height: imageHeight,
                             itemStatus: StatusMapping.ItemStatus(for: info.item),
                             typeQtyLabel: "\(info.item.type.isEmpty ? "Item" : info.item.type) × 1",
                             onLongPress: onImageLongPress,
@@ -395,15 +430,17 @@ struct WorkOrderCardThumbnailGrid: View {
                     }
                 }
             } else {
-                // 3–4 items: 2×2 grid of larger tiles
+                // 3–4 items: 2×2 grid of square images
+                // Each cell gets half the image area size minus spacing
+                let cellSize = (imageAreaSize - spacing) / 2
                 LazyVGrid(columns: [
-                    GridItem(.fixed(gridCell), spacing: spacing),
-                    GridItem(.fixed(gridCell), spacing: spacing)
+                    GridItem(.fixed(cellSize), spacing: spacing),
+                    GridItem(.fixed(cellSize), spacing: spacing)
                 ], spacing: spacing) {
                     ForEach(Array(imageInfos.enumerated()), id: \.offset) { idx, info in
                         GridThumb(
                             url: info.url,
-                            size: gridCell,
+                            size: cellSize,
                             itemStatus: StatusMapping.ItemStatus(for: info.item),
                             showPlusBadge: (idx == 3 && totalItems > 4) ? (totalItems - 3) : nil,
                             typeQtyLabel: "\(info.item.type.isEmpty ? "Item" : info.item.type) × 1",
@@ -415,14 +452,10 @@ struct WorkOrderCardThumbnailGrid: View {
                 }
             }
         }
+        .frame(width: imageAreaSize, height: imageAreaSize) // Consistent square image area
         .padding(.horizontal, 16)
         .padding(.top, 8)     // tighter top margin
-        .onAppear {
-            print("🔍 DEBUG: WorkOrderCardThumbnailGrid - totalItems: \(totalItems), displayCount: \(displayCount)")
-            for (index, info) in imageInfos.enumerated() {
-                print("🔍 DEBUG: ImageInfo \(index): URL = \(info.url?.absoluteString ?? "nil"), Item = \(info.item.type)")
-            }
-        }
+        // Removed debug prints to improve performance
     }
 
     // Always use a non-distorted source for UI cropping.
@@ -467,6 +500,7 @@ private struct SquareThumb: View {
                         Rectangle().fill(ThemeManager.shared.border.opacity(0.25))
                     }
                 }
+                .id(url?.absoluteString) // Add stable ID to prevent unnecessary reloads
                 .frame(width: geo.size.width, height: geo.size.width) // ⬅️ fixed square frame (like WorkOrderDetailView)
                 .clipped()
                 .cornerRadius(ThemeManager.shared.cardCornerRadius - 2)
@@ -492,16 +526,8 @@ private struct SquareThumb: View {
                         Spacer()
                     }
                     .padding(8)
-                    .onAppear {
-                        print("🟢 DEBUG: Green COMPLETE banner showing for individual item")
-                    }
-                } else {
-                    // Debug: Show when banner is NOT showing
-                    Color.clear
-                        .onAppear {
-                            print("🔍 DEBUG: Item NOT complete - isItemComplete: \(isItemComplete)")
-                        }
-                    }
+                    // Removed debug print to improve performance
+                }
 
                 // Indicator dot (inside)
                 OverlayDot(color: itemStatus.color, size: 10)
@@ -525,13 +551,12 @@ private struct SquareThumb: View {
             }
         }
         .aspectRatio(1, contentMode: .fit) // ⬅️ reserve square space in the card
+        .onTapGesture {
+            onTap?()
+        }
         .onLongPressGesture {
-            print("🔍 DEBUG: SquareThumb long-press gesture triggered")
             if let imageURL = url {
-                print("🔍 DEBUG: SquareThumb calling onLongPress with URL: \(imageURL.absoluteString)")
                 onLongPress(imageURL)
-            } else {
-                print("🔍 DEBUG: SquareThumb long-press but no URL available")
             }
         }
     }
@@ -554,32 +579,21 @@ private struct FullWidthThumb: View {
                     Rectangle()
                         .fill(ThemeManager.shared.border.opacity(0.25))
                         .overlay(ProgressView().scaleEffect(0.9))
-                        .onAppear {
-                            print("🔍 DEBUG: FullWidthThumb AsyncImage EMPTY for URL: \(url?.absoluteString ?? "nil")")
-                        }
                 case .success(let image):
                     image
                         .resizable()
                         .scaledToFill()
-                        .onAppear {
-                            print("✅ DEBUG: FullWidthThumb AsyncImage SUCCESS for URL: \(url?.absoluteString ?? "nil")")
-                        }
-                case .failure(let error):
+                case .failure:
                     Rectangle()
                         .fill(Color.red.opacity(0.3))
                         .overlay(Text("❌").font(.title))
-                        .onAppear {
-                            print("❌ DEBUG: FullWidthThumb AsyncImage FAILED for URL: \(url?.absoluteString ?? "nil") - Error: \(error)")
-                        }
                 @unknown default:
                     Rectangle()
                         .fill(ThemeManager.shared.border.opacity(0.25))
                         .overlay(Text("?").font(.title))
-                        .onAppear {
-                            print("⚠️ DEBUG: FullWidthThumb AsyncImage UNKNOWN for URL: \(url?.absoluteString ?? "nil")")
-                        }
                 }
             }
+            .id(url?.absoluteString) // Add stable ID to prevent unnecessary reloads
             .frame(height: height)
             .frame(maxWidth: .infinity)
             .clipped()
@@ -628,16 +642,12 @@ private struct FullWidthThumb: View {
                 }
             }
         }
-        .onAppear {
-            print("🔍 DEBUG: FullWidthThumb appeared for URL: \(url?.absoluteString ?? "nil")")
+        .onTapGesture {
+            onTap?()
         }
         .onLongPressGesture {
-            print("🔍 DEBUG: FullWidthThumb long-press gesture triggered")
             if let imageURL = url {
-                print("🔍 DEBUG: FullWidthThumb calling onLongPress with URL: \(imageURL.absoluteString)")
                 onLongPress(imageURL)
-            } else {
-                print("🔍 DEBUG: FullWidthThumb long-press but no URL available")
             }
         }
     }
@@ -750,6 +760,9 @@ private struct GridThumb: View {
         }
         .onAppear {
             print("🔍 DEBUG: GridThumb appeared for URL: \(url?.absoluteString ?? "nil"), showPlusBadge: \(showPlusBadge ?? 0)")
+        }
+        .onTapGesture {
+            onTap?()
         }
         .onLongPressGesture {
             print("🔍 DEBUG: GridThumb long-press gesture triggered")
@@ -864,6 +877,6 @@ struct WorkOrderContactSheet: View {
         items: []
     )
     
-    WorkOrderCardView(workOrder: sampleWorkOrder)
+    WorkOrderCardView(workOrder: sampleWorkOrder, imageAreaSize: 200)
         .padding()
 }
