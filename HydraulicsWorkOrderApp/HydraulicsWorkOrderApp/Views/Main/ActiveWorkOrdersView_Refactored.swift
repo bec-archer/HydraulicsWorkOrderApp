@@ -225,7 +225,7 @@ struct ActiveWorkOrdersView_Refactored: View {
                             print("📏 Final card width: \(finalCardWidth)")
                             
                             // Calculate image area size - scale with card width for better space utilization
-                            let imageAreaWidth = finalCardWidth - 32 // Full width minus padding
+                            let imageAreaWidth = finalCardWidth - 32 // Account for text content padding (16 on each side)
                             let imageAreaHeight = min(imageAreaWidth, 200) // Cap height at 200pt to prevent cards from being too tall
                             let imageAreaSize = min(imageAreaWidth, imageAreaHeight) // Use the smaller dimension for square images
                             

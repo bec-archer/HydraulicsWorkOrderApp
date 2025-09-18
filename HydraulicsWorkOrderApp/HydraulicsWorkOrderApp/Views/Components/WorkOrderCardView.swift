@@ -492,8 +492,8 @@ struct WorkOrderCardThumbnailGrid: View {
             }
         }
         .frame(width: imageAreaSize, height: imageAreaSize) // Consistent square image area
-        .padding(.horizontal, 16)
-        .padding(.top, 8)     // tighter top margin
+        .padding(.horizontal, 16)  // Match text content padding for alignment
+        .padding(.top, 0)     // no top margin for tight alignment
         // Removed debug prints to improve performance
     }
 

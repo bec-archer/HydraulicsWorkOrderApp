@@ -217,14 +217,14 @@ struct ActiveWorkOrdersView: View {
                                         // print("🖥️ Screen width: \(screenWidth)")
                                         // print("📐 Available width: \(availableWidth)")
                                         // print("📊 Cards per row: \(cardsPerRow)")
-                                        // print("📏 Final card width: \(finalCardWidth)")
+                                        // print("📏 Final card width: \(finalCardWidth - 32)")
                                         
                                         // Calculate image area size
                                         let imageAreaWidth = finalCardWidth - 32
                                         let imageAreaHeight = min(imageAreaWidth, 200)
                                         let imageAreaSize = min(imageAreaWidth, imageAreaHeight)
                                         
-                                        LazyVGrid(columns: Array(repeating: GridItem(.fixed(finalCardWidth), spacing: cardSpacing), count: cardsPerRow), spacing: cardSpacing) {
+                                        LazyVGrid(columns: Array(repeating: GridItem(.fixed(finalCardWidth - 32), spacing: cardSpacing), count: cardsPerRow), spacing: cardSpacing) {
                                             ForEach(flaggedWorkOrders, id: \.workOrderNumber) { workOrder in
                                                 WorkOrderCardView(
                                                     workOrder: workOrder,
@@ -281,7 +281,7 @@ struct ActiveWorkOrdersView: View {
                                         let imageAreaHeight = min(imageAreaWidth, 200)
                                         let imageAreaSize = min(imageAreaWidth, imageAreaHeight)
                                         
-                                        LazyVGrid(columns: Array(repeating: GridItem(.fixed(finalCardWidth), spacing: cardSpacing), count: cardsPerRow), spacing: cardSpacing) {
+                                        LazyVGrid(columns: Array(repeating: GridItem(.fixed(finalCardWidth - 32), spacing: cardSpacing), count: cardsPerRow), spacing: cardSpacing) {
                                             ForEach(unflaggedWorkOrders, id: \.workOrderNumber) { workOrder in
                                                 WorkOrderCardView(
                                                     workOrder: workOrder,
