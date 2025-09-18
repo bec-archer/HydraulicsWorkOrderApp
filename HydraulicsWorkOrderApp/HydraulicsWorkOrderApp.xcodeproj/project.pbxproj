@@ -113,6 +113,7 @@
 				Views/Components/EmojiSelectionView.swift,
 				Views/Components/FullScreenImageViewer.swift,
 				Views/Components/ImageCaptureServiceView.swift,
+				Views/Components/ImageMarkupView.swift,
 				Views/Components/ItemCard.swift,
 				Views/Components/NotesTimelineView.swift,
 				Views/Components/PhotoCaptureView.swift,
